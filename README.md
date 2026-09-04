@@ -6,9 +6,10 @@ instalar nada ni levantar un servidor — se abre con doble clic en cualquier na
 
 ## Identidad
 
-Morado `#39104e`, oro `#b2aa6d` y blanco. El logotipo va **dibujado como SVG en línea**
-—no como imagen incrustada— así que se ve nítido a cualquier tamaño, cambia de tono con el
-tema y pesa unos cientos de bytes.
+Morado `#39104e`, oro `#b2aa6d` y blanco. El logotipo —hexágono con seis flechas que
+convergen en el núcleo— va **dibujado como SVG en línea**, no como imagen incrustada: se ve
+nítido a cualquier tamaño, cambia de tono con el tema y pesa unos cientos de bytes. El
+favicon usa la misma geometría sin las puntas de flecha, que a 16 px no se resuelven.
 
 Los tres estados que cargan significado se derivan de esa paleta para no perder la lectura:
 **Ganado** en oro, **pendiente** en bronce y **perdido/error** en un rojo apagado. El embudo
