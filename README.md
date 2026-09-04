@@ -146,6 +146,28 @@ viejas se reimprimen con el logotipo vigente.
 Un convenio guarda **su propia copia** de los textos y de las tarifas al crearse, así que
 cambiar el catálogo o los textos **no altera los convenios ya emitidos**.
 
+### Confirmaciones de hospedaje
+
+Pestaña **Confirmaciones**. Genera la carta que acredita la reservación de un huésped ante
+terceros (visas, empresas, aseguradoras).
+
+- **Importa un `.xlsx`** —el archivo tal cual, sin convertir— o un CSV. El lector de Excel
+  está escrito a mano sobre `DecompressionStream`, que traen los navegadores modernos: un
+  `.xlsx` es un ZIP con XML dentro, así que **no hace falta ninguna librería externa** y el
+  archivo sigue siendo uno solo. Si el navegador no lo soporta, avisa y pide un CSV.
+- **Una fila = un huésped = una carta.** Dos huéspedes que comparten habitación y hasta el
+  mismo número de reservación siguen siendo dos registros con dos cartas.
+- Las **fechas en formato de Excel** (números de serie) se convierten solas, igual que
+  `04/09/2026` o `2026-09-04`.
+- Si dejas **Noches** en blanco, se calcula con las fechas.
+- Las filas sin nombre de huésped se omiten y se reporta cuántas fueron.
+- El mapeo de columnas se adivina con los mismos alias que el importador de clientes
+  ("Celular" → Teléfono, "No. Reservación" → Reservación) y se puede corregir.
+- **Imprimir todas** saca las cartas en lote, una hoja por huésped.
+- Cada carta tiene botón de **correo** y de **WhatsApp**, con el mensaje ya redactado.
+
+También se puede capturar un huésped a mano.
+
 ## Importar clientes
 
 Botón **Importar**. Acepta un `.csv` / `.tsv` o texto pegado. Si tus datos están en Excel o

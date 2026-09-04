@@ -69,7 +69,11 @@
   .brand b{font-size:17px; font-weight:800; letter-spacing:.07em}
   .brand i{font-style:normal; color:var(--muted); font-size:12px; letter-spacing:.08em;
     text-transform:uppercase; border-left:1px solid var(--line); padding-left:9px}
-  nav{display:flex; gap:2px; background:var(--col); border-radius:8px; padding:3px}
+  /* Con cinco pestañas la barra ya no cabe en un teléfono: se desliza en vez
+     de empujar la página a lo ancho. */
+  nav{display:flex; gap:2px; background:var(--col); border-radius:8px; padding:3px;
+    min-width:0; max-width:100%; overflow-x:auto; scrollbar-width:none}
+  nav::-webkit-scrollbar{display:none}
   nav button{background:transparent; border:0; border-radius:6px; padding:6px 13px;
     cursor:pointer; color:var(--muted); font-weight:600; white-space:nowrap}
   nav button:hover{color:var(--text)}
@@ -258,6 +262,13 @@
     min-width:150px; padding:0 3px}
 
   .estado-chip{font-size:11px; padding:2px 9px; border-radius:20px; font-weight:600; white-space:nowrap}
+  .hoja + .hoja{border-top:1px dashed var(--line); margin-top:18px; padding-top:22px}
+  .doc-campos{margin:4px 0 10px}
+  .doc-campos div{margin:2px 0}
+  .doc-campos i{font-style:normal; color:#6f6279; display:inline-block; min-width:190px}
+  .doc-campos b{border-bottom:1px solid #c9bfd3; padding:0 4px; min-width:180px; display:inline-block}
+  @media print{ .hoja{page-break-after:always} .hoja:last-child{page-break-after:auto}
+    .hoja + .hoja{border-top:0; margin-top:0; padding-top:0} }
 
   @media print{
     body{height:auto; overflow:visible}
@@ -322,6 +333,7 @@
     <button data-view="tablero" aria-current="true">Tablero</button>
     <button data-view="clientes">Clientes</button>
     <button data-view="convenios">Convenios</button>
+    <button data-view="confirmaciones">Confirmaciones</button>
     <button data-view="ajustes">Ajustes</button>
   </nav>
   <div class="spacer"></div>
@@ -342,6 +354,7 @@
   </section>
   <section class="view" id="v-clientes"><div class="table-wrap" id="tblClientes"></div></section>
   <section class="view" id="v-convenios"><div class="table-wrap" id="tblConvenios"></div></section>
+  <section class="view" id="v-confirmaciones"><div class="table-wrap" id="tblConfirm"></div></section>
   <section class="view" id="v-ajustes"><div class="table-wrap" id="panelAjustes"></div></section>
 </main>
 
@@ -541,11 +554,51 @@ Se requerirá el pago de cada estancia a la entrada de cada huésped en efectivo
 Cancelación:
 El plazo de cancelación será de 72 HORAS ANTES DE LA FECHA DE LLEGADA, toda cancelación recibida después de este plazo causará el cargo de la primera noche de estancia, bajo el concepto de "No-Show", el cual se realizará a la tarjeta de crédito o forma de pago que se tenga como garantía.`,
 
+  /* Carta de confirmación de hospedaje. Marcadores propios: {{HUESPED}},
+     {{RESERVACION}}, {{LLEGADA}}, {{SALIDA}}, {{NOCHES}}, {{HABITACION}}. */
+  confTitulo: "Carta de Confirmación de Hospedaje",
+  confSaludo: "A quien corresponda:",
+  confCuerpo:
+`Por medio de la presente, {{HOTEL}}, ubicado en la ciudad de {{CIUDAD}}, hace constar que el(la) Sr.(Sra.) {{HUESPED}}, cuenta con una reservación confirmada en nuestro hotel.`,
+  confConfirma:
+`Mediante la presente se confirma que el(la) huésped permanecerá hospedado(a) en nuestras instalaciones durante las fechas antes mencionadas.`,
+  confContacto:
+`En caso de requerir información adicional para verificar esta reservación, ponemos a su disposición los siguientes medios de contacto:`,
+  confCierre:
+`Se expide la presente a solicitud del interesado para los fines que considere convenientes.
+
+Sin más por el momento, agradecemos las atenciones brindadas al portador de esta carta.`,
+
   cierre:
 `Agradecemos nuevamente su preferencia por {{HOTEL}} y le suplicamos haga llegar esta carta-convenio debidamente firmada de aceptación, para proceder con la correcta carga de tarifas en nuestro sistema de reservaciones, de lo contrario la tarifa no podrá estar disponible.
 
 Confiando que el presente convenio sea totalmente de su agrado. Sin otro particular por el momento me despido de usted.`
 };
+
+/* Una fila del archivo = un huésped = una carta. Dos huéspedes pueden
+   compartir habitación y aun así cada uno lleva la suya. */
+const CAMPOS_HUESPED = [
+  { key:"nombre", label:"Huésped", req:true,
+    aliases:["huesped","huésped","nombre","nombre del huesped","nombre del huésped","guest","pasajero","titular","nombre completo"] },
+  { key:"reservacion", label:"Reservación",
+    aliases:["reservacion","reservación","no reservacion","numero de reservacion","número de reservación","folio","confirmacion","confirmación","booking","reserva","localizador"] },
+  { key:"llegada", label:"Llegada", tipo:"fecha",
+    aliases:["llegada","fecha de llegada","check in","check-in","checkin","entrada","arrival","desde","in"] },
+  { key:"salida", label:"Salida", tipo:"fecha",
+    aliases:["salida","fecha de salida","check out","check-out","checkout","departure","hasta","out"] },
+  { key:"noches", label:"Noches", tipo:"entero",
+    aliases:["noches","numero de noches","número de noches","nights","n noches"] },
+  { key:"habitacion", label:"Habitación",
+    aliases:["habitacion","habitación","cuarto","room","no habitacion","numero de habitacion","hab"] },
+  { key:"email", label:"Correo",
+    aliases:["correo","email","e-mail","correo electronico","correo electrónico","mail"] },
+  { key:"telefono", label:"Teléfono",
+    aliases:["telefono","teléfono","celular","movil","móvil","whatsapp","phone","tel"] },
+  { key:"empresa", label:"Empresa",
+    aliases:["empresa","compania","compañia","compañía","cuenta","convenio","razon social","razón social"] },
+  { key:"notas", label:"Notas",
+    aliases:["notas","observaciones","comentarios","comentario"] }
+];
 
 const CAMPOS_CLIENTE = [
   { key:"empresa",   label:"Empresa",   type:"text", req:true,
@@ -613,6 +666,7 @@ function sanear(s){
     clientes:     Array.isArray(s.clientes) ? s.clientes.map(saneaCliente) : [],
     actividades:  Array.isArray(s.actividades) ? s.actividades.map(saneaAct) : [],
     convenios:    Array.isArray(s.convenios) ? s.convenios.map(saneaConv) : [],
+    huespedes:    Array.isArray(s.huespedes) ? s.huespedes.map(saneaHuesped) : [],
     habitaciones: catalogo(s.habitaciones),
     ajustes: {
       hotel:  Object.assign({}, HOTEL_DEF, (s.ajustes && s.ajustes.hotel) || {}),
@@ -680,6 +734,22 @@ function saneaConv(c){
     convenio: Number(h.convenio) || 0
   }));
   return o;
+}
+
+function saneaHuesped(g){
+  const o = Object.assign({ id:"", nombre:"", reservacion:"", llegada:"", salida:"", noches:"",
+    habitacion:"", email:"", telefono:"", empresa:"", notas:"", createdAt:"" }, g || {});
+  o.id = o.id || nuevoId("g");
+  o.noches = o.noches === "" || o.noches == null ? "" : Math.max(0, Math.round(Number(o.noches) || 0));
+  return o;
+}
+
+/** Noches capturadas, o las que dan las fechas. */
+function nochesDe(g){
+  if (g.noches !== "" && g.noches != null) return Number(g.noches);
+  if (!g.llegada || !g.salida) return "";
+  const d = Math.round((new Date(g.salida + "T00:00:00") - new Date(g.llegada + "T00:00:00")) / 864e5);
+  return isNaN(d) || d < 0 ? "" : d;
 }
 
 function saneaHab(h){
@@ -903,6 +973,128 @@ function descargar(nombre, contenido, mime){
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/**
+ * Adivina qué columna del archivo corresponde a cada campo. Primero resuelve
+ * TODAS las coincidencias exactas y luego las parciales, para que una parcial
+ * de otro campo no se lleve una columna que alguien más nombra igualito.
+ */
+function autoMapear(campos, heads){
+  const norm = x => String(x).toLowerCase().normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+  const hN = heads.map(norm);
+  const cands = f => [f.label, f.key, ...(f.aliases || [])].map(norm).filter(Boolean);
+  const usados = new Set(), hallado = {};
+
+  for (const f of campos){
+    const cs = cands(f);
+    for (let i = 0; i < hN.length; i++){
+      if (usados.has(i) || !hN[i]) continue;
+      if (cs.includes(hN[i])){ hallado[f.key] = i; usados.add(i); break; }
+    }
+  }
+  for (const f of campos){
+    if (hallado[f.key] != null) continue;
+    const cs = cands(f).filter(x => x.length > 3);
+    for (let i = 0; i < hN.length; i++){
+      if (usados.has(i) || hN[i].length < 3) continue;
+      if (cs.some(x => hN[i].includes(x) || x.includes(hN[i]))){ hallado[f.key] = i; usados.add(i); break; }
+    }
+  }
+  return hallado;
+}
+
+/* ----- Lectura de .xlsx -----
+   Un .xlsx es un ZIP con XML dentro. Se lee el directorio central, se sacan
+   sólo la primera hoja y las cadenas compartidas, y se inflan con
+   DecompressionStream, que traen los navegadores modernos. Así no hace falta
+   ninguna librería externa. */
+
+async function inflar(datos){
+  if (typeof DecompressionStream !== "function")
+    throw new Error("Este navegador no puede descomprimir archivos .xlsx.\n\n" +
+                    "Guarda la hoja como CSV (Archivo → Guardar como → CSV) y súbela así.");
+  const flujo = new Blob([datos]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Response(flujo).text();
+}
+
+async function abrirZip(buf){
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 66000); i--)
+    if (dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; }
+  if (eocd < 0) throw new Error("El archivo no parece un .xlsx válido.");
+
+  const total = dv.getUint16(eocd + 10, true);
+  let off = dv.getUint32(eocd + 16, true);
+  const salida = {};
+  for (let k = 0; k < total; k++){
+    if (off + 46 > buf.length || dv.getUint32(off, true) !== 0x02014b50) break;
+    const metodo   = dv.getUint16(off + 10, true);
+    const compSize = dv.getUint32(off + 20, true);
+    const nLen = dv.getUint16(off + 28, true);
+    const eLen = dv.getUint16(off + 30, true);
+    const cLen = dv.getUint16(off + 32, true);
+    const local = dv.getUint32(off + 42, true);
+    const nombre = new TextDecoder().decode(buf.subarray(off + 46, off + 46 + nLen));
+    off += 46 + nLen + eLen + cLen;
+    if (!/^xl\/(worksheets\/sheet\d+|sharedStrings)\.xml$/.test(nombre)) continue;
+
+    const lnLen = dv.getUint16(local + 26, true);
+    const leLen = dv.getUint16(local + 28, true);
+    const ini = local + 30 + lnLen + leLen;
+    const datos = buf.subarray(ini, ini + compSize);
+    salida[nombre] = metodo === 0 ? new TextDecoder().decode(datos) : await inflar(datos);
+  }
+  return salida;
+}
+
+/** "C7" -> 2. Hace falta porque Excel omite las celdas vacías. */
+function columnaDe(ref){
+  const m = /^([A-Z]+)/.exec(String(ref || ""));
+  if (!m) return 0;
+  let n = 0;
+  for (const ch of m[1]) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1;
+}
+
+async function leerXLSX(archivo){
+  const partes = await abrirZip(new Uint8Array(await archivo.arrayBuffer()));
+  const dp = new DOMParser();
+
+  let cadenas = [];
+  if (partes["xl/sharedStrings.xml"]){
+    const sd = dp.parseFromString(partes["xl/sharedStrings.xml"], "application/xml");
+    cadenas = [...sd.getElementsByTagName("si")].map(si =>
+      [...si.getElementsByTagName("t")].map(t => t.textContent).join(""));
+  }
+
+  const hoja = Object.keys(partes).filter(n => /worksheets\/sheet\d+\.xml$/.test(n)).sort()[0];
+  if (!hoja) throw new Error("El archivo no trae ninguna hoja de cálculo.");
+  const doc = dp.parseFromString(partes[hoja], "application/xml");
+  if (doc.getElementsByTagName("parsererror").length)
+    throw new Error("No se pudo leer la hoja de cálculo.");
+
+  const filas = [];
+  for (const row of doc.getElementsByTagName("row")){
+    const celdas = [];
+    for (const c of row.getElementsByTagName("c")){
+      const col = columnaDe(c.getAttribute("r"));
+      const t = c.getAttribute("t");
+      let v = "";
+      if (t === "inlineStr") v = [...c.getElementsByTagName("t")].map(x => x.textContent).join("");
+      else {
+        const ve = c.getElementsByTagName("v")[0];
+        v = ve ? ve.textContent : "";
+        if (t === "s") v = cadenas[Number(v)] ?? "";
+      }
+      celdas[col] = v;
+    }
+    for (let i = 0; i < celdas.length; i++) if (celdas[i] === undefined) celdas[i] = "";
+    filas.push(celdas);
+  }
+  return filas.filter(f => f.some(c => String(c).trim() !== ""));
+}
+
 /* ----- Consultas ----- */
 
 const cliente     = id => state.clientes.find(c => c.id === id);
@@ -936,12 +1128,14 @@ function render(){
   const buscando = vista === "tablero" || vista === "clientes";
   document.getElementById("q").style.display      = buscando ? "" : "none";
   document.getElementById("fEje").style.display   = buscando ? "" : "none";
-  document.getElementById("bNuevo").style.display = (vista === "convenios" || vista === "ajustes") ? "none" : "";
+  document.getElementById("bNuevo").style.display =
+    ["convenios","confirmaciones","ajustes"].includes(vista) ? "none" : "";
 
   renderEjecutivos();
   if (vista === "tablero")   { renderKpis(); renderTablero(); }
   if (vista === "clientes")  renderClientes();
   if (vista === "convenios") renderConvenios();
+  if (vista === "confirmaciones") renderConfirmaciones();
   if (vista === "ajustes")   renderAjustes();
 }
 
@@ -1136,6 +1330,243 @@ function renderConvenios(){
   cont.querySelector("#bNuevoConv").onclick = () => editarConvenio(null);
 }
 
+/* ==========================================================================
+   CONFIRMACIONES DE HOSPEDAJE
+   ========================================================================== */
+
+function renderConfirmaciones(){
+  const cont = document.getElementById("tblConfirm");
+  const gs = [...state.huespedes].sort((a,b) =>
+    String(a.llegada).localeCompare(String(b.llegada)) || a.nombre.localeCompare(b.nombre, "es"));
+
+  const cab = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <b style="font-size:15px">Cartas de confirmación</b>
+      <span class="hint">${gs.length} huésped(es) · una carta por huésped</span>
+      <span style="flex:1"></span>
+      <button class="btn primary" id="bImpHuesp">Importar huéspedes</button>
+      <button class="btn" id="bAddHuesp">+ Capturar uno</button>
+      ${gs.length ? `<button class="btn" id="bImprimirTodas">Imprimir todas</button>
+        <button class="btn danger" id="bLimpiarHuesp">Vaciar lista</button>` : ""}
+    </div>`;
+
+  if (!gs.length){
+    cont.innerHTML = cab + `<div class="vacio">Todavía no hay huéspedes cargados.<br>
+      Importa un <b>.xlsx</b> o un CSV: se genera una carta por cada renglón,
+      aunque dos huéspedes compartan habitación.</div>`;
+  } else {
+    cont.innerHTML = cab + `<table class="data">
+      <thead><tr><th>Huésped</th><th>Reservación</th><th>Llegada</th><th>Salida</th>
+        <th class="num">Noches</th><th>Habitación</th><th>Empresa</th><th></th></tr></thead>
+      <tbody>${gs.map(g => `<tr class="row-link" data-g="${g.id}">
+        <td><b>${esc(g.nombre)}</b></td>
+        <td>${esc(g.reservacion || "—")}</td>
+        <td class="nowrap">${esc(fechaCorta(g.llegada))}</td>
+        <td class="nowrap">${esc(fechaCorta(g.salida))}</td>
+        <td class="num">${esc(nochesDe(g) === "" ? "—" : nochesDe(g))}</td>
+        <td>${esc(g.habitacion || "—")}</td>
+        <td>${esc(g.empresa || "—")}</td>
+        <td class="nowrap">
+          <button class="btn sm" data-vercarta="${g.id}">Ver carta</button>
+          <button class="btn sm" data-mail="${g.id}" ${g.email ? "" : "disabled"}>Correo</button>
+          <button class="btn sm wa" data-wa2="${g.id}" ${g.telefono ? "" : "disabled"}>WhatsApp</button>
+        </td></tr>`).join("")}</tbody></table>`;
+  }
+
+  cont.querySelector("#bImpHuesp").onclick = importarHuespedes;
+  cont.querySelector("#bAddHuesp").onclick = () => editarHuesped(null);
+  const bT = cont.querySelector("#bImprimirTodas");
+  if (bT) bT.onclick = () => verConfirmacion(null, gs.map(g => g.id));
+  const bL = cont.querySelector("#bLimpiarHuesp");
+  if (bL) bL.onclick = () => {
+    if (!confirm(`¿Vaciar la lista de ${gs.length} huésped(es)? Las cartas ya impresas no se tocan.`)) return;
+    state.huespedes = []; guardar(); render();
+  };
+  cont.querySelectorAll("tr[data-g]").forEach(tr => tr.addEventListener("click", e => {
+    const v = e.target.closest("[data-vercarta]"), m = e.target.closest("[data-mail]"), w = e.target.closest("[data-wa2]");
+    if (v){ e.stopPropagation(); verConfirmacion(v.dataset.vercarta); return; }
+    if (m){ e.stopPropagation(); enviarConfirmacion(m.dataset.mail, "correo"); return; }
+    if (w){ e.stopPropagation(); enviarConfirmacion(w.dataset.wa2, "whatsapp"); return; }
+    editarHuesped(tr.dataset.g);
+  }));
+}
+
+/** Arma el cuerpo de una carta. Se reutiliza para ver una o imprimir todas. */
+function cartaConfirmacion(g){
+  const h = state.ajustes.hotel, t = state.ajustes.textos;
+  const n = nochesDe(g);
+  const V = txt => String(txt || "")
+    .replace(/\{\{HOTEL\}\}/g, h.nombre)
+    .replace(/\{\{CIUDAD\}\}/g, h.ciudad)
+    .replace(/\{\{HUESPED\}\}/g, g.nombre || "____________________")
+    .replace(/\{\{RESERVACION\}\}/g, g.reservacion || "")
+    .replace(/\{\{LLEGADA\}\}/g, fechaTexto(g.llegada))
+    .replace(/\{\{SALIDA\}\}/g, fechaTexto(g.salida))
+    .replace(/\{\{NOCHES\}\}/g, n === "" ? "" : String(n))
+    .replace(/\{\{HABITACION\}\}/g, g.habitacion || "");
+
+  const campo = (etq, val) => `<div><i>${esc(etq)}</i> <b>${esc(val || "____________________")}</b></div>`;
+
+  return `
+    <div class="doc-hotel">
+      ${h.logo ? `<img class="doc-logo" src="${esc(h.logo)}" alt="${esc(h.nombre)}">`
+        : esQuartz(h.nombre) ? `<div class="doc-wordmark">${logoQuartz(MORADO_QUARTZ)}</div>`
+        : `<div class="doc-mono">${monogramaQ(MORADO_QUARTZ)}</div><b>${esc(h.nombre)}</b>`}
+      <div>${esc(h.direccion)}</div>
+      <div>Tel. ${esc(h.telefono)}</div>
+    </div>
+    <div class="doc-regla"></div>
+    <div class="doc-fecha">${esc(h.ciudad)} a ${esc(fechaTexto(hoyISO()))}</div>
+
+    <h1 style="font-size:16px;text-align:center;margin:14px 0 16px;color:#39104e;
+      letter-spacing:.02em">${esc(V(t.confTitulo))}</h1>
+
+    <p><b>${esc(V(t.confSaludo))}</b></p>
+    <p style="white-space:pre-wrap">${esc(V(t.confCuerpo))}</p>
+
+    <h2>Detalles de la reservación</h2>
+    <div class="doc-campos">
+      ${campo("Número de reservación:", g.reservacion)}
+      ${campo("Fecha de llegada:", fechaTexto(g.llegada))}
+      ${campo("Fecha de salida:", fechaTexto(g.salida))}
+      ${campo("Número de noches:", n === "" ? "" : String(n))}
+      ${g.habitacion ? campo("Habitación:", g.habitacion) : ""}
+      ${g.empresa ? campo("Empresa:", g.empresa) : ""}
+    </div>
+
+    <p style="white-space:pre-wrap">${esc(V(t.confConfirma))}</p>
+    <p style="white-space:pre-wrap">${esc(V(t.confContacto))}</p>
+
+    <div class="doc-campos">
+      <div><b style="border:0;padding:0">${esc(h.nombre)}</b></div>
+      <div>${esc(h.direccion)}</div>
+      ${h.telReservaciones ? `<div><i>Teléfono:</i> ${esc(h.telReservaciones)}</div>` : ""}
+      ${h.emailReservaciones ? `<div><i>Correo electrónico:</i> ${esc(h.emailReservaciones)}</div>` : ""}
+    </div>
+
+    <p style="white-space:pre-wrap">${esc(V(t.confCierre))}</p>
+    <p style="margin-top:18px">Atentamente,</p>
+    <p><b>${esc(h.nombre)}</b></p>
+    ${g.notas ? `<p class="hint" style="margin-top:14px">${esc(g.notas)}</p>` : ""}`;
+}
+
+/** Una carta, o varias en lote si se pasa una lista de ids. */
+function verConfirmacion(id, lote){
+  const ids = lote && lote.length ? lote : [id];
+  const gs = ids.map(x => state.huespedes.find(g => g.id === x)).filter(Boolean);
+  if (!gs.length) return;
+  const varias = gs.length > 1;
+  const h = state.ajustes.hotel;
+  const agua = h.marcaAgua === "ninguna" ? ""
+             : (h.marcaAgua === "logo" && h.logo) ? `<img src="${esc(h.logo)}" alt="">`
+             : monogramaQ(MORADO_QUARTZ);
+
+  const ov = modal(`
+    <div class="modal doc">
+      <div class="modal-head">
+        <h2>${varias ? `${gs.length} cartas de confirmación` : "Carta de confirmación"}</h2>
+        <button class="btn" data-close>✕</button>
+      </div>
+      <div class="doc-body">
+        ${gs.map(g => `<div class="hoja" style="position:relative">
+            ${agua ? `<div class="doc-agua">${agua}</div>` : ""}
+            <div class="doc-contenido">${cartaConfirmacion(g)}</div>
+          </div>`).join("")}
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="bPrintC">${varias ? "Imprimir las " + gs.length : "Imprimir / Guardar PDF"}</button>
+        <div class="spacer"></div>
+        ${!varias ? `<button class="btn" id="bMailC" ${gs[0].email ? "" : "disabled"}>Enviar por correo</button>
+          <button class="btn wa" id="bWaC" ${gs[0].telefono ? "" : "disabled"}>Enviar por WhatsApp</button>` : ""}
+      </div>
+    </div>`);
+
+  ov.querySelector("#bPrintC").onclick = () => {
+    ov.classList.add("printable");
+    const quitar = () => { ov.classList.remove("printable"); window.removeEventListener("afterprint", quitar); };
+    window.addEventListener("afterprint", quitar);
+    window.print();
+    setTimeout(quitar, 1500);
+  };
+  const bm = ov.querySelector("#bMailC");
+  if (bm) bm.onclick = () => enviarConfirmacion(gs[0].id, "correo");
+  const bw = ov.querySelector("#bWaC");
+  if (bw) bw.onclick = () => enviarConfirmacion(gs[0].id, "whatsapp");
+}
+
+function enviarConfirmacion(id, via){
+  const g = state.huespedes.find(x => x.id === id);
+  if (!g) return;
+  const h = state.ajustes.hotel;
+  const n = nochesDe(g);
+  const asunto = `Confirmación de hospedaje · ${h.nombre}${g.reservacion ? " · Reservación " + g.reservacion : ""}`;
+  const cuerpo =
+    `Estimado(a) ${g.nombre}:\n\n` +
+    `Adjuntamos su carta de confirmación de hospedaje en ${h.nombre}.\n\n` +
+    (g.reservacion ? `Reservación: ${g.reservacion}\n` : "") +
+    (g.llegada ? `Llegada: ${fechaTexto(g.llegada)}\n` : "") +
+    (g.salida ? `Salida: ${fechaTexto(g.salida)}\n` : "") +
+    (n !== "" ? `Noches: ${n}\n` : "") +
+    `\nCualquier duda, con gusto le atendemos.\n\n${h.nombre}\n` +
+    (h.telReservaciones ? h.telReservaciones + "\n" : "") + (h.emailReservaciones || "");
+
+  if (via === "correo"){
+    if (!g.email){ alert("Este huésped no tiene correo registrado."); return; }
+    window.location.href = `mailto:${encodeURIComponent(g.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+  } else {
+    if (!g.telefono){ alert("Este huésped no tiene teléfono registrado."); return; }
+    window.open(waLink(g.telefono, cuerpo), "_blank", "noopener");
+  }
+}
+
+function editarHuesped(id){
+  const existente = id ? state.huespedes.find(g => g.id === id) : null;
+  const g = existente || saneaHuesped({});
+  const campos = CAMPOS_HUESPED.map(f => {
+    const ancho = (f.key === "nombre" || f.key === "notas") ? " full" : "";
+    const val = g[f.key] ?? "";
+    const ctl = f.key === "notas"
+      ? `<textarea class="field" name="notas">${esc(val)}</textarea>`
+      : `<input class="field" type="${f.tipo === "fecha" ? "date" : "text"}" name="${f.key}" value="${esc(val)}">`;
+    return `<div class="${ancho.trim()}"><label class="lbl">${esc(f.label)}</label>${ctl}</div>`;
+  }).join("");
+
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>${existente ? "Editar huésped" : "Nuevo huésped"}</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body"><form id="fG"><div class="grid">${campos}</div>
+        <p class="hint">Si dejas <b>Noches</b> en blanco se calcula con las fechas.</p></form></div>
+      <div class="modal-foot">
+        ${existente ? `<button class="btn danger" id="bDelG">Eliminar</button>` : ""}
+        <div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="bOkG">Guardar</button>
+      </div>
+    </div>`);
+
+  const form = ov.querySelector("#fG");
+  form.querySelector('[name="nombre"]').focus();
+  form.addEventListener("submit", e => { e.preventDefault(); ok(); });
+  ov.querySelector("#bOkG").onclick = ok;
+  const bd = ov.querySelector("#bDelG");
+  if (bd) bd.onclick = () => {
+    if (!confirm(`¿Eliminar a "${g.nombre}" de la lista?`)) return;
+    state.huespedes = state.huespedes.filter(x => x.id !== g.id);
+    guardar(); render(); ov.remove();
+  };
+
+  function ok(){
+    const fd = new FormData(form);
+    const o = Object.assign({}, g);
+    for (const f of CAMPOS_HUESPED) o[f.key] = (fd.get(f.key) ?? "").toString().trim();
+    if (!o.nombre){ alert("El nombre del huésped es obligatorio."); return; }
+    if (o.llegada && o.salida && o.salida < o.llegada){ alert("La salida no puede ser anterior a la llegada."); return; }
+    if (existente) Object.assign(g, saneaHuesped(o));
+    else { o.id = nuevoId("g"); o.createdAt = new Date().toISOString(); state.huespedes.push(saneaHuesped(o)); }
+    guardar(); render(); ov.remove();
+  }
+}
+
 function renderAjustes(){
   const a = state.ajustes, t = a.textos, h = a.hotel;
   const filaHab = x => `<tr data-id="${x.id}">
@@ -1229,6 +1660,22 @@ function renderAjustes(){
         ${areaTexto("reservaciones", "RESERVACIONES", 80)}
         ${areaTexto("politicas", "POLÍTICAS (garantía, pago y cancelación)", 230)}
         ${areaTexto("cierre", "Párrafo de cierre", 110)}
+      </div>
+
+      <h3 class="sec">Carta de confirmación de hospedaje</h3>
+      <div class="note">Además de los marcadores de arriba, aquí valen
+        <code>{{HUESPED}}</code>, <code>{{RESERVACION}}</code>, <code>{{LLEGADA}}</code>,
+        <code>{{SALIDA}}</code>, <code>{{NOCHES}}</code>, <code>{{HABITACION}}</code> y
+        <code>{{CIUDAD}}</code>.</div>
+      <div class="grid">
+        <div><label class="lbl">Título</label>
+          <input class="field" data-t="confTitulo" value="${esc(t.confTitulo)}" style="width:100%"></div>
+        <div><label class="lbl">Saludo</label>
+          <input class="field" data-t="confSaludo" value="${esc(t.confSaludo)}" style="width:100%"></div>
+        ${areaTexto("confCuerpo", "Párrafo principal", 90)}
+        ${areaTexto("confConfirma", "Párrafo de confirmación", 80)}
+        ${areaTexto("confContacto", "Antesala de los datos de contacto", 80)}
+        ${areaTexto("confCierre", "Cierre", 110)}
       </div>
 
       <h3 class="sec">Bloque Surgery Recovery</h3>
@@ -2165,29 +2612,7 @@ function abrirImportar(){
     heads = todo[0].map(x => String(x).trim());
     filas = todo.slice(1);
 
-    const norm = s => String(s).toLowerCase().normalize("NFD")
-      .replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
-    const hN = heads.map(norm);
-    const cands = f => [f.label, f.key, ...f.aliases].map(norm).filter(Boolean);
-    const usados = new Set(), hallado = {};
-
-    // Primero TODAS las coincidencias exactas, para que una parcial de otro campo
-    // no se lleve una columna que alguien más nombra igualito.
-    for (const f of CAMPOS_CLIENTE){
-      const cs = cands(f);
-      for (let i = 0; i < hN.length; i++){
-        if (usados.has(i) || !hN[i]) continue;
-        if (cs.includes(hN[i])){ hallado[f.key] = i; usados.add(i); break; }
-      }
-    }
-    for (const f of CAMPOS_CLIENTE){
-      if (hallado[f.key] != null) continue;
-      const cs = cands(f).filter(x => x.length > 3);
-      for (let i = 0; i < hN.length; i++){
-        if (usados.has(i) || hN[i].length < 3) continue;
-        if (cs.some(x => hN[i].includes(x) || x.includes(hN[i]))){ hallado[f.key] = i; usados.add(i); break; }
-      }
-    }
+    const hallado = autoMapear(CAMPOS_CLIENTE, heads);
 
     const cuerpo = CAMPOS_CLIENTE.map(f => {
       const g = hallado[f.key] != null ? hallado[f.key] : -1;
@@ -2247,6 +2672,122 @@ function abrirImportar(){
     else state.clientes = state.clientes.concat(nuevos);
     guardar(); render(); ov.remove();
     alert(`Se importaron ${nuevos.length} clientes.`);
+  };
+}
+
+function importarHuespedes(){
+  const ov = modal(`
+    <div class="modal wide">
+      <div class="modal-head"><h2>Importar huéspedes</h2><button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note">Sube el <b>.xlsx</b> tal cual, o un CSV. La primera fila debe ser la de
+          encabezados. <b>Se genera una carta por cada renglón</b>, aunque dos huéspedes compartan
+          la misma habitación.</div>
+        <p><input type="file" id="fileG" class="field"
+             accept=".xlsx,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></p>
+        <p class="hint">o pega aquí las filas (con su fila de encabezados):</p>
+        <textarea id="pasteG" class="field" style="width:100%"
+          placeholder="Huésped,Reservación,Llegada,Salida,Habitación,Correo,Teléfono&#10;Ana López,R-1201,2026-10-04,2026-10-07,410,ana@x.mx,6641112233"></textarea>
+        <div id="mapG"></div>
+      </div>
+      <div class="modal-foot"><span class="hint" id="infoG"></span><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="doImpG" disabled>Importar</button></div>
+    </div>`);
+
+  let filas = null, heads = [];
+
+  ov.querySelector("#fileG").addEventListener("change", async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    ov.querySelector("#infoG").textContent = "Leyendo el archivo…";
+    try{
+      if (/\.xlsx$/i.test(f.name)) preparar(await leerXLSX(f));
+      else preparar(parseCSV(await f.text()));
+    }catch(err){
+      ov.querySelector("#infoG").textContent = "";
+      alert(err.message || "No se pudo leer el archivo.");
+    }
+  });
+  ov.querySelector("#pasteG").addEventListener("input", e => {
+    const t = e.target.value.trim();
+    if (t.length > 10) preparar(parseCSV(t)); else limpiar();
+  });
+
+  function limpiar(){
+    filas = null;
+    ov.querySelector("#mapG").innerHTML = "";
+    ov.querySelector("#infoG").textContent = "";
+    ov.querySelector("#doImpG").disabled = true;
+  }
+
+  function preparar(todo){
+    if (!todo || todo.length < 2){
+      limpiar();
+      ov.querySelector("#infoG").textContent = "Hacen falta encabezados y al menos una fila.";
+      return;
+    }
+    heads = todo[0].map(x => String(x).trim());
+    filas = todo.slice(1);
+    const hallado = autoMapear(CAMPOS_HUESPED, heads);
+
+    ov.querySelector("#mapG").innerHTML = `
+      <h3 class="sec">Relaciona tus columnas</h3>
+      <p class="hint" style="margin-top:0">Ya adiviné el mapeo según tus encabezados. Corrige lo que haga falta.</p>
+      <div style="max-height:40vh;overflow:auto"><table class="data">
+        <thead><tr><th>Campo de la carta</th><th>Columna de tu archivo</th><th>Ejemplo</th></tr></thead>
+        <tbody>${CAMPOS_HUESPED.map(f => {
+          const gi = hallado[f.key] != null ? hallado[f.key] : -1;
+          const opts = [`<option value="-1">— ignorar —</option>`].concat(
+            heads.map((x,i) => `<option value="${i}"${i===gi?" selected":""}>${esc(x || "(columna "+(i+1)+")")}</option>`)).join("");
+          const ej = gi > -1 ? ((filas.find(r => String(r[gi]||"").trim()) || [])[gi] || "") : "";
+          return `<tr><td><b>${esc(f.label)}</b>${f.req ? ' <span style="color:var(--bad)">*</span>' : ""}</td>
+            <td><select class="field" data-f="${f.key}" style="width:100%">${opts}</select></td>
+            <td class="hint" data-p="${f.key}" style="max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(ej)}</td></tr>`;
+        }).join("")}</tbody></table></div>
+      <p style="margin:12px 0 0"><label><input type="checkbox" id="repG" checked>
+        Reemplazar la lista actual de huéspedes</label></p>`;
+
+    ov.querySelectorAll("#mapG select").forEach(sel => sel.addEventListener("change", () => {
+      const i = Number(sel.value);
+      ov.querySelector(`[data-p="${sel.dataset.f}"]`).textContent =
+        i > -1 ? ((filas.find(r => String(r[i]||"").trim()) || [])[i] || "") : "";
+    }));
+    ov.querySelector("#infoG").textContent = `${filas.length} filas · ${heads.length} columnas detectadas`;
+    ov.querySelector("#doImpG").disabled = false;
+  }
+
+  ov.querySelector("#doImpG").onclick = () => {
+    if (!filas) return;
+    const map = {};
+    ov.querySelectorAll("#mapG select").forEach(x => map[x.dataset.f] = Number(x.value));
+    const reemplazar = ov.querySelector("#repG") && ov.querySelector("#repG").checked;
+
+    const nuevos = [];
+    let sinNombre = 0;
+    for (const r of filas){
+      const o = {};
+      for (const f of CAMPOS_HUESPED){
+        const i = map[f.key];
+        const val = String((i > -1 ? r[i] : "") ?? "").trim();
+        if (f.tipo === "fecha") o[f.key] = parseDate(val);
+        else if (f.tipo === "entero") o[f.key] = val === "" ? "" : Math.max(0, Math.round(parseMoney(val)));
+        else o[f.key] = val;
+      }
+      if (!o.nombre){
+        if (Object.values(o).some(v => String(v).trim())) sinNombre++;
+        continue;                       // sin nombre no hay carta que emitir
+      }
+      o.id = nuevoId("g");
+      o.createdAt = new Date().toISOString();
+      nuevos.push(saneaHuesped(o));
+    }
+    if (!nuevos.length){ alert("No se encontró ninguna fila con nombre de huésped. Revisa el mapeo."); return; }
+
+    state.huespedes = reemplazar ? nuevos : state.huespedes.concat(nuevos);
+    guardar(); render(); ov.remove();
+    alert(`Se cargaron ${nuevos.length} huésped(es): una carta para cada uno.` +
+      (sinNombre ? `\n\nSe omitieron ${sinNombre} fila(s) sin nombre de huésped.` : ""));
   };
 }
 
