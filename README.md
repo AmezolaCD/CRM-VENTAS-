@@ -114,12 +114,24 @@ Recovery a dos columnas; ESPECIFICACIONES DE TARIFAS; VALORES AGREGADOS y NUESTR
 CONDICIONES; RESERVACIONES; POLÍTICAS de garantía, pago y cancelación; y los dos bloques de
 firma (**De conformidad Hotel** y **De conformidad Empresa**) con Nombre, Puesto, Fecha y Celular.
 
+Lleva **membrete y marca de agua**: el logotipo (o el monograma Q, redibujado en SVG) arriba,
+y la marca al fondo de la primera hoja. La marca de agua va como elemento, no como fondo CSS,
+para que también salga al imprimir.
+
+El logotipo **no se congela** en los convenios firmados, a diferencia de las tarifas y los
+textos: es identidad del hotel, no una condición pactada, así que si cambia, las cartas
+viejas se reimprimen con el logotipo vigente.
+
 *Imprimir / Guardar PDF* saca la carta sola, sin la interfaz.
 
 ### Ajustes
 
 - **Datos del hotel**: nombre, dirección, teléfono, ciudad (para la línea de fecha), teléfono
   y correo de reservaciones, moneda y lada del país.
+- **Logotipo del membrete**: se sube una imagen (PNG, JPG o SVG, máximo 400 KB) y sustituye
+  al monograma y al nombre en el encabezado de la carta. Sin logotipo se usa el monograma Q.
+- **Marca de agua**: monograma Q, el mismo logotipo, o ninguna. Se imprime al fondo de la
+  primera hoja, como papel membretado.
 - **Catálogo de habitaciones**: clave, tipo, bloque (Deluxe o Recovery) y tarifa pública
   —vacía = N/A—. **Es el único lugar donde se edita la tarifa pública.**
 - **Bloques de la carta**: el nombre que encabeza cada tabla y el texto de lo que incluye ese

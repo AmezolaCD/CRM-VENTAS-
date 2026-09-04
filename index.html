@@ -202,7 +202,17 @@
     touch-action:none; width:100%; height:170px; display:block; cursor:crosshair}
 
   /* ---------- Documento (carta-convenio) ---------- */
-  .doc-body{padding:30px 40px 34px; font-size:12.4px; line-height:1.5; color:#2b0d3a; background:#fff}
+  .doc-body{padding:30px 40px 34px; font-size:12.4px; line-height:1.5; color:#2b0d3a;
+    background:#fff; position:relative; overflow:hidden}
+  /* Marca de agua tipo hoja membretada: va como elemento, no como fondo CSS,
+     para que también salga al imprimir. */
+  .doc-agua{position:absolute; top:90px; left:0; right:0; height:840px;
+    display:flex; align-items:center; justify-content:center; pointer-events:none;
+    z-index:0; opacity:.05; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+  .doc-agua svg, .doc-agua img{width:68%; max-width:470px; height:auto; object-fit:contain}
+  .doc-contenido{position:relative; z-index:1}
+  .doc-logo{max-height:78px; max-width:76%; display:block; margin:0 auto 6px}
+  .doc-mono{width:52px; height:52px; margin:0 auto 5px; display:block}
   .doc-hotel{text-align:center; border-bottom:2px solid #39104e; padding-bottom:8px; margin-bottom:3px}
   .doc-regla{height:3px; background:#b2aa6d; margin-bottom:16px}
   .doc-hotel b{font-size:15px; letter-spacing:.04em}
@@ -381,8 +391,19 @@ const HOTEL_DEF = {
   telefono: "(664) 862-8200",
   ciudad: "Tijuana B.C.",
   telReservaciones: "664 374 2487",
-  emailReservaciones: "reservaciones@quartzhotel.mx"
+  emailReservaciones: "reservaciones@quartzhotel.mx",
+  logo: "",                 // data URI; si está vacío se usa el monograma
+  marcaAgua: "monograma"    // monograma | logo | ninguna
 };
+
+/* Monograma Q de Quartz, redibujado: marco con 6% de margen, círculo de r≈28.6
+   centrado en (48.5,49) y cola horizontal tangente al borde inferior. */
+const monogramaQ = (color) => `<svg viewBox="0 0 100 100" aria-hidden="true">
+  <rect x="6" y="6" width="88" height="88" fill="none" stroke="${color}" stroke-width="1.6"/>
+  <circle cx="48.5" cy="49" r="28.6" fill="none" stroke="${color}" stroke-width="3.1"/>
+  <path d="M56 77.3 H82" fill="none" stroke="${color}" stroke-width="3.1"/>
+</svg>`;
+const MORADO_QUARTZ = "#43305e";
 
 /* Catálogo de habitaciones del hotel. La tarifa pública admite N/A (null),
    como el Recovery Care del convenio original. */
@@ -1109,6 +1130,24 @@ function renderAjustes(){
         <div><label class="lbl">Moneda (código ISO)</label><input class="field" id="hMoneda" value="${esc(a.moneda)}"></div>
         <div><label class="lbl">Lada del país para WhatsApp</label><input class="field" id="hLada" value="${esc(a.ladaPais)}">
           <div class="hint">Se antepone a los teléfonos de 10 dígitos. México = 52.</div></div>
+
+        <div class="full"><label class="lbl">Logotipo del membrete</label>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <input type="file" id="hLogo" class="field" accept="image/png,image/jpeg,image/svg+xml,image/webp">
+            ${h.logo ? `<img src="${esc(h.logo)}" alt="Logotipo actual"
+                 style="max-height:46px;max-width:190px;border:1px solid var(--line);border-radius:6px;padding:4px;background:#fff">
+               <button class="btn sm danger" id="bQuitarLogo">Quitar</button>` : ""}
+          </div>
+          <div class="hint">PNG, JPG o SVG, máximo 400 KB. Sustituye el monograma y el nombre
+            en el encabezado de la carta. Sin logotipo se usa el monograma Q.</div></div>
+
+        <div><label class="lbl">Marca de agua de la carta</label>
+          <select class="field" id="hAgua">
+            <option value="monograma"${h.marcaAgua==="monograma"?" selected":""}>Monograma Q</option>
+            <option value="logo"${h.marcaAgua==="logo"?" selected":""}>El mismo logotipo</option>
+            <option value="ninguna"${h.marcaAgua==="ninguna"?" selected":""}>Sin marca de agua</option>
+          </select>
+          <div class="hint">Se imprime al fondo de la primera hoja, como papel membretado.</div></div>
       </div>
 
       <h3 class="sec">Catálogo de habitaciones y tarifas públicas</h3>
@@ -1179,6 +1218,7 @@ function renderAjustes(){
     h.ciudad    = p.querySelector("#hCiudad").value.trim();
     h.telReservaciones   = p.querySelector("#hTelRes").value.trim();
     h.emailReservaciones = p.querySelector("#hMailRes").value.trim();
+    h.marcaAgua = p.querySelector("#hAgua").value;
     a.ladaPais  = p.querySelector("#hLada").value.replace(/\D/g,"") || "52";
 
     const mon = p.querySelector("#hMoneda").value.trim().toUpperCase() || "MXN";
@@ -1202,6 +1242,27 @@ function renderAjustes(){
       x.publica = pub === "" ? null : parseMoney(pub);
     });
   }
+
+  p.querySelector("#hLogo").addEventListener("change", e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const MAX = 400 * 1024;   // el almacenamiento del navegador es limitado
+    if (f.size > MAX){
+      alert(`La imagen pesa ${Math.round(f.size/1024)} KB y el límite es 400 KB.\n\n` +
+            "Guárdala más chica (un PNG de unos 600 px de ancho basta) o usa un SVG.");
+      e.target.value = "";
+      return;
+    }
+    const r = new FileReader();
+    r.onload = () => { recogerAjustes(); h.logo = String(r.result); guardar(); renderAjustes(); };
+    r.onerror = () => alert("No se pudo leer la imagen.");
+    r.readAsDataURL(f);
+  });
+  const bQ = p.querySelector("#bQuitarLogo");
+  if (bQ) bQ.onclick = () => {
+    if (!confirm("¿Quitar el logotipo? La carta volverá a usar el monograma Q.")) return;
+    recogerAjustes(); h.logo = ""; guardar(); renderAjustes();
+  };
 
   p.querySelector("#bAddHab").onclick = () => {
     recogerAjustes();
@@ -1723,6 +1784,9 @@ function verConvenio(id, alCerrar, pedirFirma){
   const t = v.textos;
   const ec = ESTADOS_CONV[v.estado];
   const T = k => vars(t[k], v, c);
+  const agua = h.marcaAgua === "ninguna" ? ""
+             : (h.marcaAgua === "logo" && h.logo) ? `<img src="${esc(h.logo)}" alt="">`
+             : monogramaQ(MORADO_QUARTZ);
 
   const tablaGrupo = gid => {
     const hs = v.habitaciones.filter(x => x.grupo === gid);
@@ -1759,8 +1823,12 @@ function verConvenio(id, alCerrar, pedirFirma){
         <button class="btn" data-close>✕</button>
       </div>
       <div class="doc-body">
+        ${agua ? `<div class="doc-agua">${agua}</div>` : ""}
+        <div class="doc-contenido">
         <div class="doc-hotel">
-          <b>${esc(h.nombre)}</b>
+          ${h.logo
+            ? `<img class="doc-logo" src="${esc(h.logo)}" alt="${esc(h.nombre)}">`
+            : `<div class="doc-mono">${monogramaQ(MORADO_QUARTZ)}</div><b>${esc(h.nombre)}</b>`}
           <div>${esc(h.direccion)}</div>
           <div>Tel. ${esc(h.telefono)}</div>
         </div>
@@ -1812,6 +1880,7 @@ function verConvenio(id, alCerrar, pedirFirma){
         <div class="firmas">
           ${bloqueFirma(v.firmaHotel, "De conformidad · Hotel", (c && c.ejecutivo) || "", "Ejecutivo de ventas", "")}
           ${bloqueFirma(v.firmaEmpresa, "De conformidad · Empresa", (c && c.contacto) || "", "", (c && c.telefono) || "")}
+        </div>
         </div>
       </div>
       <div class="modal-foot">
