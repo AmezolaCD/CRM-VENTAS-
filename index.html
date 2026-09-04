@@ -52,9 +52,20 @@
     position:fixed; inset:0; z-index:200; pointer-events:none;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:26px;
     background:radial-gradient(circle at 50% 45%, #4a1a63 0%, #2b0b3c 55%, #17061f 100%);
-    animation:intro-salida .45s ease-in 1.65s forwards;
+    transition:background .55s ease-out;
   }
-  #intro svg{width:150px; height:150px; overflow:visible}
+  /* Al final el logo no se desvanece: viaja hasta el botón de inicio y se
+     tiñe con los colores del encabezado, para que el relevo no se note. */
+  #intro.vuelo{background:radial-gradient(circle at 50% 45%, #4a1a6300 0%, #17061f00 100%)}
+  #intro svg{width:150px; height:150px; overflow:visible;
+    transition:transform .8s cubic-bezier(.6,0,.3,1)}
+  #intro.vuelo .marca{opacity:0; transition:opacity .3s ease-out}
+  #intro.vuelo .hex{stroke:var(--logo-morado); transition:stroke .55s ease-out .2s}
+  #intro.vuelo .flechas{stroke:var(--oro); transition:stroke .55s ease-out .2s}
+  #intro.vuelo .nucleo{fill:var(--logo-morado); transition:fill .55s ease-out .2s}
+  /* Mientras el logo va en camino, el del encabezado se oculta: si no,
+     se verían dos a la vez. */
+  .intro-activa .brand .logo{visibility:hidden}
   #intro .hex{
     fill:none; stroke:#b2aa6d; stroke-width:6;
     stroke-dasharray:276; stroke-dashoffset:276;
@@ -340,7 +351,7 @@
 <div id="intro" aria-hidden="true">
   <svg viewBox="0 0 120 120">
     <polygon class="hex" points="60,14 20.16,37 20.16,83 60,106 99.84,83 99.84,37"/>
-    <g fill="none" stroke="#fff" stroke-width="6" stroke-linecap="butt">
+    <g class="flechas" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="butt">
       <g class="fl" style="animation-delay:.45s"><g transform="rotate(0 60 60)">
         <path d="M60 10 V 41"/><path d="M52 32 L60 41 L68 32"/></g></g>
       <g class="fl" style="animation-delay:.53s"><g transform="rotate(60 60 60)">
@@ -3229,20 +3240,44 @@ try{
   if (t) document.documentElement.dataset.theme = t;
 }catch(e){}
 
-/* La entrada se retira sola; cualquier clic o tecla la corta antes. */
+/*
+ * La entrada termina llevando el logo hasta el botón de inicio, que es el
+ * mismo logo: se mide dónde y de qué tamaño está, y se anima hasta ahí. Al
+ * llegar, el del encabezado reaparece y el de la entrada se retira, así que
+ * el cambio de uno a otro no se ve.
+ */
 (function entrada(){
   const el = document.getElementById("intro");
   if (!el) return;
+
   const quitar = () => {
     if (!el.parentNode) return;
     el.remove();
+    document.documentElement.classList.remove("intro-activa");
     document.removeEventListener("pointerdown", quitar);
     document.removeEventListener("keydown", quitar);
   };
+
   if (matchMedia("(prefers-reduced-motion: reduce)").matches){ quitar(); return; }
-  setTimeout(quitar, 2150);
+
+  document.documentElement.classList.add("intro-activa");
   document.addEventListener("pointerdown", quitar);
   document.addEventListener("keydown", quitar);
+
+  const volar = () => {
+    const svg = el.querySelector("svg");
+    const meta = document.querySelector(".brand .logo");
+    if (!svg || !meta){ quitar(); return; }
+    const a = svg.getBoundingClientRect(), b = meta.getBoundingClientRect();
+    if (!a.width || !b.width){ quitar(); return; }
+    svg.style.transform =
+      `translate(${(b.left + b.width/2) - (a.left + a.width/2)}px,` +
+      ` ${(b.top + b.height/2) - (a.top + a.height/2)}px) scale(${b.width / a.width})`;
+    el.classList.add("vuelo");
+  };
+
+  setTimeout(volar, 1350);
+  setTimeout(quitar, 2250);
 })();
 
 guardar();

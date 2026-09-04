@@ -27,9 +27,13 @@ del hotel, no del CRM.
 ## Animación de entrada
 
 Al abrir el CRM se muestra durante **dos segundos** una animación del logotipo: el hexágono se
-traza, las seis flechas convergen en el núcleo y aparece la palabra CORE. Está hecha con
-**CSS y SVG**, no con video: pesa unos cientos de bytes en vez de varios megabytes, se ve
-nítida en cualquier pantalla y no reproduce sonido.
+traza, las seis flechas convergen en el núcleo, aparece la palabra CORE y al final **el propio
+logo vuela hasta el botón de inicio del encabezado**, que es el mismo logo, tiñéndose de sus
+colores en el camino. El del encabezado se esconde mientras tanto, así que el relevo entre uno
+y otro no se nota: la entrada termina siendo una transición y no una interrupción.
+
+Está hecha con **CSS y SVG**, no con video: pesa unos cientos de bytes en vez de varios
+megabytes, se ve nítida en cualquier pantalla y no reproduce sonido.
 
 Tres detalles pensados para que nunca estorbe:
 
