@@ -189,7 +189,31 @@ terceros (visas, empresas, aseguradoras).
   Numero de reservación · Fecha de llegada · Fecha de salida · Numero de noches · Nombre ·
   Apellidos · Teléfono · Correo electrónico.
 - **Imprimir todas** saca las cartas en lote, una hoja por huésped.
-- Cada carta tiene botón de **correo** y de **WhatsApp**, con el mensaje ya redactado.
+- Cada carta tiene botón de **correo** y de **WhatsApp**, con el mensaje ya redactado y
+  **el PDF adjunto** donde el equipo lo permite (ver abajo).
+- **Descargar PDF** genera el archivo directamente, una hoja por huésped, sin pasar por el
+  diálogo de impresión.
+
+#### Cómo se adjunta el PDF
+
+Ni `mailto:` ni el enlace de WhatsApp admiten adjuntos: esos protocolos sólo transportan
+texto, y ninguna página web puede saltárselo. Para poder mandar el archivo hay que tener un
+PDF de verdad hecho en el navegador, así que el CRM lo genera solo: rasteriza la hoja tal como
+se ve —vía un `foreignObject` de SVG, sin librerías— y envuelve esa imagen en un PDF mínimo
+escrito a mano. Es fiel al documento impreso porque es el mismo render; a cambio, su texto no
+es seleccionable.
+
+Con el archivo en mano hay dos caminos, y el botón de envío elige el que corresponda:
+
+- **Equipos que saben compartir archivos** (celulares y Windows reciente): un solo toque abre
+  la hoja de compartir del sistema con **el PDF y el mensaje juntos**; se elige WhatsApp o el
+  correo ahí mismo.
+- **Los demás**: se descarga el PDF con un nombre que identifica al huésped
+  (`Confirmacion-R-1201-Ana-Lopez-Ramirez.pdf`) y se abre la app con el mensaje listo, para
+  adjuntarlo a mano.
+
+La carta-convenio no tiene todavía esta ruta porque ocupa tres páginas: ahí se sigue usando
+*Imprimir / Guardar PDF*.
 
 También se puede capturar un huésped a mano.
 

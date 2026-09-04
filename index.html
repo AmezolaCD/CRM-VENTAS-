@@ -1117,6 +1117,128 @@ async function leerXLSX(archivo){
   return filas.filter(f => f.some(c => String(c).trim() !== ""));
 }
 
+/* ==========================================================================
+   GENERACIÓN DE PDF EN EL NAVEGADOR
+
+   Ni mailto: ni wa.me admiten adjuntos: sólo transportan texto. La única vía
+   para mandar el archivo junto con el mensaje es navigator.share() con un
+   File, así que hace falta un PDF de verdad hecho aquí mismo.
+
+   Se hace en dos pasos: la hoja se rasteriza tal como se ve —vía un
+   foreignObject de SVG, que no necesita ninguna librería— y esa imagen se
+   envuelve en un PDF mínimo. El resultado es fiel al documento impreso
+   porque es literalmente el mismo render; a cambio, su texto no es
+   seleccionable.
+   ========================================================================== */
+
+const PT_ANCHO = 612, PT_ALTO = 792;      // carta en puntos PostScript
+const PX_ANCHO = 816, PX_ALTO = 1056;     // la misma carta a 96 dpi
+const ESCALA_PDF = 2;                     // para que no se vea pixelado
+
+/** Convierte un elemento del documento en un JPEG del tamaño de una hoja carta. */
+function rasterizarHoja(el){
+  return new Promise((resolve, reject) => {
+    // Dentro del SVG el medio es "pantalla", así que las reglas de @media print
+    // no aplican: la sangría de la hoja se pone aquí a mano.
+    const css = [...document.querySelectorAll("style")].map(s => s.textContent).join("\n");
+
+    // La hoja se vuelve a colgar de un .doc-body real: los estilos de la carta
+    // son selectores descendentes de él, y sin ese ancestro se pierden.
+    const clon = el.cloneNode(true);
+    clon.style.cssText = "position:relative;border:0;margin:0;padding:0";
+
+    const papel = document.createElement("div");
+    papel.className = "doc-body";
+    papel.style.cssText = "width:100%;height:100%;padding:16mm 18mm;margin:0;" +
+      "box-sizing:border-box;background:#fff;overflow:hidden";
+    papel.appendChild(clon);
+
+    const envoltura = document.createElement("div");
+    envoltura.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+    envoltura.style.cssText = `width:${PX_ANCHO}px;height:${PX_ALTO}px;background:#fff;` +
+      `font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif`;
+    envoltura.innerHTML = `<style>${css}</style>`;
+    envoltura.appendChild(papel);
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${PX_ANCHO}" height="${PX_ALTO}">` +
+      `<foreignObject width="100%" height="100%">` +
+      new XMLSerializer().serializeToString(envoltura) + `</foreignObject></svg>`;
+
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement("canvas");
+      cv.width = PX_ANCHO * ESCALA_PDF;
+      cv.height = PX_ALTO * ESCALA_PDF;
+      const g = cv.getContext("2d");
+      g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height);
+      g.drawImage(img, 0, 0, cv.width, cv.height);
+      try{ resolve(cv.toDataURL("image/jpeg", 0.92)); }
+      catch(e){ reject(new Error("El navegador bloqueó la conversión de la hoja a imagen.")); }
+    };
+    img.onerror = () => reject(new Error("Este navegador no pudo convertir la carta a imagen."));
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  });
+}
+
+const base64ABytes = b64 => {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+};
+
+/** PDF mínimo: una página tamaño carta por imagen, cada una a página completa. */
+function pdfDesdeImagenes(dataUrls){
+  const enc = new TextEncoder();
+  const trozos = [];
+  let largo = 0;
+  const push = x => { const b = typeof x === "string" ? enc.encode(x) : x; trozos.push(b); largo += b.length; };
+
+  const n = dataUrls.length;
+  const objetos = [];                       // desplazamiento de cada objeto
+  const idPagina = i => 3 + i * 3;          // página, imagen y contenido por hoja
+
+  push("%PDF-1.4\n");
+  const obj = (num, cuerpo, flujo) => {
+    objetos[num] = largo;
+    push(`${num} 0 obj\n${cuerpo}\n`);
+    if (flujo){ push("stream\n"); push(flujo); push("\nendstream\n"); }
+    push("endobj\n");
+  };
+
+  obj(1, `<< /Type /Catalog /Pages 2 0 R >>`);
+  obj(2, `<< /Type /Pages /Kids [${dataUrls.map((_,i) => `${idPagina(i)} 0 R`).join(" ")}] /Count ${n} >>`);
+
+  dataUrls.forEach((url, i) => {
+    const bytes = base64ABytes(url.split(",")[1]);
+    const pg = idPagina(i), im = pg + 1, ct = pg + 2;
+    obj(pg, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PT_ANCHO} ${PT_ALTO}] ` +
+            `/Resources << /XObject << /Im0 ${im} 0 R >> >> /Contents ${ct} 0 R >>`);
+    obj(im, `<< /Type /XObject /Subtype /Image /Width ${PX_ANCHO*ESCALA_PDF} ` +
+            `/Height ${PX_ALTO*ESCALA_PDF} /ColorSpace /DeviceRGB /BitsPerComponent 8 ` +
+            `/Filter /DCTDecode /Length ${bytes.length} >>`, bytes);
+    const contenido = `q ${PT_ANCHO} 0 0 ${PT_ALTO} 0 0 cm /Im0 Do Q`;
+    obj(ct, `<< /Length ${contenido.length} >>`, enc.encode(contenido));
+  });
+
+  const totalObj = 2 + n * 3;
+  const inicioXref = largo;
+  let xref = `xref\n0 ${totalObj + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i <= totalObj; i++)
+    xref += String(objetos[i]).padStart(10, "0") + " 00000 n \n";
+  push(xref);
+  push(`trailer\n<< /Size ${totalObj + 1} /Root 1 0 R >>\nstartxref\n${inicioXref}\n%%EOF\n`);
+
+  const salida = new Uint8Array(largo);
+  let o = 0;
+  for (const t of trozos){ salida.set(t, o); o += t.length; }
+  return salida;
+}
+
+/** Nombre de archivo sin acentos ni caracteres que molesten al sistema. */
+const nombreArchivo = txt => String(txt).normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 70);
+
 /* ----- Consultas ----- */
 
 const cliente     = id => state.clientes.find(c => c.id === id);
@@ -1493,7 +1615,8 @@ function verConfirmacion(id, lote){
           </div>`).join("")}
       </div>
       <div class="modal-foot">
-        <button class="btn" id="bPrintC">${varias ? "Imprimir las " + gs.length : "Imprimir / Guardar PDF"}</button>
+        <button class="btn" id="bPrintC">${varias ? "Imprimir las " + gs.length : "Imprimir"}</button>
+        <button class="btn" id="bPdfC">${varias ? `Descargar las ${gs.length} en un PDF` : "Descargar PDF"}</button>
         <div class="spacer"></div>
         ${!varias ? `<button class="btn" id="bMailC" ${gs[0].email ? "" : "disabled"}>Enviar por correo</button>
           <button class="btn wa" id="bWaC" ${gs[0].telefono ? "" : "disabled"} title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button>` : ""}
@@ -1508,20 +1631,51 @@ function verConfirmacion(id, lote){
     window.print();
     setTimeout(quitar, 1500);
   };
+  ov.querySelector("#bPdfC").onclick = async e => {
+    const b = e.currentTarget, txt = b.textContent;
+    b.disabled = true; b.textContent = "Generando…";
+    try{
+      descargarBlob(new Blob([await pdfDeHuespedes(gs)], { type:"application/pdf" }), nombrePdf(gs));
+    }catch(err){
+      alert("No se pudo generar el PDF: " + err.message +
+            "\n\nUsa Imprimir y elige \"Guardar como PDF\".");
+    }
+    b.disabled = false; b.textContent = txt;
+  };
+
   const bm = ov.querySelector("#bMailC");
   if (bm) bm.onclick = () => enviarConfirmacion(gs[0].id, "correo");
   const bw = ov.querySelector("#bWaC");
   if (bw) bw.onclick = () => enviarConfirmacion(gs[0].id, "whatsapp");
 }
 
-function enviarConfirmacion(id, via){
-  const g = state.huespedes.find(x => x.id === id);
-  if (!g) return;
+/** Arma el PDF de una o varias confirmaciones sin abrir ninguna ventana. */
+async function pdfDeHuespedes(gs){
+  const h = state.ajustes.hotel;
+  const agua = h.marcaAgua === "ninguna" ? ""
+             : (h.marcaAgua === "logo" && h.logo) ? `<img src="${esc(h.logo)}" alt="">`
+             : monogramaQ(MORADO_QUARTZ);
+  const caja = document.createElement("div");
+  caja.innerHTML = gs.map(g => `<div class="hoja" style="position:relative">
+      ${agua ? `<div class="doc-agua">${agua}</div>` : ""}
+      <div class="doc-contenido">${cartaConfirmacion(g)}</div></div>`).join("");
+  const imgs = [];
+  for (const hoja of caja.querySelectorAll(".hoja")) imgs.push(await rasterizarHoja(hoja));
+  return pdfDesdeImagenes(imgs);
+}
+
+function nombrePdf(gs){
+  if (gs.length === 1){
+    const g = gs[0];
+    return "Confirmacion-" + nombreArchivo([g.reservacion, nombreCompleto(g)].filter(Boolean).join(" ")) + ".pdf";
+  }
+  return `Confirmaciones-${gs.length}-${hoyISO()}.pdf`;
+}
+
+function mensajeConfirmacion(g){
   const h = state.ajustes.hotel;
   const n = nochesDe(g);
-  const asunto = `Confirmación de hospedaje · ${h.nombre}${g.reservacion ? " · Reservación " + g.reservacion : ""}`;
-  const cuerpo =
-    `Estimado(a) ${nombreCompleto(g)}:\n\n` +
+  return `Estimado(a) ${nombreCompleto(g)}:\n\n` +
     `Adjuntamos su carta de confirmación de hospedaje en ${h.nombre}.\n\n` +
     (g.reservacion ? `Reservación: ${g.reservacion}\n` : "") +
     (g.llegada ? `Llegada: ${fechaTexto(g.llegada)}\n` : "") +
@@ -1529,14 +1683,92 @@ function enviarConfirmacion(id, via){
     (n !== "" ? `Noches: ${n}\n` : "") +
     `\nCualquier duda, con gusto le atendemos.\n\n${h.nombre}\n` +
     (h.telReservaciones ? h.telReservaciones + "\n" : "") + (h.emailReservaciones || "");
+}
 
-  if (via === "correo"){
-    if (!g.email){ alert("Este huésped no tiene correo registrado."); return; }
-    window.location.href = `mailto:${encodeURIComponent(g.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
-  } else {
-    if (!g.telefono){ alert("Este huésped no tiene teléfono registrado."); return; }
-    window.open(waLink(g.telefono, cuerpo), "_blank", "noopener");
-  }
+/**
+ * Ni mailto: ni wa.me admiten adjuntos, así que hay dos caminos: si el equipo
+ * soporta compartir archivos, el PDF y el mensaje salen juntos por la hoja del
+ * sistema; si no, se descarga el PDF y se abre la app con el mensaje listo.
+ */
+function enviarConfirmacion(id, via){
+  const g = state.huespedes.find(x => x.id === id);
+  if (!g) return;
+  const h = state.ajustes.hotel;
+  const n = nochesDe(g);
+  if (via === "correo" && !g.email){ alert("Este huésped no tiene correo registrado."); return; }
+  if (via === "whatsapp" && !g.telefono){ alert("Este huésped no tiene teléfono registrado."); return; }
+
+  const asunto = `Confirmación de hospedaje · ${h.nombre}${g.reservacion ? " · Reservación " + g.reservacion : ""}`;
+  const cuerpo = mensajeConfirmacion(g);
+  const destino = via === "correo" ? "correo" : "WhatsApp";
+  const archivo = nombrePdf([g]);
+
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>Enviar por ${esc(destino)}</h2><button class="btn" data-close>✕</button></div>
+      <div class="modal-body" id="cuerpoEnvio">
+        <p class="hint">Preparando el PDF de la carta…</p>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div><button class="btn" data-close>Cerrar</button></div>
+    </div>`);
+
+  pdfDeHuespedes([g]).then(bytes => {
+    const blob = new Blob([bytes], { type:"application/pdf" });
+    const file = new File([blob], archivo, { type:"application/pdf" });
+    const puedeCompartir = typeof navigator.canShare === "function" && navigator.canShare({ files:[file] });
+
+    ov.querySelector("#cuerpoEnvio").innerHTML = puedeCompartir
+      ? `<div class="note"><b>La carta ya está lista.</b> Al compartir, el PDF y el mensaje
+           van juntos: elige ${esc(destino)} en la lista que abra el sistema.</div>
+         <p><button class="btn ok" id="bCompartir" style="font-size:15px;padding:10px 16px">
+            Compartir carta y mensaje</button></p>
+         <p class="hint">¿Prefieres hacerlo a mano?</p>
+         <p style="display:flex;gap:8px;flex-wrap:wrap">
+           <button class="btn" id="bBajar">Descargar el PDF</button>
+           <button class="btn" id="bAbrir">Abrir ${esc(destino)} con el mensaje</button></p>`
+      : `<div class="note warn"><b>Este equipo no puede adjuntar archivos desde el navegador.</b>
+           Ni el correo ni WhatsApp aceptan adjuntos por enlace, así que se hace en dos pasos:
+           se descarga el PDF y lo adjuntas al abrir ${esc(destino)}.
+           <br><br>En un celular sí sale todo junto de una vez.</div>
+         <p><button class="btn ok" id="bBajarAbrir" style="font-size:15px;padding:10px 16px">
+            Descargar el PDF y abrir ${esc(destino)}</button></p>
+         <p class="hint">Se guardará como <b>${esc(archivo)}</b></p>`;
+
+    const bajar = () => descargarBlob(blob, archivo);
+    const abrir = () => {
+      if (via === "correo")
+        window.location.href = `mailto:${encodeURIComponent(g.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+      else window.open(waLink(g.telefono, cuerpo), "_blank", "noopener");
+    };
+
+    const bc = ov.querySelector("#bCompartir");
+    if (bc) bc.onclick = async () => {
+      try{ await navigator.share({ files:[file], text: cuerpo, title: asunto }); ov.remove(); }
+      catch(err){ if (err && err.name !== "AbortError") alert("No se pudo compartir: " + err.message); }
+    };
+    const bb = ov.querySelector("#bBajar"); if (bb) bb.onclick = bajar;
+    const ba = ov.querySelector("#bAbrir"); if (ba) ba.onclick = abrir;
+    const bba = ov.querySelector("#bBajarAbrir");
+    if (bba) bba.onclick = () => { bajar(); setTimeout(abrir, 600); ov.remove(); };
+  }).catch(err => {
+    ov.querySelector("#cuerpoEnvio").innerHTML =
+      `<div class="note warn"><b>No se pudo generar el PDF aquí.</b> ${esc(err.message)}
+        <br><br>Usa <i>Ver carta → Imprimir / Guardar PDF</i> y adjúntalo a mano.</div>
+       <p><button class="btn" id="bAbrir2">Abrir ${esc(destino)} con el mensaje</button></p>`;
+    ov.querySelector("#bAbrir2").onclick = () => {
+      if (via === "correo")
+        window.location.href = `mailto:${encodeURIComponent(g.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+      else window.open(waLink(g.telefono, cuerpo), "_blank", "noopener");
+    };
+  });
+}
+
+function descargarBlob(blob, nombre){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 function editarHuesped(id){
