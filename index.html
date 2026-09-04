@@ -306,6 +306,10 @@ const GRUPOS = [
   { id:"recovery", name:"Recovery", opcional:true }
 ];
 const grupoDe = id => GRUPOS.find(g => g.id === id) || GRUPOS[0];
+/** Nombre e "incluye" del bloque: del convenio si ya los congeló, si no de Ajustes. */
+const infoGrupo = (id, conv) => (conv && conv.grupos && conv.grupos[id])
+  || (state.ajustes && state.ajustes.grupos && state.ajustes.grupos[id])
+  || GRUPOS_DEF[id] || { nombre: grupoDe(id).name, incluye: "" };
 
 const ESTADOS_CONV = {
   borrador:          { name:"Borrador",              bg:"var(--panel-2)",   fg:"var(--muted)" },
@@ -323,14 +327,28 @@ const HOTEL_DEF = {
   emailReservaciones: "reservaciones@quartzhotel.mx"
 };
 
-/* Catálogo de habitaciones. La tarifa pública admite N/A (null), como el
-   Recovery Care del convenio original. */
+/* Catálogo de habitaciones del hotel. La tarifa pública admite N/A (null),
+   como el Recovery Care del convenio original. */
 const HABS_DEF = [
-  { id:"d1", nombre:"Sencilla y Doble", grupo:"deluxe", publica:5300,
-    incluye:"Incluye desayuno americano" },
-  { id:"r1", nombre:"Care", grupo:"recovery", publica:null,
-    incluye:"✓ Incluye acceso a gimnasio\n✓ 20% de descuento en SENSES SPA\n✓ Transportación *Hotel- Empresa- Hotel* (sujeta a disponibilidad)" }
+  { id:"h_stkn", codigo:"STKN", nombre:"Standard King",   grupo:"deluxe",   publica:5300  },
+  { id:"h_stqu", codigo:"STQU", nombre:"Standard Queen",  grupo:"deluxe",   publica:5300  },
+  { id:"h_stdb", codigo:"STDB", nombre:"Standard Double", grupo:"deluxe",   publica:5300  },
+  { id:"h_gdkn", codigo:"GDKN", nombre:"Garden King",     grupo:"deluxe",   publica:6460  },
+  { id:"h_gddo", codigo:"GDDO", nombre:"Garden Double",   grupo:"deluxe",   publica:6460  },
+  { id:"h_sukn", codigo:"SUKN", nombre:"Suite King",      grupo:"deluxe",   publica:5300  },
+  { id:"h_mstr", codigo:"MSTR", nombre:"Master Suite",    grupo:"deluxe",   publica:12031 },
+  { id:"h_psdt", codigo:"PSDT", nombre:"Presidencial",    grupo:"deluxe",   publica:14601 },
+  { id:"h_care", codigo:"CARE", nombre:"Care",            grupo:"recovery", publica:null  }
 ];
+
+/* Lo que incluye cada bloque va UNA vez debajo de su tabla, como en el machote
+   —no por habitación, o se repetiría en cada renglón. */
+const GRUPOS_DEF = {
+  deluxe:   { nombre:"Deluxe",
+              incluye:"Incluye desayuno americano" },
+  recovery: { nombre:"Recovery",
+              incluye:"✓ Incluye acceso a gimnasio\n✓ 20% de descuento en SENSES SPA\n✓ Transportación *Hotel- Empresa- Hotel* (sujeta a disponibilidad)" }
+};
 
 /* Textos de la carta. {{EMPRESA}}, {{HOTEL}}, {{VIGENCIA}} y {{CONTACTO}}
    se sustituyen al generar el documento. */
@@ -478,11 +496,11 @@ function sanear(s){
     clientes:     Array.isArray(s.clientes) ? s.clientes.map(saneaCliente) : [],
     actividades:  Array.isArray(s.actividades) ? s.actividades.map(saneaAct) : [],
     convenios:    Array.isArray(s.convenios) ? s.convenios.map(saneaConv) : [],
-    habitaciones: Array.isArray(s.habitaciones) && s.habitaciones.length
-                    ? s.habitaciones.map(saneaHab) : HABS_DEF.map(saneaHab),
+    habitaciones: catalogo(s.habitaciones),
     ajustes: {
       hotel:  Object.assign({}, HOTEL_DEF, (s.ajustes && s.ajustes.hotel) || {}),
       textos: Object.assign({}, TEXTOS_DEF, (s.ajustes && s.ajustes.textos) || {}),
+      grupos: saneaGrupos(s.ajustes && s.ajustes.grupos),
       moneda: (s.ajustes && s.ajustes.moneda) || "MXN",
       ladaPais: (s.ajustes && s.ajustes.ladaPais) || "52"
     }
@@ -491,6 +509,19 @@ function sanear(s){
   out.actividades = out.actividades.filter(a => ids.has(a.clienteId));
   out.convenios   = out.convenios.filter(c => ids.has(c.clienteId));
   return out;
+}
+
+/**
+ * El catálogo por omisión salió de un solo convenio y sólo traía dos tipos.
+ * Si lo guardado es exactamente ese catálogo viejo, nadie lo tocó: se
+ * reemplaza por el del hotel. Un catálogo ya editado se respeta.
+ */
+function catalogo(guardadas){
+  if (!Array.isArray(guardadas) || !guardadas.length) return HABS_DEF.map(saneaHab);
+  const viejo = guardadas.length === 2 &&
+    guardadas.some(h => h.nombre === "Sencilla y Doble") &&
+    guardadas.some(h => h.nombre === "Care");
+  return (viejo ? HABS_DEF : guardadas).map(saneaHab);
 }
 
 function saneaCliente(c){
@@ -517,29 +548,37 @@ function saneaFirma(f){
 
 function saneaConv(c){
   const o = Object.assign({ id:"", folio:"", clienteId:"", fecha:"", vigenciaDesde:"", vigenciaHasta:"",
-    habitaciones:[], incluyeRecovery:false, notas:"", textos:null,
+    habitaciones:[], incluyeRecovery:false, notas:"", textos:null, grupos:null,
     estado:"borrador", firmaHotel:null, firmaEmpresa:null, createdAt:"", updatedAt:"" }, c || {});
   o.id = o.id || nuevoId("v");
   if (!ESTADOS_CONV[o.estado]) o.estado = "borrador";
   o.textos = Object.assign({}, TEXTOS_DEF, o.textos || {});
   o.firmaHotel   = saneaFirma(o.firmaHotel);
   o.firmaEmpresa = saneaFirma(o.firmaEmpresa);
+  o.grupos = saneaGrupos(o.grupos);
   o.habitaciones = (Array.isArray(o.habitaciones) ? o.habitaciones : []).map(h => ({
-    tipoId: h.tipoId || "", nombre: h.nombre || "",
+    tipoId: h.tipoId || "", codigo: h.codigo || "", nombre: h.nombre || "",
     grupo: GRUPOS.some(g => g.id === h.grupo) ? h.grupo : "deluxe",
     publica: h.publica === null || h.publica === "" || h.publica === undefined ? null : Number(h.publica) || 0,
-    incluye: h.incluye || "",
     convenio: Number(h.convenio) || 0
   }));
   return o;
 }
 
 function saneaHab(h){
-  const o = Object.assign({ id:"", nombre:"", grupo:"deluxe", publica:null, incluye:"" }, h || {});
+  const o = Object.assign({ id:"", codigo:"", nombre:"", grupo:"deluxe", publica:null }, h || {});
   o.id = o.id || nuevoId("h");
+  o.codigo = String(o.codigo || "").toUpperCase().trim();
   if (!GRUPOS.some(g => g.id === o.grupo)) o.grupo = "deluxe";
   o.publica = (o.publica === null || o.publica === "" || o.publica === undefined) ? null : (Number(o.publica) || 0);
   return o;
+}
+
+function saneaGrupos(g){
+  const out = {};
+  for (const k of Object.keys(GRUPOS_DEF))
+    out[k] = Object.assign({}, GRUPOS_DEF[k], (g && g[k]) || {});
+  return out;
 }
 
 function guardar(){
@@ -983,12 +1022,13 @@ function renderConvenios(){
 function renderAjustes(){
   const a = state.ajustes, t = a.textos, h = a.hotel;
   const filaHab = x => `<tr data-id="${x.id}">
+      <td><input class="field" data-k="codigo" value="${esc(x.codigo)}" placeholder="STKN"
+            style="width:88px;text-transform:uppercase"></td>
       <td><input class="field" data-k="nombre" value="${esc(x.nombre)}" style="width:100%"></td>
       <td><select class="field" data-k="grupo" style="width:100%">${
-        GRUPOS.map(g => `<option value="${g.id}"${x.grupo===g.id?" selected":""}>${esc(g.name)}</option>`).join("")}</select></td>
+        GRUPOS.map(g => `<option value="${g.id}"${x.grupo===g.id?" selected":""}>${esc(infoGrupo(g.id).nombre)}</option>`).join("")}</select></td>
       <td><input class="field" data-k="publica" inputmode="decimal" placeholder="N/A"
             value="${x.publica === null ? "" : esc(x.publica)}" style="width:120px;text-align:right"></td>
-      <td><textarea class="field" data-k="incluye" style="width:100%;min-height:56px;font-size:12px">${esc(x.incluye)}</textarea></td>
       <td><button class="btn sm danger" data-del="${x.id}">Eliminar</button></td></tr>`;
 
   const areaTexto = (k, label, alto, ayuda) => `
@@ -1019,10 +1059,22 @@ function renderAjustes(){
         se muestra pero no se puede editar. Déjala <b>vacía</b> para que salga <b>N/A</b>, como el
         Recovery Care del convenio original. Un convenio ya firmado conserva la tarifa que tenía al firmarse.</div>
       <table class="data"><thead><tr>
-        <th>Tipo de habitación</th><th style="width:150px">Bloque</th>
-        <th style="width:140px">Tarifa pública</th><th>Incluye (una línea por viñeta)</th><th style="width:100px"></th>
+        <th style="width:100px">Clave</th><th>Tipo de habitación</th><th style="width:150px">Bloque</th>
+        <th style="width:140px">Tarifa pública</th><th style="width:100px"></th>
       </tr></thead><tbody id="tHab">${state.habitaciones.map(filaHab).join("")}</tbody></table>
       <p><button class="btn" id="bAddHab">+ Agregar tipo de habitación</button></p>
+
+      <h3 class="sec">Bloques de la carta</h3>
+      <p class="hint" style="margin-top:0">El nombre encabeza la tabla de tarifas (“Deluxe / ${esc(h.nombre)}”)
+        y el texto de “incluye” va <b>una sola vez</b> debajo de ella, como en el machote.</p>
+      <div class="grid">${GRUPOS.map(g => `
+        <div>
+          <label class="lbl">Bloque ${esc(g.name)} · nombre en la carta</label>
+          <input class="field" data-g="${g.id}" data-gk="nombre" value="${esc(infoGrupo(g.id).nombre)}" style="width:100%">
+          <label class="lbl" style="margin-top:8px">Incluye (una línea por viñeta)</label>
+          <textarea class="field mono" data-g="${g.id}" data-gk="incluye"
+            style="width:100%;min-height:110px">${esc(infoGrupo(g.id).incluye)}</textarea>
+        </div>`).join("")}</div>
 
       <h3 class="sec">Textos de la carta-convenio</h3>
       <div class="note">Marcadores disponibles: <code>{{HOTEL}}</code>, <code>{{EMPRESA}}</code>,
@@ -1060,23 +1112,10 @@ function renderAjustes(){
     </div>`;
 
   const p = document.getElementById("panelAjustes");
-  p.querySelector("#bAddHab").onclick = () => {
-    state.habitaciones.push(saneaHab({ nombre:"Nuevo tipo", grupo:"deluxe", publica:null, incluye:"" }));
-    guardar(); renderAjustes();
-  };
-  p.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
-    const id = b.dataset.del;
-    const usos = state.convenios.filter(v => v.habitaciones.some(x => x.tipoId === id)).length;
-    if (usos && !confirm(`Este tipo aparece en ${usos} convenio(s). Los convenios ya guardados conservan su copia. ¿Eliminarlo del catálogo?`)) return;
-    state.habitaciones = state.habitaciones.filter(x => x.id !== id);
-    guardar(); renderAjustes();
-  });
-  p.querySelector("#bResetTextos").onclick = () => {
-    if (!confirm("Se restaurarán todos los textos de la carta a los originales. ¿Continuar?")) return;
-    a.textos = Object.assign({}, TEXTOS_DEF);
-    guardar(); renderAjustes();
-  };
-  p.querySelector("#bGuardarAj").onclick = () => {
+
+  /** Vuelca el formulario al estado. Se llama también antes de agregar o
+      eliminar una fila: si no, al repintar se perdía lo que estuviera escrito. */
+  function recogerAjustes(){
     h.nombre    = p.querySelector("#hNombre").value.trim() || "Hotel";
     h.direccion = p.querySelector("#hDir").value.trim();
     h.telefono  = p.querySelector("#hTel").value.trim();
@@ -1092,15 +1131,42 @@ function renderAjustes(){
     catch(err){ a.moneda = antes; alert(`El código de moneda "${mon}" no es válido; se dejó ${antes}.`); }
 
     p.querySelectorAll("[data-t]").forEach(el => { a.textos[el.dataset.t] = el.value; });
+    p.querySelectorAll("[data-g]").forEach(el => {
+      if (!a.grupos[el.dataset.g]) return;
+      a.grupos[el.dataset.g][el.dataset.gk] = el.dataset.gk === "nombre" ? el.value.trim() : el.value;
+    });
     p.querySelectorAll("#tHab tr[data-id]").forEach(tr => {
       const x = state.habitaciones.find(y => y.id === tr.dataset.id);
       if (!x) return;
+      x.codigo  = tr.querySelector('[data-k="codigo"]').value.trim().toUpperCase();
       x.nombre  = tr.querySelector('[data-k="nombre"]').value.trim() || "Sin nombre";
       x.grupo   = tr.querySelector('[data-k="grupo"]').value;
       const pub = tr.querySelector('[data-k="publica"]').value.trim();
       x.publica = pub === "" ? null : parseMoney(pub);
-      x.incluye = tr.querySelector('[data-k="incluye"]').value;
     });
+  }
+
+  p.querySelector("#bAddHab").onclick = () => {
+    recogerAjustes();
+    state.habitaciones.push(saneaHab({ nombre:"Nuevo tipo", grupo:"deluxe", publica:null }));
+    guardar(); renderAjustes();
+  };
+  p.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
+    const id = b.dataset.del;
+    const usos = state.convenios.filter(v => v.habitaciones.some(x => x.tipoId === id)).length;
+    if (usos && !confirm(`Este tipo aparece en ${usos} convenio(s). Los convenios ya guardados conservan su copia. ¿Eliminarlo del catálogo?`)) return;
+    recogerAjustes();
+    state.habitaciones = state.habitaciones.filter(x => x.id !== id);
+    guardar(); renderAjustes();
+  });
+  p.querySelector("#bResetTextos").onclick = () => {
+    if (!confirm("Se restaurarán todos los textos de la carta a los originales. ¿Continuar?")) return;
+    a.textos = Object.assign({}, TEXTOS_DEF);
+    a.grupos = saneaGrupos(null);
+    guardar(); renderAjustes();
+  };
+  p.querySelector("#bGuardarAj").onclick = () => {
+    recogerAjustes();
     guardar(); renderAjustes();
     const ok = document.getElementById("ajOk");
     if (ok){ ok.textContent = "Guardado ✓"; setTimeout(() => { if (ok) ok.textContent = ""; }, 2500); }
@@ -1368,18 +1434,20 @@ function editarConvenio(id, clientePre, alCerrar){
   // En borrador la tarifa pública se refresca desde el catálogo; el precio convenio se conserva.
   const previos = new Map(v.habitaciones.map(h => [h.tipoId, h.convenio]));
   const filas = state.habitaciones.map(h => ({
-    tipoId:h.id, nombre:h.nombre, grupo:h.grupo, publica:h.publica, incluye:h.incluye,
-    convenio: previos.has(h.tipoId) ? previos.get(h.tipoId) : (previos.has(h.id) ? previos.get(h.id) : "")
+    tipoId:h.id, codigo:h.codigo, nombre:h.nombre, grupo:h.grupo, publica:h.publica,
+    convenio: previos.has(h.id) ? previos.get(h.id) : ""
   }));
 
   const bloque = gid => {
     const fs = filas.filter(f => f.grupo === gid);
     if (!fs.length) return `<p class="hint">No hay habitaciones de este bloque en el catálogo (pestaña Ajustes).</p>`;
     return `<table class="data"><thead><tr>
-        <th>Tipo de habitación</th><th class="num" style="width:150px">Tarifa pública</th>
+        <th style="width:80px">Clave</th><th>Tipo de habitación</th>
+        <th class="num" style="width:150px">Tarifa pública</th>
         <th class="num" style="width:170px">Tarifa convenio</th><th class="num" style="width:100px">Dcto.</th>
       </tr></thead><tbody>${fs.map(f => `<tr data-tipo="${f.tipoId}">
-        <td><b>${esc(f.nombre)}</b>${f.incluye ? `<div class="hint" style="white-space:pre-wrap">${esc(f.incluye)}</div>` : ""}</td>
+        <td>${f.codigo ? `<span class="pill">${esc(f.codigo)}</span>` : ""}</td>
+        <td><b>${esc(f.nombre)}</b></td>
         <td class="num">${f.publica === null ? `<b>N/A</b>` : `<b>${esc(moneyMN(f.publica))}</b>`}
           <div class="hint">fija</div></td>
         <td class="num"><input class="field conv" inputmode="decimal" data-pub="${f.publica === null ? "" : f.publica}"
@@ -1405,14 +1473,14 @@ function editarConvenio(id, clientePre, alCerrar){
           <div><label class="lbl">Vigencia hasta</label><input class="field" type="date" id="cHasta" value="${esc(v.vigenciaHasta)}"></div>
         </div>
 
-        <h3 class="sec">Bloque Deluxe</h3>
+        <h3 class="sec">Bloque ${esc(infoGrupo("deluxe").nombre)}</h3>
         <div class="note">La <b>tarifa pública</b> viene del catálogo y no se edita aquí.
           Captura sólo la <b>tarifa convenio</b>; deja en blanco los tipos que no entren en este convenio.</div>
         <div>${bloque("deluxe")}</div>
 
-        <h3 class="sec">Bloque Recovery</h3>
+        <h3 class="sec">Bloque ${esc(infoGrupo("recovery").nombre)}</h3>
         <p><label><input type="checkbox" id="cRec" ${v.incluyeRecovery ? "checked" : ""}>
-          Considerar también habitaciones Recovery en este convenio</label></p>
+          Considerar también habitaciones ${esc(infoGrupo("recovery").nombre)} en este convenio</label></p>
         <div id="bRecovery" ${v.incluyeRecovery ? "" : 'style="display:none"'}>${bloque("recovery")}</div>
 
         <h3 class="sec">Observaciones internas</h3>
@@ -1473,8 +1541,8 @@ function editarConvenio(id, clientePre, alCerrar){
       if (cat.grupo === "recovery" && !incRec) return;
       const val = tr.querySelector(".conv").value.trim();
       if (!val) return;                                  // sin tarifa convenio = no entra
-      habs.push({ tipoId, nombre:cat.nombre, grupo:cat.grupo, publica:cat.publica,
-                  incluye:cat.incluye, convenio: parseMoney(val) });
+      habs.push({ tipoId, codigo:cat.codigo, nombre:cat.nombre, grupo:cat.grupo,
+                  publica:cat.publica, convenio: parseMoney(val) });
     });
     if (!habs.length){ alert("Captura al menos una tarifa convenio."); return false; }
 
@@ -1489,6 +1557,7 @@ function editarConvenio(id, clientePre, alCerrar){
       incluyeRecovery: incRec,
       habitaciones: habs,
       notas: ov.querySelector("#cNotas").value.trim(),
+      grupos: saneaGrupos(state.ajustes.grupos),
       updatedAt: new Date().toISOString()
     });
     if (!existente){ v.createdAt = new Date().toISOString(); state.convenios.push(v); }
@@ -1511,16 +1580,16 @@ function verConvenio(id, alCerrar, pedirFirma){
   const tablaGrupo = gid => {
     const hs = v.habitaciones.filter(x => x.grupo === gid);
     if (!hs.length) return "";
-    const g = grupoDe(gid);
+    const g = infoGrupo(gid, v);
     return `<table class="tar"><thead><tr>
-        <th>${esc(g.name)} / ${esc(h.nombre)}</th>
+        <th>${esc(g.nombre)} / ${esc(h.nombre)}</th>
         <th class="num" style="width:150px">Tarifa pública</th>
         <th class="num" style="width:150px">Tarifa convenio</th></tr></thead>
       <tbody>${hs.map(x => `<tr>
         <td>${esc(x.nombre)}</td>
         <td class="num">${x.publica === null ? "N/A" : esc(moneyMN(x.publica))}</td>
         <td class="num"><b>${esc(moneyMN(x.convenio))}</b></td></tr>`).join("")}</tbody></table>
-      ${hs.some(x => x.incluye) ? `<div class="inc">${esc(hs.map(x => x.incluye).filter(Boolean).join("\n"))}</div>` : ""}`;
+      ${g.incluye ? `<div class="inc">${esc(g.incluye)}</div>` : ""}`;
   };
 
   const bloqueFirma = (f, titulo, nombreDef, puestoDef, celDef) => `
@@ -1955,15 +2024,16 @@ function abrirExportar(){
           .map(a => [nombreCli(a.clienteId), tipoAct(a.tipo).name, a.asunto, a.fecha, a.responsable, a.notas]))), "text/csv");
   };
   ov.querySelector("#eConv").onclick = () => {
-    const fs = [["Folio","Empresa","Fecha","Vigencia desde","Vigencia hasta","Bloque","Tipo de habitación",
+    const fs = [["Folio","Empresa","Fecha","Vigencia desde","Vigencia hasta","Bloque","Clave","Tipo de habitación",
                  "Tarifa pública","Tarifa convenio","Estado","Firmó hotel","Firmó empresa","Observaciones"]];
     for (const v of state.convenios){
       const base = [v.folio, nombreCli(v.clienteId), v.fecha, v.vigenciaDesde, v.vigenciaHasta];
       const cola = [ESTADOS_CONV[v.estado].name, (v.firmaHotel||{}).nombre || "",
                     (v.firmaEmpresa||{}).nombre || "", v.notas];
-      if (!v.habitaciones.length) fs.push(base.concat(["","","",""], cola));
+      if (!v.habitaciones.length) fs.push(base.concat(["","","","",""], cola));
       for (const h of v.habitaciones)
-        fs.push(base.concat([grupoDe(h.grupo).name, h.nombre, h.publica === null ? "N/A" : h.publica, h.convenio], cola));
+        fs.push(base.concat([infoGrupo(h.grupo, v).nombre, h.codigo, h.nombre,
+                             h.publica === null ? "N/A" : h.publica, h.convenio], cola));
     }
     descargar(`convenios-${hoy}.csv`, toCSV(fs), "text/csv");
   };

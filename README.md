@@ -93,8 +93,10 @@ firma (**De conformidad Hotel** y **De conformidad Empresa**) con Nombre, Puesto
 
 - **Datos del hotel**: nombre, dirección, teléfono, ciudad (para la línea de fecha), teléfono
   y correo de reservaciones, moneda y lada del país.
-- **Catálogo de habitaciones**: tipo, bloque (Deluxe o Recovery), tarifa pública —vacía = N/A—
-  y el texto de lo que incluye. **Es el único lugar donde se edita la tarifa pública.**
+- **Catálogo de habitaciones**: clave, tipo, bloque (Deluxe o Recovery) y tarifa pública
+  —vacía = N/A—. **Es el único lugar donde se edita la tarifa pública.**
+- **Bloques de la carta**: el nombre que encabeza cada tabla y el texto de lo que incluye ese
+  bloque, que se imprime **una sola vez** debajo de la tabla, como en el machote.
 - **Textos de la carta**: todos editables, con marcadores `{{HOTEL}}`, `{{EMPRESA}}`,
   `{{CONTACTO}}`, `{{VIGENCIA}}` y `{{ANIO}}` que se sustituyen al generar cada carta.
 
@@ -126,7 +128,23 @@ y no se comparten entre computadoras. Usa *Exportar* seguido:
 - **CSV de clientes, actividades y convenios** — para Excel. El de convenios saca una fila por
   habitación.
 
+### Catálogo cargado
+
+| Clave | Tipo | Bloque | Tarifa pública |
+|---|---|---|---|
+| STKN | Standard King | Deluxe | 5,300 |
+| STQU | Standard Queen | Deluxe | 5,300 |
+| STDB | Standard Double | Deluxe | 5,300 |
+| GDKN | Garden King | Deluxe | 6,460 |
+| GDDO | Garden Double | Deluxe | 6,460 |
+| SUKN | Suite King | Deluxe | 5,300 |
+| MSTR | Master Suite | Deluxe | 12,031 |
+| PSDT | Presidencial | Deluxe | 14,601 |
+| CARE | Care | Recovery | N/A |
+
 ## Pendientes
 
 - Las tarifas y los textos por omisión salen de la carta-convenio de **Quartz Hotel & Spa**
   para *Samaha Clinik* (agosto 2026). Revisa en Ajustes que sigan vigentes.
+- **Suite King aparece con la misma tarifa pública que las Standard (5,300).** Viene así del
+  catálogo que nos pasaron; conviene confirmarlo antes de emitir convenios con ese tipo.
