@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CRM Ventas · Kanban</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --panel:#ffffff; --panel-2:#fafbfc; --col:#ebecf0;
+    --text:#172b4d; --muted:#6b778c; --line:#dfe1e6;
+    --accent:#0052cc; --accent-soft:#e6effc;
+    --ok:#1f845a; --ok-soft:#dcfff1;
+    --bad:#c9372c; --bad-soft:#ffedeb;
+    --warn:#b65c02; --warn-soft:#fff4e5;
+    --shadow:0 1px 2px rgba(9,30,66,.16);
+    --radius:8px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0f1114; --panel:#1a1d21; --panel-2:#202429; --col:#16191d;
+      --text:#e6e8ea; --muted:#9aa4b2; --line:#2c3138;
+      --accent:#579dff; --accent-soft:#12253f;
+      --ok:#5fd6a4; --ok-soft:#10291f;
+      --bad:#ff8f85; --bad-soft:#2e1614;
+      --warn:#e8a33d; --warn-soft:#2c2013;
+      --shadow:0 1px 2px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0f1114; --panel:#1a1d21; --panel-2:#202429; --col:#16191d;
+    --text:#e6e8ea; --muted:#9aa4b2; --line:#2c3138;
+    --accent:#579dff; --accent-soft:#12253f;
+    --ok:#5fd6a4; --ok-soft:#10291f;
+    --bad:#ff8f85; --bad-soft:#2e1614;
+    --warn:#e8a33d; --warn-soft:#2c2013;
+    --shadow:0 1px 2px rgba(0,0,0,.5);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    height:100vh; display:flex; flex-direction:column; overflow:hidden;
+  }
+
+  /* ---------- Barra superior ---------- */
+  header{
+    background:var(--panel); border-bottom:1px solid var(--line);
+    padding:10px 16px; display:flex; flex-wrap:wrap; gap:12px; align-items:center;
+  }
+  .brand{font-size:16px; font-weight:700; letter-spacing:-.01em; white-space:nowrap}
+  .brand span{color:var(--accent)}
+  .kpis{display:flex; gap:8px; flex-wrap:wrap}
+  .kpi{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius);
+    padding:5px 10px; min-width:96px;
+  }
+  .kpi b{display:block; font-size:15px; font-variant-numeric:tabular-nums}
+  .kpi small{color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em}
+  .spacer{flex:1 1 auto}
+  .tools{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+
+  input,select,textarea,button{font:inherit; color:inherit}
+  .field{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    border-radius:6px; padding:7px 10px;
+  }
+  .field:focus{outline:2px solid var(--accent); outline-offset:-1px}
+  #q{min-width:190px}
+  button.btn{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:6px;
+    padding:7px 12px; cursor:pointer; white-space:nowrap;
+  }
+  button.btn:hover{background:var(--col)}
+  button.btn.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+  button.btn.primary:hover{filter:brightness(1.08)}
+  button.btn.danger{color:var(--bad); border-color:var(--line)}
+  button.btn.danger:hover{background:var(--bad-soft)}
+
+  /* ---------- Tablero ---------- */
+  main{flex:1 1 auto; overflow-x:auto; overflow-y:hidden; padding:14px}
+  #board{display:flex; gap:12px; height:100%; align-items:stretch; min-height:0}
+  .col{
+    background:var(--col); border-radius:10px; width:290px; flex:0 0 290px;
+    display:flex; flex-direction:column; height:100%;
+  }
+  .col.drop{outline:2px dashed var(--accent); outline-offset:-2px}
+  .col-head{padding:10px 12px 8px; display:flex; align-items:center; gap:8px}
+  .dot{width:9px; height:9px; border-radius:50%; flex:0 0 auto}
+  .col-name{font-weight:700; font-size:13px; flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .count{
+    background:var(--panel); border:1px solid var(--line); color:var(--muted);
+    border-radius:20px; padding:1px 8px; font-size:11px; font-variant-numeric:tabular-nums;
+  }
+  .col-sum{
+    padding:0 12px 8px; color:var(--muted); font-size:12px;
+    font-variant-numeric:tabular-nums; border-bottom:1px solid var(--line); margin-bottom:6px;
+  }
+  .cards{flex:0 1 auto; overflow-y:auto; padding:0 8px 8px; display:flex; flex-direction:column; gap:8px; min-height:40px}
+  .col-foot{padding:6px 8px 10px}
+  .add-card{
+    width:100%; text-align:left; background:transparent; border:1px dashed var(--line);
+    color:var(--muted); border-radius:6px; padding:7px 10px; cursor:pointer;
+  }
+  .add-card:hover{background:var(--panel-2); color:var(--text)}
+
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--accent);
+    border-radius:6px; padding:9px 10px; box-shadow:var(--shadow); cursor:grab;
+  }
+  .card:hover{border-color:var(--accent)}
+  .card.dragging{opacity:.4}
+  .card-title{font-weight:600; margin-bottom:3px; word-break:break-word}
+  .card-sub{color:var(--muted); font-size:12px; margin-bottom:7px; word-break:break-word}
+  .card-row{display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+  .amount{font-weight:700; font-variant-numeric:tabular-nums}
+  .pill{
+    font-size:11px; padding:1px 7px; border-radius:20px;
+    background:var(--panel-2); border:1px solid var(--line); color:var(--muted);
+  }
+  .pill.due{background:var(--warn-soft); color:var(--warn); border-color:transparent}
+  .pill.late{background:var(--bad-soft); color:var(--bad); border-color:transparent}
+  .tags{display:flex; gap:4px; flex-wrap:wrap; margin-top:6px}
+  .tag{font-size:11px; padding:1px 7px; border-radius:4px; background:var(--accent-soft); color:var(--accent)}
+  .move{display:flex; gap:4px; margin-top:8px}
+  .move button{
+    flex:1; background:var(--panel-2); border:1px solid var(--line); color:var(--muted);
+    border-radius:4px; padding:2px 0; cursor:pointer; font-size:12px; line-height:1.6;
+  }
+  .move button:hover:not(:disabled){background:var(--accent); border-color:var(--accent); color:#fff}
+  .move button:disabled{opacity:.35; cursor:default}
+  .empty-col{color:var(--muted); font-size:12px; text-align:center; padding:14px 6px}
+
+  /* ---------- Modales ---------- */
+  .overlay{
+    position:fixed; inset:0; background:rgba(9,30,66,.55); display:flex;
+    align-items:flex-start; justify-content:center; padding:24px 16px; overflow-y:auto; z-index:50;
+  }
+  .modal{
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    width:100%; max-width:640px; box-shadow:0 12px 40px rgba(9,30,66,.35);
+  }
+  .modal.wide{max-width:840px}
+  .modal-head{
+    padding:14px 18px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:10px;
+  }
+  .modal-head h2{margin:0; font-size:16px; flex:1 1 auto}
+  .modal-body{padding:16px 18px}
+  .modal-foot{
+    padding:12px 18px; border-top:1px solid var(--line);
+    display:flex; gap:8px; align-items:center;
+  }
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  .grid .full{grid-column:1/-1}
+  label.lbl{display:block; font-size:12px; color:var(--muted); margin-bottom:4px; font-weight:600}
+  .grid input,.grid select,.grid textarea{width:100%}
+  textarea{resize:vertical; min-height:70px}
+  .hint{color:var(--muted); font-size:12px}
+  .note{
+    background:var(--accent-soft); color:var(--text); border-radius:6px;
+    padding:10px 12px; font-size:13px; margin-bottom:14px;
+  }
+
+  table.map{width:100%; border-collapse:collapse}
+  table.map th{
+    text-align:left; font-size:11px; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.04em; padding:6px 8px; border-bottom:1px solid var(--line);
+  }
+  table.map td{padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:middle}
+  table.map td:first-child{font-weight:600; white-space:nowrap}
+  table.map select{width:100%}
+  .prev{color:var(--muted); font-size:12px; max-width:230px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .scroll{max-height:52vh; overflow-y:auto}
+
+  @media (max-width:640px){
+    .kpis{order:3; width:100%}
+    .col{width:82vw; flex-basis:82vw}
+    .grid{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">CRM Ventas <span>· Kanban</span></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="spacer"></div>
+  <div class="tools">
+    <input id="q" class="field" type="search" placeholder="Buscar negocio, empresa, contacto…" autocomplete="off">
+    <select id="fOwner" class="field" title="Filtrar por responsable"><option value="">Todos</option></select>
+    <button class="btn primary" id="bNew">+ Negocio</button>
+    <button class="btn" id="bImport">Importar</button>
+    <button class="btn" id="bExport">Exportar</button>
+    <button class="btn" id="bTheme" title="Cambiar tema">◐</button>
+  </div>
+</header>
+
+<main><div id="board"></div></main>
+
+<script>
+"use strict";
+
+/* ================= Configuración ================= */
+
+const STORE_KEY = "crm-ventas-kanban-v1";
+
+const STAGES = [
+  { id:"prospecto",   name:"Prospecto",   color:"#8993a4", won:false, lost:false },
+  { id:"contactado",  name:"Contactado",  color:"#0052cc", won:false, lost:false },
+  { id:"calificado",  name:"Calificado",  color:"#5243aa", won:false, lost:false },
+  { id:"propuesta",   name:"Propuesta",   color:"#0079bf", won:false, lost:false },
+  { id:"negociacion", name:"Negociación", color:"#b65c02", won:false, lost:false },
+  { id:"ganado",      name:"Ganado",      color:"#1f845a", won:true,  lost:false },
+  { id:"perdido",     name:"Perdido",     color:"#c9372c", won:false, lost:true  }
+];
+const stageById = id => STAGES.find(s => s.id === id) || STAGES[0];
+
+/* Campos del negocio. `aliases` alimenta el auto-mapeo al importar CSV. */
+const FIELDS = [
+  { key:"nombre",       label:"Negocio",         type:"text",   aliases:["negocio","oportunidad","titulo","título","deal","asunto","descripcion","descripción","concepto","proyecto","name","title"] },
+  { key:"empresa",      label:"Empresa",         type:"text",   aliases:["empresa","cliente","compania","compañia","compañía","cuenta","razon social","razón social","company","account","organizacion","organización"] },
+  { key:"contacto",     label:"Contacto",        type:"text",   aliases:["contacto","nombre contacto","persona","atencion","atención","contact"] },
+  { key:"email",        label:"Email",           type:"email",  aliases:["email","correo","e-mail","correo electronico","correo electrónico","mail"] },
+  { key:"telefono",     label:"Teléfono",        type:"tel",    aliases:["telefono","teléfono","tel","celular","movil","móvil","whatsapp","phone"] },
+  { key:"monto",        label:"Monto",           type:"money",  aliases:["monto","valor","importe","precio","total","cotizacion","cotización","amount","value","venta","ingreso"] },
+  { key:"probabilidad", label:"Probabilidad %",  type:"number", aliases:["probabilidad","prob","porcentaje","probability","probabilidad de cierre"] },
+  { key:"fechaCierre",  label:"Cierre estimado", type:"date",   aliases:["fecha cierre","cierre","fecha de cierre","cierre estimado","fecha estimada","vencimiento","close date","fecha"] },
+  { key:"responsable",  label:"Responsable",     type:"text",   aliases:["responsable","vendedor","asesor","ejecutivo","dueño","dueno","owner","asignado","agente"] },
+  { key:"origen",       label:"Origen",          type:"text",   aliases:["origen","fuente","canal","source","medio","como nos conocio","cómo nos conoció"] },
+  { key:"etiquetas",    label:"Etiquetas",       type:"text",   aliases:["etiquetas","etiqueta","tags","categoria","categoría","tipo"] },
+  { key:"notas",        label:"Notas",           type:"textarea",aliases:["notas","nota","comentarios","comentario","observaciones","detalle","notes"] },
+  { key:"stage",        label:"Etapa",           type:"stage",  aliases:["etapa","estatus","estado","fase","status","stage","situacion","situación","pipeline"] }
+];
+
+/* ================= Estado ================= */
+
+let idCounter = 0;
+let state = load();
+let filters = { q:"", owner:"" };
+let dragId = null;
+
+function load(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw){
+      const p = JSON.parse(raw);
+      if (p && Array.isArray(p.deals)) return { deals: p.deals.map(normalize) };
+    }
+  }catch(e){ console.warn("No se pudo leer el almacenamiento local:", e); }
+  return { deals: demoDeals() };
+}
+
+function save(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+  catch(e){ console.warn("No se pudo guardar en el almacenamiento local:", e); }
+}
+
+function normalize(d){
+  const o = Object.assign({
+    id:"", nombre:"", empresa:"", contacto:"", email:"", telefono:"",
+    monto:0, probabilidad:"", fechaCierre:"", responsable:"", origen:"",
+    etiquetas:[], notas:"", stage:"prospecto", createdAt:"", updatedAt:""
+  }, d || {});
+  o.id = String(o.id || nextId());
+  o.monto = Number(o.monto) || 0;
+  o.etiquetas = Array.isArray(o.etiquetas)
+    ? o.etiquetas.filter(Boolean)
+    : String(o.etiquetas || "").split(/[,;|]/).map(s => s.trim()).filter(Boolean);
+  if (!stageById(o.stage) || o.stage !== stageById(o.stage).id) o.stage = "prospecto";
+  return o;
+}
+
+function nextId(){ return "d" + Date.now().toString(36) + "-" + (++idCounter); }
+
+function demoDeals(){
+  const hoy = new Date();
+  const en = n => new Date(hoy.getTime() + n*864e5).toISOString().slice(0,10);
+  return [
+    { id:"d1", nombre:"Licencias anuales", empresa:"Grupo Marín", contacto:"Laura Marín", email:"laura@grupomarin.mx", telefono:"55 1234 5678", monto:180000, probabilidad:60, fechaCierre:en(14), responsable:"Ana", origen:"Referido", etiquetas:["software"], notas:"Pidieron cotización por 25 usuarios.", stage:"propuesta" },
+    { id:"d2", nombre:"Implementación ERP", empresa:"Distribuidora Sur", contacto:"Jorge Rivas", email:"jrivas@dsur.com", telefono:"33 8899 1122", monto:420000, probabilidad:35, fechaCierre:en(45), responsable:"Carlos", origen:"Sitio web", etiquetas:["consultoría","alto valor"], notas:"", stage:"calificado" },
+    { id:"d3", nombre:"Renovación soporte", empresa:"Textiles Ávila", contacto:"Mónica Ávila", email:"monica@avila.mx", telefono:"", monto:95000, probabilidad:85, fechaCierre:en(5), responsable:"Ana", origen:"Cliente actual", etiquetas:["renovación"], notas:"Alta probabilidad, sólo falta firma.", stage:"negociacion" },
+    { id:"d4", nombre:"Capacitación equipo", empresa:"Constructora León", contacto:"Raúl León", email:"", telefono:"81 4455 6677", monto:60000, probabilidad:20, fechaCierre:en(30), responsable:"Carlos", origen:"Feria", etiquetas:[], notas:"", stage:"contactado" },
+    { id:"d5", nombre:"Módulo facturación", empresa:"Farmacias Delta", contacto:"Sofía Cruz", email:"scruz@delta.mx", telefono:"", monto:150000, probabilidad:100, fechaCierre:en(-10), responsable:"Ana", origen:"Referido", etiquetas:["software"], notas:"Cerrado, facturado en agosto.", stage:"ganado" },
+    { id:"d6", nombre:"Servidor dedicado", empresa:"Logística Pacífico", contacto:"Iván Ortega", email:"", telefono:"", monto:75000, probabilidad:0, fechaCierre:en(-20), responsable:"Carlos", origen:"Llamada fría", etiquetas:[], notas:"Se fueron con la competencia por precio.", stage:"perdido" }
+  ].map(normalize);
+}
+
+/* ================= Utilidades ================= */
+
+const money = n => new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",maximumFractionDigits:0}).format(Number(n)||0);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const todayISO = () => new Date().toISOString().slice(0,10);
+
+function daysTo(iso){
+  if (!iso) return null;
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d)) return null;
+  const t = new Date(todayISO() + "T00:00:00");
+  return Math.round((d - t) / 864e5);
+}
+
+/**
+ * Lee montos escritos como sea: "$120,000.50", "1.250.000", "89500,75", "(1,200)".
+ * Regla: el último separador es decimal sólo si deja 1 o 2 dígitos detrás;
+ * si deja 3 o más, es separador de miles. Sirve igual para formato latino y anglosajón.
+ */
+function parseMoney(v){
+  if (v == null || v === "") return 0;
+  if (typeof v === "number") return v;
+  const src = String(v).trim();
+  const neg = src.includes("-") || /^\(.*\)$/.test(src);
+  let s = src.replace(/[^\d.,]/g, "");
+  if (!s) return 0;
+  const sep = Math.max(s.lastIndexOf(","), s.lastIndexOf("."));
+  if (sep > -1){
+    const dec = s.length - sep - 1;
+    s = (dec >= 1 && dec <= 2)
+      ? s.slice(0, sep).replace(/[.,]/g, "") + "." + s.slice(sep + 1)
+      : s.replace(/[.,]/g, "");
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : (neg ? -Math.abs(n) : n);
+}
+
+/** Acepta 2026-09-04, 04/09/2026, 4-9-26, seriales de Excel. */
+function parseDate(v){
+  if (!v) return "";
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  if (/^\d{5}$/.test(s)){ // serial de Excel (base 1899-12-30)
+    const d = new Date(Date.UTC(1899,11,30) + Number(s)*864e5);
+    return d.toISOString().slice(0,10);
+  }
+  const m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if (m){
+    let [,a,b,y] = m;
+    if (y.length === 2) y = "20" + y;
+    // Formato latino: día primero, salvo que sea imposible.
+    let dd = +a, mm = +b;
+    if (dd > 12 && mm <= 12){ /* ok */ }
+    else if (mm > 12 && dd <= 12){ [dd, mm] = [mm, dd]; }
+    if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return "";
+    return `${y}-${String(mm).padStart(2,"0")}-${String(dd).padStart(2,"0")}`;
+  }
+  const d = new Date(s);
+  return isNaN(d) ? "" : d.toISOString().slice(0,10);
+}
+
+/** Empata el texto de una etapa del archivo con una etapa del tablero. */
+function matchStage(v){
+  const s = String(v || "").trim().toLowerCase();
+  if (!s) return "prospecto";
+  const hit = STAGES.find(st => st.id === s || st.name.toLowerCase() === s);
+  if (hit) return hit.id;
+  const rules = [
+    [/gan[oa]|won|exito|éxito|vendid|facturad|cobrad/, "ganado"],
+    [/perd|lost|cancel|rechaz|declin|no\s*interes/, "perdido"],
+    [/negoc|cierre|firma/, "negociacion"],
+    [/propuesta|cotiz|oferta|proposal|quote/, "propuesta"],
+    [/calific|qualified|interes|demo|reunion|reunión/, "calificado"],
+    [/contact|seguimiento|llamad|first|primer/, "contactado"],
+    [/prospec|nuevo|lead|inicial|sin\s*contact/, "prospecto"]
+  ];
+  for (const [re, id] of rules) if (re.test(s)) return id;
+  return "prospecto";
+}
+
+/* ================= CSV ================= */
+
+/** Parser de CSV/TSV que respeta comillas, saltos de línea y comillas escapadas. */
+function parseCSV(text){
+  text = text.replace(/^\uFEFF/, "");
+  const head = text.slice(0, text.indexOf("\n") === -1 ? text.length : text.indexOf("\n"));
+  const delim = (head.match(/\t/g)||[]).length > (head.match(/,/g)||[]).length ? "\t"
+              : (head.match(/;/g)||[]).length > (head.match(/,/g)||[]).length ? ";" : ",";
+  const rows = []; let row = []; let cell = ""; let quoted = false;
+
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (quoted){
+      if (c === '"'){
+        if (text[i+1] === '"'){ cell += '"'; i++; }
+        else quoted = false;
+      } else cell += c;
+      continue;
+    }
+    if (c === '"'){ quoted = true; }
+    else if (c === delim){ row.push(cell); cell = ""; }
+    else if (c === "\n"){ row.push(cell); rows.push(row); row = []; cell = ""; }
+    else if (c === "\r"){ /* ignora */ }
+    else cell += c;
+  }
+  if (cell !== "" || row.length){ row.push(cell); rows.push(row); }
+  return rows.filter(r => r.some(c => String(c).trim() !== ""));
+}
+
+function toCSV(rows){
+  return rows.map(r => r.map(c => {
+    const s = String(c ?? "");
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  }).join(",")).join("\r\n");
+}
+
+function download(name, content, mime){
+  const blob = new Blob(["\uFEFF" + content], { type: (mime||"text/plain") + ";charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ================= Render ================= */
+
+function visibleDeals(){
+  const q = filters.q.trim().toLowerCase();
+  return state.deals.filter(d => {
+    if (filters.owner && d.responsable !== filters.owner) return false;
+    if (!q) return true;
+    return [d.nombre,d.empresa,d.contacto,d.email,d.telefono,d.responsable,d.origen,d.notas,d.etiquetas.join(" ")]
+      .join(" ").toLowerCase().includes(q);
+  });
+}
+
+function render(){
+  renderKpis();
+  renderOwners();
+  renderBoard();
+}
+
+function renderKpis(){
+  const ds = visibleDeals();
+  const abiertos = ds.filter(d => !stageById(d.stage).won && !stageById(d.stage).lost);
+  const ganados  = ds.filter(d => stageById(d.stage).won);
+  const perdidos = ds.filter(d => stageById(d.stage).lost);
+  const sum = a => a.reduce((t,d) => t + (Number(d.monto)||0), 0);
+  const ponderado = abiertos.reduce((t,d) => t + (Number(d.monto)||0) * ((Number(d.probabilidad)||0)/100), 0);
+  const cerrados = ganados.length + perdidos.length;
+  const tasa = cerrados ? Math.round(ganados.length / cerrados * 100) : 0;
+
+  const items = [
+    ["Pipeline abierto", money(sum(abiertos)), abiertos.length + " negocios"],
+    ["Ponderado", money(ponderado), "por probabilidad"],
+    ["Ganado", money(sum(ganados)), ganados.length + " cerrados"],
+    ["Tasa de cierre", tasa + "%", cerrados + " resueltos"]
+  ];
+  document.getElementById("kpis").innerHTML = items
+    .map(([t,v,s]) => `<div class="kpi"><small>${esc(t)}</small><b>${esc(v)}</b><small>${esc(s)}</small></div>`)
+    .join("");
+}
+
+function renderOwners(){
+  const sel = document.getElementById("fOwner");
+  const owners = [...new Set(state.deals.map(d => d.responsable).filter(Boolean))].sort();
+  const cur = filters.owner;
+  sel.innerHTML = `<option value="">Todos</option>` +
+    owners.map(o => `<option value="${esc(o)}"${o===cur?" selected":""}>${esc(o)}</option>`).join("");
+}
+
+function renderBoard(){
+  const ds = visibleDeals();
+  const board = document.getElementById("board");
+  board.innerHTML = "";
+
+  for (const st of STAGES){
+    const mine = ds.filter(d => d.stage === st.id)
+                   .sort((a,b) => (Number(b.monto)||0) - (Number(a.monto)||0));
+    const total = mine.reduce((t,d) => t + (Number(d.monto)||0), 0);
+
+    const col = document.createElement("section");
+    col.className = "col";
+    col.dataset.stage = st.id;
+    col.innerHTML = `
+      <div class="col-head">
+        <span class="dot" style="background:${st.color}"></span>
+        <span class="col-name">${esc(st.name)}</span>
+        <span class="count">${mine.length}</span>
+      </div>
+      <div class="col-sum">${money(total)}</div>
+      <div class="cards"></div>
+      <div class="col-foot"><button class="add-card" data-stage="${st.id}">+ Agregar negocio</button></div>`;
+
+    const cards = col.querySelector(".cards");
+    if (!mine.length){
+      cards.innerHTML = `<div class="empty-col">Sin negocios</div>`;
+    } else {
+      for (const d of mine) cards.appendChild(cardEl(d, st));
+    }
+
+    // Zona de soltado
+    col.addEventListener("dragover", e => { e.preventDefault(); col.classList.add("drop"); });
+    col.addEventListener("dragleave", () => col.classList.remove("drop"));
+    col.addEventListener("drop", e => {
+      e.preventDefault();
+      col.classList.remove("drop");
+      moveDeal(dragId, st.id);
+    });
+
+    board.appendChild(col);
+  }
+}
+
+function cardEl(d, st){
+  const el = document.createElement("article");
+  el.className = "card";
+  el.draggable = true;
+  el.dataset.id = d.id;
+  el.style.borderLeftColor = st.color;
+
+  const dias = daysTo(d.fechaCierre);
+  let fecha = "";
+  if (d.fechaCierre){
+    const cls = (!st.won && !st.lost && dias !== null && dias < 0) ? "late"
+              : (!st.won && !st.lost && dias !== null && dias <= 7) ? "due" : "";
+    const txt = dias === null ? d.fechaCierre
+              : dias < 0 ? `Vencido ${Math.abs(dias)} d`
+              : dias === 0 ? "Cierra hoy"
+              : `${dias} d`;
+    fecha = `<span class="pill ${cls}">${esc(txt)}</span>`;
+  }
+
+  const idx = STAGES.findIndex(s => s.id === d.stage);
+  el.innerHTML = `
+    <div class="card-title">${esc(d.nombre || "(sin título)")}</div>
+    <div class="card-sub">${esc([d.empresa, d.contacto].filter(Boolean).join(" · ") || "—")}</div>
+    <div class="card-row">
+      <span class="amount">${money(d.monto)}</span>
+      ${d.probabilidad !== "" && d.probabilidad !== null ? `<span class="pill">${esc(d.probabilidad)}%</span>` : ""}
+      ${fecha}
+      ${d.responsable ? `<span class="pill">${esc(d.responsable)}</span>` : ""}
+    </div>
+    ${d.etiquetas.length ? `<div class="tags">${d.etiquetas.map(t => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
+    <div class="move">
+      <button data-dir="-1" ${idx <= 0 ? "disabled" : ""} title="Etapa anterior">‹</button>
+      <button data-dir="1" ${idx >= STAGES.length-1 ? "disabled" : ""} title="Etapa siguiente">›</button>
+    </div>`;
+
+  el.addEventListener("dragstart", e => {
+    dragId = d.id;
+    el.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", d.id);
+  });
+  el.addEventListener("dragend", () => el.classList.remove("dragging"));
+
+  el.addEventListener("click", e => {
+    const b = e.target.closest("button[data-dir]");
+    if (b){
+      e.stopPropagation();
+      const target = STAGES[idx + Number(b.dataset.dir)];
+      if (target) moveDeal(d.id, target.id);
+      return;
+    }
+    openDeal(d.id);
+  });
+
+  return el;
+}
+
+function moveDeal(id, stage){
+  const d = state.deals.find(x => x.id === id);
+  if (!d || d.stage === stage) return;
+  d.stage = stage;
+  d.updatedAt = new Date().toISOString();
+  if (stageById(stage).won) d.probabilidad = 100;
+  if (stageById(stage).lost) d.probabilidad = 0;
+  save(); render();
+}
+
+/* ================= Modal de negocio ================= */
+
+function openDeal(id, presetStage){
+  const d = id ? state.deals.find(x => x.id === id) : null;
+  const v = d || normalize({ stage: presetStage || "prospecto", fechaCierre:"" });
+
+  const inputs = FIELDS.map(f => {
+    let val = f.key === "etiquetas" ? v.etiquetas.join(", ") : (v[f.key] ?? "");
+    if (f.key === "monto") val = Number(val) ? val : "";   // no arrastres un 0 en un alta nueva
+    const wide = (f.key === "notas" || f.key === "nombre") ? " full" : "";
+    let ctl;
+    if (f.type === "textarea") ctl = `<textarea class="field" name="${f.key}">${esc(val)}</textarea>`;
+    else if (f.type === "stage") ctl = `<select class="field" name="stage">${
+        STAGES.map(s => `<option value="${s.id}"${s.id===v.stage?" selected":""}>${esc(s.name)}</option>`).join("")}</select>`;
+    else if (f.type === "money") ctl = `<input class="field" type="text" inputmode="decimal" name="monto" value="${esc(val)}" placeholder="0.00">`;
+    else ctl = `<input class="field" type="${f.type}" name="${f.key}" value="${esc(val)}"${f.key==="probabilidad"?' min="0" max="100"':""}>`;
+    return `<div class="${wide.trim()}"><label class="lbl">${esc(f.label)}</label>${ctl}</div>`;
+  }).join("");
+
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>${d ? "Editar negocio" : "Nuevo negocio"}</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body"><form id="dealForm"><div class="grid">${inputs}</div></form></div>
+      <div class="modal-foot">
+        ${d ? `<button class="btn danger" id="del">Eliminar</button>` : ""}
+        <div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="ok">Guardar</button>
+      </div>
+    </div>`);
+
+  const form = ov.querySelector("#dealForm");
+  form.querySelector('[name="nombre"]').focus();
+  form.addEventListener("submit", e => { e.preventDefault(); guardar(); });
+
+  ov.querySelector("#ok").onclick = guardar;
+  const delBtn = ov.querySelector("#del");
+  if (delBtn) delBtn.onclick = () => {
+    if (!confirm(`¿Eliminar "${v.nombre || "este negocio"}"? Esta acción no se puede deshacer.`)) return;
+    state.deals = state.deals.filter(x => x.id !== v.id);
+    save(); render(); ov.remove();
+  };
+
+  function guardar(){
+    const fd = new FormData(form);
+    const obj = Object.assign({}, v);
+    for (const f of FIELDS){
+      let val = (fd.get(f.key) ?? "").toString().trim();
+      if (f.key === "monto") val = parseMoney(val);
+      else if (f.key === "probabilidad") val = val === "" ? "" : Math.max(0, Math.min(100, Number(val) || 0));
+      else if (f.key === "etiquetas") val = val.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+      obj[f.key] = val;
+    }
+    if (!obj.nombre && !obj.empresa){ alert("Escribe al menos el nombre del negocio o la empresa."); return; }
+    obj.updatedAt = new Date().toISOString();
+
+    if (d) Object.assign(d, normalize(obj));
+    else {
+      obj.id = nextId();
+      obj.createdAt = new Date().toISOString();
+      state.deals.push(normalize(obj));
+    }
+    save(); render(); ov.remove();
+  }
+}
+
+/* ================= Importar ================= */
+
+function openImport(){
+  const ov = modal(`
+    <div class="modal wide">
+      <div class="modal-head"><h2>Importar negocios</h2><button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note">
+          Sube un <b>CSV</b> (o TSV) con la primera fila como encabezados. Si tus datos están en Excel o Google Sheets,
+          usa <i>Archivo → Descargar → CSV</i>. También puedes pegar el contenido abajo.
+        </div>
+        <p><input type="file" id="file" class="field" accept=".csv,.tsv,.txt,text/csv,text/plain"></p>
+        <p class="hint">o pega aquí las filas (incluye la fila de encabezados):</p>
+        <textarea id="paste" class="field" style="width:100%" placeholder="Negocio,Empresa,Contacto,Monto,Etapa&#10;Licencias,ACME,Ana López,120000,Propuesta"></textarea>
+        <div id="mapArea"></div>
+      </div>
+      <div class="modal-foot">
+        <span class="hint" id="impInfo"></span>
+        <div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="doImport" disabled>Importar</button>
+      </div>
+    </div>`);
+
+  let rows = null, headers = [];
+
+  ov.querySelector("#file").addEventListener("change", e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => prepare(String(r.result));
+    r.onerror = () => alert("No se pudo leer el archivo.");
+    r.readAsText(f, "utf-8");
+  });
+  ov.querySelector("#paste").addEventListener("input", e => {
+    const t = e.target.value.trim();
+    if (t.length > 10) prepare(t); else clearPrep();
+  });
+
+  function clearPrep(){
+    rows = null;
+    ov.querySelector("#mapArea").innerHTML = "";
+    ov.querySelector("#impInfo").textContent = "";
+    ov.querySelector("#doImport").disabled = true;
+  }
+
+  function prepare(text){
+    const all = parseCSV(text);
+    if (all.length < 2){ clearPrep(); ov.querySelector("#impInfo").textContent = "Se necesitan encabezados y al menos una fila."; return; }
+    headers = all[0].map(h => String(h).trim());
+    rows = all.slice(1);
+
+    const norm = s => String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+    const hNorm = headers.map(norm);
+    const cands = f => [f.label, f.key, ...f.aliases].map(norm).filter(Boolean);
+    const used = new Set(), found = {};
+
+    // Pase 1: TODAS las coincidencias exactas primero, para que una parcial
+    // de otro campo no se lleve una columna que alguien más nombra igualito.
+    for (const f of FIELDS){
+      const cs = cands(f);
+      for (let i = 0; i < hNorm.length; i++){
+        if (used.has(i) || !hNorm[i]) continue;
+        if (cs.includes(hNorm[i])){ found[f.key] = i; used.add(i); break; }
+      }
+    }
+    // Pase 2: coincidencia parcial, sólo con lo que quedó libre.
+    for (const f of FIELDS){
+      if (found[f.key] != null) continue;
+      const cs = cands(f).filter(c => c.length > 3);
+      for (let i = 0; i < hNorm.length; i++){
+        if (used.has(i) || hNorm[i].length < 3) continue;
+        if (cs.some(c => hNorm[i].includes(c) || c.includes(hNorm[i]))){ found[f.key] = i; used.add(i); break; }
+      }
+    }
+    const guess = f => found[f.key] != null ? found[f.key] : -1;
+
+    const rowsHtml = FIELDS.map(f => {
+      const g = guess(f);
+      const opts = [`<option value="-1">— ignorar —</option>`]
+        .concat(headers.map((h,i) => `<option value="${i}"${i===g?" selected":""}>${esc(h || "(columna " + (i+1) + ")")}</option>`))
+        .join("");
+      const prev = g > -1 ? (rows.find(r => String(r[g]||"").trim()) || [])[g] || "" : "";
+      return `<tr><td>${esc(f.label)}</td><td><select class="field" data-f="${f.key}">${opts}</select></td>
+              <td class="prev" data-p="${f.key}">${esc(prev)}</td></tr>`;
+    }).join("");
+
+    ov.querySelector("#mapArea").innerHTML = `
+      <h3 style="margin:18px 0 8px;font-size:14px">Relaciona tus columnas</h3>
+      <p class="hint" style="margin-top:0">Ya adiviné el mapeo según tus encabezados. Corrige lo que haga falta.</p>
+      <div class="scroll"><table class="map">
+        <thead><tr><th>Campo del CRM</th><th>Columna de tu archivo</th><th>Ejemplo</th></tr></thead>
+        <tbody>${rowsHtml}</tbody></table></div>
+      <p style="margin:12px 0 0"><label><input type="checkbox" id="replace"> Reemplazar todos los negocios actuales (en vez de agregar)</label></p>`;
+
+    ov.querySelectorAll("#mapArea select").forEach(sel => {
+      sel.addEventListener("change", () => {
+        const i = Number(sel.value);
+        const cell = ov.querySelector(`[data-p="${sel.dataset.f}"]`);
+        cell.textContent = i > -1 ? ((rows.find(r => String(r[i]||"").trim()) || [])[i] || "") : "";
+      });
+    });
+
+    ov.querySelector("#impInfo").textContent = `${rows.length} filas · ${headers.length} columnas detectadas`;
+    ov.querySelector("#doImport").disabled = false;
+  }
+
+  ov.querySelector("#doImport").onclick = () => {
+    if (!rows) return;
+    const map = {};
+    ov.querySelectorAll("#mapArea select").forEach(s => { map[s.dataset.f] = Number(s.value); });
+    const replace = ov.querySelector("#replace")?.checked;
+
+    const nuevos = [];
+    for (const r of rows){
+      const o = {};
+      for (const f of FIELDS){
+        const i = map[f.key];
+        const raw = (i > -1 ? r[i] : "") ?? "";
+        const val = String(raw).trim();
+        if (f.key === "monto") o.monto = parseMoney(val);
+        else if (f.key === "fechaCierre") o.fechaCierre = parseDate(val);
+        else if (f.key === "stage") o.stage = matchStage(val);
+        else if (f.key === "probabilidad") o.probabilidad = val === "" ? "" : Math.max(0, Math.min(100, Math.round(parseMoney(val))));
+        else if (f.key === "etiquetas") o.etiquetas = val;
+        else o[f.key] = val;
+      }
+      if (!o.nombre && !o.empresa && !o.contacto && !o.monto) continue; // fila vacía
+      if (!o.nombre) o.nombre = o.empresa || o.contacto;
+      o.id = nextId();
+      o.createdAt = new Date().toISOString();
+      nuevos.push(normalize(o));
+    }
+
+    if (!nuevos.length){ alert("No se encontraron filas con datos utilizables. Revisa el mapeo."); return; }
+    state.deals = replace ? nuevos : state.deals.concat(nuevos);
+    save(); render(); ov.remove();
+    alert(`Se importaron ${nuevos.length} negocios.`);
+  };
+}
+
+/* ================= Exportar ================= */
+
+function openExport(){
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>Exportar</h2><button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <p class="hint" style="margin-top:0">Tus datos viven en este navegador. Descarga una copia para respaldarla o abrirla en Excel.</p>
+        <p><button class="btn" id="csv">Descargar CSV (Excel)</button></p>
+        <p><button class="btn" id="json">Descargar respaldo JSON</button></p>
+        <p><button class="btn" id="tpl">Descargar plantilla CSV vacía</button></p>
+        <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+        <p><button class="btn danger" id="wipe">Borrar todos los datos</button></p>
+      </div>
+    </div>`);
+
+  const stamp = todayISO();
+  ov.querySelector("#csv").onclick = () => {
+    const cols = FIELDS.map(f => f.label);
+    const rows = [cols].concat(state.deals.map(d => FIELDS.map(f =>
+      f.key === "stage" ? stageById(d.stage).name :
+      f.key === "etiquetas" ? d.etiquetas.join(", ") : (d[f.key] ?? ""))));
+    download(`crm-ventas-${stamp}.csv`, toCSV(rows), "text/csv");
+  };
+  ov.querySelector("#json").onclick = () =>
+    download(`crm-ventas-respaldo-${stamp}.json`, JSON.stringify(state, null, 2), "application/json");
+  ov.querySelector("#tpl").onclick = () =>
+    download("plantilla-crm-ventas.csv", toCSV([FIELDS.map(f => f.label)]), "text/csv");
+  ov.querySelector("#wipe").onclick = () => {
+    if (!confirm("Se borrarán TODOS los negocios de este navegador. ¿Continuar?")) return;
+    if (!confirm("Confirma otra vez: esta acción no se puede deshacer.")) return;
+    state = { deals: [] };
+    save(); render(); ov.remove();
+  };
+}
+
+/* ================= Infra de modales ================= */
+
+function modal(html){
+  const ov = document.createElement("div");
+  ov.className = "overlay";
+  ov.innerHTML = html;
+  ov.addEventListener("click", e => {
+    if (e.target === ov || e.target.closest("[data-close]")) ov.remove();
+  });
+  document.body.appendChild(ov);
+  return ov;
+}
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape"){
+    const ovs = document.querySelectorAll(".overlay");
+    if (ovs.length) ovs[ovs.length - 1].remove();
+  }
+});
+
+/* ================= Eventos ================= */
+
+document.getElementById("q").addEventListener("input", e => { filters.q = e.target.value; render(); });
+document.getElementById("fOwner").addEventListener("change", e => { filters.owner = e.target.value; render(); });
+document.getElementById("bNew").onclick = () => openDeal(null);
+document.getElementById("bImport").onclick = openImport;
+document.getElementById("bExport").onclick = openExport;
+document.getElementById("bTheme").onclick = () => {
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const cur = document.documentElement.dataset.theme || (dark ? "dark" : "light");
+  document.documentElement.dataset.theme = cur === "dark" ? "light" : "dark";
+  try{ localStorage.setItem(STORE_KEY + ":theme", document.documentElement.dataset.theme); }catch(e){}
+};
+document.getElementById("board").addEventListener("click", e => {
+  const b = e.target.closest(".add-card");
+  if (b) openDeal(null, b.dataset.stage);
+});
+
+try{
+  const t = localStorage.getItem(STORE_KEY + ":theme");
+  if (t) document.documentElement.dataset.theme = t;
+}catch(e){}
+
+render();
+</script>
+</body>
+</html>
