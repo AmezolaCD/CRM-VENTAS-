@@ -132,6 +132,14 @@
   table.data tbody tr:hover{background:var(--panel-2)}
   table.data td.num, table.data th.num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
   .row-link{cursor:pointer}
+  table.data tr.row-err > td{background:var(--bad-soft)}
+  .field.err{border-color:var(--bad); box-shadow:0 0 0 1px var(--bad)}
+  .errbox{background:var(--bad-soft); color:var(--bad); border:1px solid var(--bad);
+    border-radius:6px; padding:10px 13px; margin-bottom:14px; font-size:13px}
+  .errbox b{display:block; margin-bottom:3px}
+  .errbox ul{margin:0; padding-left:18px}
+  .errbox li{margin-top:3px}
+  tr.off td:not(.selcell){opacity:.45}
   .nowrap{white-space:nowrap}
   .vacio{color:var(--muted); text-align:center; padding:36px 16px}
 
@@ -1442,17 +1450,22 @@ function editarConvenio(id, clientePre, alCerrar){
     const fs = filas.filter(f => f.grupo === gid);
     if (!fs.length) return `<p class="hint">No hay habitaciones de este bloque en el catálogo (pestaña Ajustes).</p>`;
     return `<table class="data"><thead><tr>
-        <th style="width:80px">Clave</th><th>Tipo de habitación</th>
+        <th style="width:44px"></th><th style="width:80px">Clave</th><th>Tipo de habitación</th>
         <th class="num" style="width:150px">Tarifa pública</th>
         <th class="num" style="width:170px">Tarifa convenio</th><th class="num" style="width:100px">Dcto.</th>
-      </tr></thead><tbody>${fs.map(f => `<tr data-tipo="${f.tipoId}">
+      </tr></thead><tbody>${fs.map(f => {
+        const on = f.convenio !== "" && f.convenio !== null;
+        return `<tr data-tipo="${f.tipoId}"${on ? "" : ' class="off"'}>
+        <td class="selcell"><input type="checkbox" class="sel"${on ? " checked" : ""}
+              title="Incluir esta habitación en el convenio"></td>
         <td>${f.codigo ? `<span class="pill">${esc(f.codigo)}</span>` : ""}</td>
         <td><b>${esc(f.nombre)}</b></td>
         <td class="num">${f.publica === null ? `<b>N/A</b>` : `<b>${esc(moneyMN(f.publica))}</b>`}
           <div class="hint">fija</div></td>
         <td class="num"><input class="field conv" inputmode="decimal" data-pub="${f.publica === null ? "" : f.publica}"
-              value="${f.convenio === "" ? "" : esc(f.convenio)}" placeholder="—" style="width:100%;text-align:right"></td>
-        <td class="num desc">—</td></tr>`).join("")}</tbody></table>`;
+              value="${on ? esc(f.convenio) : ""}" placeholder="—" style="width:100%;text-align:right"
+              ${on ? "" : "disabled"}></td>
+        <td class="num desc">—</td></tr>`; }).join("")}</tbody></table>`;
   };
 
   const ov = modal(`
@@ -1474,8 +1487,9 @@ function editarConvenio(id, clientePre, alCerrar){
         </div>
 
         <h3 class="sec">Bloque ${esc(infoGrupo("deluxe").nombre)}</h3>
-        <div class="note">La <b>tarifa pública</b> viene del catálogo y no se edita aquí.
-          Captura sólo la <b>tarifa convenio</b>; deja en blanco los tipos que no entren en este convenio.</div>
+        <div id="cErr"></div>
+        <div class="note">Marca las habitaciones que entran en este convenio. La <b>tarifa pública</b>
+          viene del catálogo y no se edita aquí; <b>toda habitación marcada necesita su tarifa convenio</b>.</div>
         <div>${bloque("deluxe")}</div>
 
         <h3 class="sec">Bloque ${esc(infoGrupo("recovery").nombre)}</h3>
@@ -1498,19 +1512,44 @@ function editarConvenio(id, clientePre, alCerrar){
 
   const recalcular = () => ov.querySelectorAll("tr[data-tipo]").forEach(tr => {
     const inp = tr.querySelector(".conv");
+    const sel = tr.querySelector(".sel").checked;
     const pub = inp.dataset.pub === "" ? null : Number(inp.dataset.pub);
     const celda = tr.querySelector(".desc");
     const val = inp.value.trim();
-    if (!val || pub === null || !pub){ celda.textContent = "—"; celda.style.color = ""; return; }
+    if (!sel || !val || pub === null || !pub){ celda.textContent = "—"; celda.style.color = ""; return; }
     const pct = Math.round((1 - parseMoney(val)/pub) * 100);
     celda.textContent = (pct >= 0 ? "-" : "+") + Math.abs(pct) + "%";
     celda.style.color = pct < 0 ? "var(--bad)" : "var(--muted)";
   });
-  ov.addEventListener("input", e => { if (e.target.classList.contains("conv")) recalcular(); });
+
+  /** La casilla manda: sin marcar, la tarifa ni se captura. */
+  function sincroniza(tr, foco){
+    const sel = tr.querySelector(".sel").checked;
+    const inp = tr.querySelector(".conv");
+    inp.disabled = !sel;
+    tr.classList.toggle("off", !sel);
+    if (!sel){
+      inp.value = "";
+      tr.classList.remove("row-err");
+      inp.classList.remove("err");
+    } else if (foco) inp.focus();
+    recalcular();
+  }
+
+  ov.addEventListener("change", e => {
+    if (e.target.classList.contains("sel")) sincroniza(e.target.closest("tr"), true);
+  });
+  ov.addEventListener("input", e => {
+    if (!e.target.classList.contains("conv")) return;
+    e.target.classList.remove("err");
+    e.target.closest("tr").classList.remove("row-err");
+    recalcular();
+  });
   recalcular();
 
   ov.querySelector("#cRec").onchange = e => {
     ov.querySelector("#bRecovery").style.display = e.target.checked ? "" : "none";
+    validar();          // al apagarlo desaparece su reclamo, al prenderlo aparece
   };
 
   const bDel = ov.querySelector("#bDel");
@@ -1528,33 +1567,92 @@ function editarConvenio(id, clientePre, alCerrar){
     verConvenio(v.id, alCerrar, true);
   };
 
+  /** Filas que cuentan: las de un bloque vigente (Recovery sólo si está activo). */
+  function filasVigentes(){
+    const incRec = ov.querySelector("#cRec").checked;
+    return [...ov.querySelectorAll("tr[data-tipo]")].map(tr => {
+      const cat = state.habitaciones.find(h => h.id === tr.dataset.tipo);
+      if (!cat || (cat.grupo === "recovery" && !incRec)) return null;
+      return { tr, cat, sel: tr.querySelector(".sel").checked, val: tr.querySelector(".conv").value.trim() };
+    }).filter(Boolean);
+  }
+
+  function pintaErrores(lista){
+    const caja = ov.querySelector("#cErr");
+    caja.innerHTML = lista.length
+      ? `<div class="errbox"><b>Falta esto para poder continuar:</b><ul>${
+          lista.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`
+      : "";
+  }
+
+  /**
+   * Devuelve las habitaciones listas para guardar, o null si algo falta.
+   * Reglas: al menos una habitación marcada; toda marcada con su tarifa
+   * convenio; y si el bloque Recovery está activo, al menos una de ese bloque.
+   */
+  function validar(){
+    ov.querySelectorAll("tr[data-tipo]").forEach(tr => {
+      tr.classList.remove("row-err");
+      tr.querySelector(".conv").classList.remove("err");
+    });
+
+    const vigentes = filasVigentes();
+    const marcadas = vigentes.filter(f => f.sel);
+    const sinTarifa = marcadas.filter(f => parseMoney(f.val) <= 0);
+    const problemas = [];
+
+    if (!marcadas.length)
+      problemas.push("Marca al menos un tipo de habitación para este convenio.");
+
+    if (sinTarifa.length){
+      problemas.push("Captura la tarifa convenio de: " +
+        sinTarifa.map(f => f.cat.codigo || f.cat.nombre).join(", ") + ".");
+      sinTarifa.forEach(f => {
+        f.tr.classList.add("row-err");
+        f.tr.querySelector(".conv").classList.add("err");
+      });
+    }
+
+    const rec = infoGrupo("recovery").nombre;
+    if (ov.querySelector("#cRec").checked && !marcadas.some(f => f.cat.grupo === "recovery"))
+      problemas.push(`Activaste el bloque ${rec}: marca al menos una habitación de ese bloque con su tarifa, o desactívalo.`);
+
+    pintaErrores(problemas);
+    if (problemas.length){
+      const primera = ov.querySelector("tr.row-err") || ov.querySelector("#cErr");
+      if (primera) primera.scrollIntoView({ block:"center", behavior:"smooth" });
+      return null;
+    }
+    return marcadas.map(f => ({
+      tipoId: f.cat.id, codigo: f.cat.codigo, nombre: f.cat.nombre, grupo: f.cat.grupo,
+      publica: f.cat.publica, convenio: parseMoney(f.val)
+    }));
+  }
+
   function recoger(){
     const cid = ov.querySelector("#cCli").value;
-    if (!cid){ alert("Selecciona el cliente del convenio."); return false; }
+    if (!cid){
+      pintaErrores(["Selecciona el cliente del convenio."]);
+      ov.querySelector("#cCli").focus();
+      return false;
+    }
 
-    const incRec = ov.querySelector("#cRec").checked;
-    const habs = [];
-    ov.querySelectorAll("tr[data-tipo]").forEach(tr => {
-      const tipoId = tr.dataset.tipo;
-      const cat = state.habitaciones.find(h => h.id === tipoId);
-      if (!cat) return;
-      if (cat.grupo === "recovery" && !incRec) return;
-      const val = tr.querySelector(".conv").value.trim();
-      if (!val) return;                                  // sin tarifa convenio = no entra
-      habs.push({ tipoId, codigo:cat.codigo, nombre:cat.nombre, grupo:cat.grupo,
-                  publica:cat.publica, convenio: parseMoney(val) });
-    });
-    if (!habs.length){ alert("Captura al menos una tarifa convenio."); return false; }
+    const habs = validar();
+    if (!habs) return false;
 
     const desde = ov.querySelector("#cDesde").value, hasta = ov.querySelector("#cHasta").value;
-    if (desde && hasta && hasta < desde){ alert('La vigencia "hasta" no puede ser anterior a "desde".'); return false; }
+    if (desde && hasta && hasta < desde){
+      pintaErrores(['La vigencia "hasta" no puede ser anterior a "desde".']);
+      return false;
+    }
+    pintaErrores([]);
 
     Object.assign(v, {
       clienteId: cid,
       folio: ov.querySelector("#cFolio").value.trim(),
       fecha: ov.querySelector("#cFecha").value || hoyISO(),
       vigenciaDesde: desde, vigenciaHasta: hasta,
-      incluyeRecovery: incRec,
+      incluyeRecovery: ov.querySelector("#cRec").checked,
       habitaciones: habs,
       notas: ov.querySelector("#cNotas").value.trim(),
       grupos: saneaGrupos(state.ajustes.grupos),

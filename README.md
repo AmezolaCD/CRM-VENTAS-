@@ -50,15 +50,24 @@ registran solos en esta bitácora.
 
 ### Convenios
 
-Un convenio se arma eligiendo el cliente y capturando tarifas:
+Un convenio se arma eligiendo el cliente y marcando las habitaciones que entran:
 
+- Cada habitación tiene una **casilla**. Sin marcar, su tarifa ni se puede capturar; al
+  marcarla se habilita y toma el foco. Si la desmarcas, se limpia.
 - La **tarifa pública** (rack) sale del catálogo y **se muestra pero no se puede editar**.
   Admite **N/A** para las habitaciones sin tarifa pública, como el Recovery *Care*.
 - La **tarifa convenio** se captura a mano. Al lado se calcula el descuento contra la pública.
-- Los tipos que dejes en blanco no entran en ese convenio.
 - Un interruptor decide si el convenio **incluye también las habitaciones Recovery**, con su
   propia tarifa pública fija y su tarifa convenio capturable.
 - Hay un campo de **observaciones internas** que no se imprime en la carta.
+
+**No se puede guardar ni firmar** hasta que se cumplan las tres reglas. Lo que falte se
+enumera arriba del formulario y las filas incompletas se marcan en rojo:
+
+1. Al menos **una habitación marcada**.
+2. **Toda habitación marcada lleva su tarifa convenio** (cero no cuenta).
+3. Si el **bloque Recovery está activo**, al menos una habitación de ese bloque marcada y
+   con tarifa — o se desactiva el bloque.
 
 #### Flujo de firma
 
