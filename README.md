@@ -24,6 +24,19 @@ La carta-convenio toma los colores (membrete con regla dorada, encabezados de ta
 morado, viñetas con filete de oro) pero **no lleva el logotipo de CORE**: es un documento
 del hotel, no del CRM.
 
+## Animación de entrada
+
+Al abrir el CRM se muestra durante **dos segundos** una animación del logotipo: el hexágono se
+traza, las seis flechas convergen en el núcleo y aparece la palabra CORE. Está hecha con
+**CSS y SVG**, no con video: pesa unos cientos de bytes en vez de varios megabytes, se ve
+nítida en cualquier pantalla y no reproduce sonido.
+
+Tres detalles pensados para que nunca estorbe:
+
+- Va con `pointer-events:none`, así que **no bloquea nada** aunque coincida con un clic.
+- **Cualquier clic o tecla la salta**, y se retira sola del DOM al terminar.
+- Con **"reducir movimiento"** activado en el sistema, ni se muestra.
+
 ## Cómo usarlo
 
 1. Descarga o clona este repositorio.

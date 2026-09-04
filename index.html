@@ -45,6 +45,37 @@
     --shadow:0 1px 2px rgba(0,0,0,.5);
   }
 
+  /* ---------- Animación de entrada ----------
+     Va con pointer-events:none para no tapar nada mientras dura, y se retira
+     sola del DOM. Con "reducir movimiento" activado no llega ni a mostrarse. */
+  #intro{
+    position:fixed; inset:0; z-index:200; pointer-events:none;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:26px;
+    background:radial-gradient(circle at 50% 45%, #4a1a63 0%, #2b0b3c 55%, #17061f 100%);
+    animation:intro-salida .45s ease-in 1.65s forwards;
+  }
+  #intro svg{width:150px; height:150px; overflow:visible}
+  #intro .hex{
+    fill:none; stroke:#b2aa6d; stroke-width:6;
+    stroke-dasharray:276; stroke-dashoffset:276;
+    animation:intro-trazo .75s cubic-bezier(.4,0,.2,1) .1s forwards;
+  }
+  #intro .fl{opacity:0; animation:intro-flecha .55s cubic-bezier(.34,1.3,.64,1) forwards}
+  #intro .nucleo{
+    fill:#b2aa6d; transform:scale(0); transform-origin:60px 60px;
+    animation:intro-nucleo .5s cubic-bezier(.34,1.56,.64,1) .95s forwards;
+  }
+  #intro .marca{
+    color:#fff; font-size:26px; font-weight:800; letter-spacing:.42em; text-indent:.42em;
+    opacity:0; animation:intro-marca .6s ease-out 1.05s forwards;
+  }
+  @keyframes intro-trazo{ to{ stroke-dashoffset:0 } }
+  @keyframes intro-flecha{ from{ opacity:0; transform:translateY(-26px) } to{ opacity:1; transform:translateY(0) } }
+  @keyframes intro-nucleo{ to{ transform:scale(1) } }
+  @keyframes intro-marca{ from{ opacity:0; letter-spacing:.75em } to{ opacity:1; letter-spacing:.42em } }
+  @keyframes intro-salida{ to{ opacity:0; visibility:hidden } }
+  @media (prefers-reduced-motion: reduce){ #intro{ display:none } }
+
   *{box-sizing:border-box}
   body{
     margin:0; background:var(--bg); color:var(--text);
@@ -305,6 +336,28 @@
 </style>
 </head>
 <body>
+
+<div id="intro" aria-hidden="true">
+  <svg viewBox="0 0 120 120">
+    <polygon class="hex" points="60,14 20.16,37 20.16,83 60,106 99.84,83 99.84,37"/>
+    <g fill="none" stroke="#fff" stroke-width="6" stroke-linecap="butt">
+      <g class="fl" style="animation-delay:.45s"><g transform="rotate(0 60 60)">
+        <path d="M60 10 V 41"/><path d="M52 32 L60 41 L68 32"/></g></g>
+      <g class="fl" style="animation-delay:.53s"><g transform="rotate(60 60 60)">
+        <path d="M60 10 V 41"/><path d="M52 32 L60 41 L68 32"/></g></g>
+      <g class="fl" style="animation-delay:.61s"><g transform="rotate(120 60 60)">
+        <path d="M60 10 V 41"/><path d="M52 32 L60 41 L68 32"/></g></g>
+      <g class="fl" style="animation-delay:.69s"><g transform="rotate(180 60 60)">
+        <path d="M60 10 V 41"/><path d="M52 32 L60 41 L68 32"/></g></g>
+      <g class="fl" style="animation-delay:.77s"><g transform="rotate(240 60 60)">
+        <path d="M60 10 V 41"/><path d="M52 32 L60 41 L68 32"/></g></g>
+      <g class="fl" style="animation-delay:.85s"><g transform="rotate(300 60 60)">
+        <path d="M60 10 V 41"/><path d="M52 32 L60 41 L68 32"/></g></g>
+    </g>
+    <circle class="nucleo" cx="60" cy="60" r="14"/>
+  </svg>
+  <div class="marca">CORE</div>
+</div>
 
 <header>
   <button class="brand" id="bHome" type="button" title="Ir al tablero" aria-label="Ir al tablero">
@@ -3175,6 +3228,22 @@ try{
   const t = localStorage.getItem(STORE + ":tema");
   if (t) document.documentElement.dataset.theme = t;
 }catch(e){}
+
+/* La entrada se retira sola; cualquier clic o tecla la corta antes. */
+(function entrada(){
+  const el = document.getElementById("intro");
+  if (!el) return;
+  const quitar = () => {
+    if (!el.parentNode) return;
+    el.remove();
+    document.removeEventListener("pointerdown", quitar);
+    document.removeEventListener("keydown", quitar);
+  };
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches){ quitar(); return; }
+  setTimeout(quitar, 2150);
+  document.addEventListener("pointerdown", quitar);
+  document.addEventListener("keydown", quitar);
+})();
 
 guardar();
 render();
