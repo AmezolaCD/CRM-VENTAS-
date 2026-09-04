@@ -271,8 +271,11 @@
   .doc-campos div{margin:2px 0}
   .doc-campos i{font-style:normal; color:#6f6279; display:inline-block; min-width:190px}
   .doc-campos b{border-bottom:1px solid #c9bfd3; padding:0 4px; min-width:180px; display:inline-block}
-  @media print{ .hoja{page-break-after:always} .hoja:last-child{page-break-after:auto}
-    .hoja + .hoja{border-top:0; margin-top:0; padding-top:0} }
+  @media print{
+    .hoja{page-break-after:always; padding:16mm 18mm}
+    .hoja:last-child{page-break-after:auto}
+    .hoja + .hoja{border-top:0; margin-top:0}
+  }
 
   /* Sin esto el tamaño lo decide la impresora de cada quien: el mismo
      documento salía en Carta o en A4 según el diálogo. Se fija en Carta,
@@ -1498,6 +1501,7 @@ function verConfirmacion(id, lote){
     </div>`);
 
   ov.querySelector("#bPrintC").onclick = () => {
+    fijarPagina(true);
     ov.classList.add("printable");
     const quitar = () => { ov.classList.remove("printable"); window.removeEventListener("afterprint", quitar); };
     window.addEventListener("afterprint", quitar);
@@ -1798,6 +1802,25 @@ function renderAjustes(){
 /* ==========================================================================
    MODALES
    ========================================================================== */
+
+/**
+ * El navegador imprime su propio encabezado y pie —URL, fecha, número de
+ * página— siempre que la hoja tenga margen. Con margen cero no le queda sitio
+ * y los omite, así que los márgenes reales los pone el contenido.
+ *
+ * Sólo se puede hacer cuando cada página es un bloque propio (.hoja), como en
+ * las confirmaciones. En un documento que fluye varias páginas, como el
+ * convenio, la segunda hoja arrancaría pegada al borde del papel: ahí se
+ * conserva el margen de página y el pie del navegador se apaga desde el
+ * diálogo de impresión.
+ */
+function fijarPagina(sinMargenDeHoja){
+  let el = document.getElementById("reglaPagina");
+  if (!el){ el = document.createElement("style"); el.id = "reglaPagina"; document.head.appendChild(el); }
+  el.textContent = sinMargenDeHoja
+    ? "@page{ size: letter; margin: 0; }"
+    : "@page{ size: letter; margin: 16mm 18mm; }";
+}
 
 function modal(html){
   const ov = document.createElement("div");
@@ -2401,6 +2424,7 @@ function verConvenio(id, alCerrar, pedirFirma){
     </div>`);
 
   ov.querySelector("#bPrint").onclick = () => {
+    fijarPagina(false);
     ov.classList.add("printable");
     const quitar = () => { ov.classList.remove("printable"); window.removeEventListener("afterprint", quitar); };
     window.addEventListener("afterprint", quitar);

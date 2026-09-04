@@ -133,6 +133,18 @@ es una palabra en el CSS (`size: letter` → `size: A4`).
 La carta-convenio ocupa tres hojas, con los dos bloques de firma juntos en la última. Cada
 confirmación de hospedaje cabe en una.
 
+### El encabezado y el pie del navegador
+
+Chrome imprime por su cuenta la URL del archivo, la fecha y el número de página. No es parte
+del documento: aparece siempre que la hoja tenga margen.
+
+En las **confirmaciones** ya no sale: la hoja se manda con margen cero y los márgenes los
+pone el contenido, así que el navegador no encuentra sitio donde escribirlos.
+
+En el **convenio** no se puede hacer lo mismo, porque fluye en varias páginas y la segunda
+arrancaría pegada al borde del papel. Ahí se apaga desde el diálogo de impresión:
+*Más ajustes → Encabezados y pies de página*. Chrome recuerda la casilla.
+
 ### Ajustes
 
 - **Datos del hotel**: nombre, dirección, teléfono, ciudad (para la línea de fecha), teléfono
