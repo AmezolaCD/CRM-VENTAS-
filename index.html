@@ -555,7 +555,7 @@ Cancelación:
 El plazo de cancelación será de 72 HORAS ANTES DE LA FECHA DE LLEGADA, toda cancelación recibida después de este plazo causará el cargo de la primera noche de estancia, bajo el concepto de "No-Show", el cual se realizará a la tarjeta de crédito o forma de pago que se tenga como garantía.`,
 
   /* Carta de confirmación de hospedaje. Marcadores propios: {{HUESPED}},
-     {{RESERVACION}}, {{LLEGADA}}, {{SALIDA}}, {{NOCHES}}, {{HABITACION}}. */
+     {{RESERVACION}}, {{LLEGADA}}, {{SALIDA}} y {{NOCHES}}. */
   confTitulo: "Carta de Confirmación de Hospedaje",
   confSaludo: "A quien corresponda:",
   confCuerpo:
@@ -578,8 +578,10 @@ Confiando que el presente convenio sea totalmente de su agrado. Sin otro particu
 /* Una fila del archivo = un huésped = una carta. Dos huéspedes pueden
    compartir habitación y aun así cada uno lleva la suya. */
 const CAMPOS_HUESPED = [
-  { key:"nombre", label:"Huésped", req:true,
-    aliases:["huesped","huésped","nombre","nombre del huesped","nombre del huésped","guest","pasajero","titular","nombre completo"] },
+  { key:"nombre", label:"Nombre", req:true,
+    aliases:["nombre","nombres","nombre(s)","first name","given name","nombre del huesped","nombre del huésped","huesped","huésped","guest","pasajero","titular","nombre completo"] },
+  { key:"apellidos", label:"Apellidos",
+    aliases:["apellidos","apellido","apellido paterno","apellidos del huesped","last name","surname","apellidos y nombre"] },
   { key:"reservacion", label:"Reservación",
     aliases:["reservacion","reservación","no reservacion","numero de reservacion","número de reservación","folio","confirmacion","confirmación","booking","reserva","localizador"] },
   { key:"llegada", label:"Llegada", tipo:"fecha",
@@ -588,17 +590,17 @@ const CAMPOS_HUESPED = [
     aliases:["salida","fecha de salida","check out","check-out","checkout","departure","hasta","out"] },
   { key:"noches", label:"Noches", tipo:"entero",
     aliases:["noches","numero de noches","número de noches","nights","n noches"] },
-  { key:"habitacion", label:"Habitación",
-    aliases:["habitacion","habitación","cuarto","room","no habitacion","numero de habitacion","hab"] },
-  { key:"email", label:"Correo",
-    aliases:["correo","email","e-mail","correo electronico","correo electrónico","mail"] },
   { key:"telefono", label:"Teléfono",
     aliases:["telefono","teléfono","celular","movil","móvil","whatsapp","phone","tel"] },
+  { key:"email", label:"Correo",
+    aliases:["correo","email","e-mail","correo electronico","correo electrónico","mail"] },
   { key:"empresa", label:"Empresa",
     aliases:["empresa","compania","compañia","compañía","cuenta","convenio","razon social","razón social"] },
   { key:"notas", label:"Notas",
     aliases:["notas","observaciones","comentarios","comentario"] }
 ];
+
+/* La habitación no va en la carta: no se asigna hasta la llegada del huésped. */
 
 const CAMPOS_CLIENTE = [
   { key:"empresa",   label:"Empresa",   type:"text", req:true,
@@ -737,12 +739,16 @@ function saneaConv(c){
 }
 
 function saneaHuesped(g){
-  const o = Object.assign({ id:"", nombre:"", reservacion:"", llegada:"", salida:"", noches:"",
-    habitacion:"", email:"", telefono:"", empresa:"", notas:"", createdAt:"" }, g || {});
+  const o = Object.assign({ id:"", nombre:"", apellidos:"", reservacion:"", llegada:"", salida:"",
+    noches:"", email:"", telefono:"", empresa:"", notas:"", createdAt:"" }, g || {});
   o.id = o.id || nuevoId("g");
+  delete o.habitacion;   // versiones anteriores la guardaban
   o.noches = o.noches === "" || o.noches == null ? "" : Math.max(0, Math.round(Number(o.noches) || 0));
   return o;
 }
+
+/** El archivo trae nombre y apellidos por separado; la carta los une. */
+const nombreCompleto = g => [g.nombre, g.apellidos].map(x => String(x || "").trim()).filter(Boolean).join(" ");
 
 /** Noches capturadas, o las que dan las fechas. */
 function nochesDe(g){
@@ -1337,7 +1343,8 @@ function renderConvenios(){
 function renderConfirmaciones(){
   const cont = document.getElementById("tblConfirm");
   const gs = [...state.huespedes].sort((a,b) =>
-    String(a.llegada).localeCompare(String(b.llegada)) || a.nombre.localeCompare(b.nombre, "es"));
+    String(a.llegada).localeCompare(String(b.llegada)) ||
+    nombreCompleto(a).localeCompare(nombreCompleto(b), "es"));
 
   const cab = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
       <b style="font-size:15px">Cartas de confirmación</b>
@@ -1356,14 +1363,13 @@ function renderConfirmaciones(){
   } else {
     cont.innerHTML = cab + `<table class="data">
       <thead><tr><th>Huésped</th><th>Reservación</th><th>Llegada</th><th>Salida</th>
-        <th class="num">Noches</th><th>Habitación</th><th>Empresa</th><th></th></tr></thead>
+        <th class="num">Noches</th><th>Empresa</th><th></th></tr></thead>
       <tbody>${gs.map(g => `<tr class="row-link" data-g="${g.id}">
-        <td><b>${esc(g.nombre)}</b></td>
+        <td><b>${esc(nombreCompleto(g))}</b></td>
         <td>${esc(g.reservacion || "—")}</td>
         <td class="nowrap">${esc(fechaCorta(g.llegada))}</td>
         <td class="nowrap">${esc(fechaCorta(g.salida))}</td>
         <td class="num">${esc(nochesDe(g) === "" ? "—" : nochesDe(g))}</td>
-        <td>${esc(g.habitacion || "—")}</td>
         <td>${esc(g.empresa || "—")}</td>
         <td class="nowrap">
           <button class="btn sm" data-vercarta="${g.id}">Ver carta</button>
@@ -1397,12 +1403,11 @@ function cartaConfirmacion(g){
   const V = txt => String(txt || "")
     .replace(/\{\{HOTEL\}\}/g, h.nombre)
     .replace(/\{\{CIUDAD\}\}/g, h.ciudad)
-    .replace(/\{\{HUESPED\}\}/g, g.nombre || "____________________")
+    .replace(/\{\{HUESPED\}\}/g, nombreCompleto(g) || "____________________")
     .replace(/\{\{RESERVACION\}\}/g, g.reservacion || "")
     .replace(/\{\{LLEGADA\}\}/g, fechaTexto(g.llegada))
     .replace(/\{\{SALIDA\}\}/g, fechaTexto(g.salida))
-    .replace(/\{\{NOCHES\}\}/g, n === "" ? "" : String(n))
-    .replace(/\{\{HABITACION\}\}/g, g.habitacion || "");
+    .replace(/\{\{NOCHES\}\}/g, n === "" ? "" : String(n));
 
   const campo = (etq, val) => `<div><i>${esc(etq)}</i> <b>${esc(val || "____________________")}</b></div>`;
 
@@ -1429,7 +1434,6 @@ function cartaConfirmacion(g){
       ${campo("Fecha de llegada:", fechaTexto(g.llegada))}
       ${campo("Fecha de salida:", fechaTexto(g.salida))}
       ${campo("Número de noches:", n === "" ? "" : String(n))}
-      ${g.habitacion ? campo("Habitación:", g.habitacion) : ""}
       ${g.empresa ? campo("Empresa:", g.empresa) : ""}
     </div>
 
@@ -1500,7 +1504,7 @@ function enviarConfirmacion(id, via){
   const n = nochesDe(g);
   const asunto = `Confirmación de hospedaje · ${h.nombre}${g.reservacion ? " · Reservación " + g.reservacion : ""}`;
   const cuerpo =
-    `Estimado(a) ${g.nombre}:\n\n` +
+    `Estimado(a) ${nombreCompleto(g)}:\n\n` +
     `Adjuntamos su carta de confirmación de hospedaje en ${h.nombre}.\n\n` +
     (g.reservacion ? `Reservación: ${g.reservacion}\n` : "") +
     (g.llegada ? `Llegada: ${fechaTexto(g.llegada)}\n` : "") +
@@ -1522,7 +1526,7 @@ function editarHuesped(id){
   const existente = id ? state.huespedes.find(g => g.id === id) : null;
   const g = existente || saneaHuesped({});
   const campos = CAMPOS_HUESPED.map(f => {
-    const ancho = (f.key === "nombre" || f.key === "notas") ? " full" : "";
+    const ancho = (f.key === "notas") ? " full" : "";
     const val = g[f.key] ?? "";
     const ctl = f.key === "notas"
       ? `<textarea class="field" name="notas">${esc(val)}</textarea>`
@@ -1550,7 +1554,7 @@ function editarHuesped(id){
   ov.querySelector("#bOkG").onclick = ok;
   const bd = ov.querySelector("#bDelG");
   if (bd) bd.onclick = () => {
-    if (!confirm(`¿Eliminar a "${g.nombre}" de la lista?`)) return;
+    if (!confirm(`¿Eliminar a "${nombreCompleto(g)}" de la lista?`)) return;
     state.huespedes = state.huespedes.filter(x => x.id !== g.id);
     guardar(); render(); ov.remove();
   };
@@ -1665,8 +1669,7 @@ function renderAjustes(){
       <h3 class="sec">Carta de confirmación de hospedaje</h3>
       <div class="note">Además de los marcadores de arriba, aquí valen
         <code>{{HUESPED}}</code>, <code>{{RESERVACION}}</code>, <code>{{LLEGADA}}</code>,
-        <code>{{SALIDA}}</code>, <code>{{NOCHES}}</code>, <code>{{HABITACION}}</code> y
-        <code>{{CIUDAD}}</code>.</div>
+        <code>{{SALIDA}}</code>, <code>{{NOCHES}}</code> y <code>{{CIUDAD}}</code>.</div>
       <div class="grid">
         <div><label class="lbl">Título</label>
           <input class="field" data-t="confTitulo" value="${esc(t.confTitulo)}" style="width:100%"></div>
@@ -2687,7 +2690,9 @@ function importarHuespedes(){
              accept=".xlsx,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></p>
         <p class="hint">o pega aquí las filas (con su fila de encabezados):</p>
         <textarea id="pasteG" class="field" style="width:100%"
-          placeholder="Huésped,Reservación,Llegada,Salida,Habitación,Correo,Teléfono&#10;Ana López,R-1201,2026-10-04,2026-10-07,410,ana@x.mx,6641112233"></textarea>
+          placeholder="Numero de reservación,Fecha de llegada,Fecha de salida,Numero de noches,Nombre,Apellidos,Teléfono,Correo electrónico&#10;R-1201,2026-09-30,2026-10-03,3,Ana,López Ramírez,6641112233,ana@x.mx"></textarea>
+        <p class="hint"><button class="btn sm" id="bTplG" type="button">Descargar plantilla</button>
+          con las columnas esperadas.</p>
         <div id="mapG"></div>
       </div>
       <div class="modal-foot"><span class="hint" id="infoG"></span><div class="spacer"></div>
@@ -2709,6 +2714,11 @@ function importarHuespedes(){
       alert(err.message || "No se pudo leer el archivo.");
     }
   });
+  ov.querySelector("#bTplG").onclick = () => descargar("plantilla-huespedes.csv",
+    toCSV([["Numero de reservación","Fecha de llegada","Fecha de salida","Numero de noches",
+            "Nombre","Apellidos","Teléfono","Correo electrónico"],
+           ["R-1201","2026-09-30","2026-10-03","3","Ana","López Ramírez","6641112233","ana@ejemplo.mx"]]),
+    "text/csv");
   ov.querySelector("#pasteG").addEventListener("input", e => {
     const t = e.target.value.trim();
     if (t.length > 10) preparar(parseCSV(t)); else limpiar();
@@ -2774,6 +2784,8 @@ function importarHuespedes(){
         else if (f.tipo === "entero") o[f.key] = val === "" ? "" : Math.max(0, Math.round(parseMoney(val)));
         else o[f.key] = val;
       }
+      // Si sólo viene la columna de apellidos, ésa es el nombre.
+      if (!o.nombre && o.apellidos){ o.nombre = o.apellidos; o.apellidos = ""; }
       if (!o.nombre){
         if (Object.values(o).some(v => String(v).trim())) sinNombre++;
         continue;                       // sin nombre no hay carta que emitir

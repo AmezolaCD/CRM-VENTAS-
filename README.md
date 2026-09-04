@@ -155,14 +155,19 @@ terceros (visas, empresas, aseguradoras).
   está escrito a mano sobre `DecompressionStream`, que traen los navegadores modernos: un
   `.xlsx` es un ZIP con XML dentro, así que **no hace falta ninguna librería externa** y el
   archivo sigue siendo uno solo. Si el navegador no lo soporta, avisa y pide un CSV.
-- **Una fila = un huésped = una carta.** Dos huéspedes que comparten habitación y hasta el
-  mismo número de reservación siguen siendo dos registros con dos cartas.
+- **Una fila = un huésped = una carta.** Dos huéspedes que comparten el mismo número de
+  reservación siguen siendo dos registros con dos cartas.
+- **Nombre y apellidos vienen en columnas separadas** y la carta los une. Si el archivo trae
+  una sola columna con el nombre completo, también funciona.
+- **No se pide número de habitación**: no se asigna hasta la llegada del huésped.
 - Las **fechas en formato de Excel** (números de serie) se convierten solas, igual que
   `04/09/2026` o `2026-09-04`.
 - Si dejas **Noches** en blanco, se calcula con las fechas.
 - Las filas sin nombre de huésped se omiten y se reporta cuántas fueron.
-- El mapeo de columnas se adivina con los mismos alias que el importador de clientes
-  ("Celular" → Teléfono, "No. Reservación" → Reservación) y se puede corregir.
+- El mapeo de columnas se adivina con los mismos alias que el importador de clientes y se
+  puede corregir. Hay un botón para **descargar la plantilla** con las columnas esperadas:
+  Numero de reservación · Fecha de llegada · Fecha de salida · Numero de noches · Nombre ·
+  Apellidos · Teléfono · Correo electrónico.
 - **Imprimir todas** saca las cartas en lote, una hoja por huésped.
 - Cada carta tiene botón de **correo** y de **WhatsApp**, con el mensaje ya redactado.
 
