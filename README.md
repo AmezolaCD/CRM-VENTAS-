@@ -1,8 +1,25 @@
-# CRM de Ventas · Hotel
+# CORE · CRM de Ventas
 
 CRM para el equipo de ventas del hotel: cartera de clientes, bitácora de actividad y
 generación de cartas-convenio con firma digital. Es **un solo archivo HTML**: no hay que
 instalar nada ni levantar un servidor — se abre con doble clic en cualquier navegador.
+
+## Identidad
+
+Morado `#39104e`, oro `#b2aa6d` y blanco. El logotipo va **dibujado como SVG en línea**
+—no como imagen incrustada— así que se ve nítido a cualquier tamaño, cambia de tono con el
+tema y pesa unos cientos de bytes.
+
+Los tres estados que cargan significado se derivan de esa paleta para no perder la lectura:
+**Ganado** en oro, **pendiente** en bronce y **perdido/error** en un rojo apagado. El embudo
+es una rampa de morado que se cierra hacia la venta. Los chips de estatus van sólidos con su
+propia tinta, para que se lean igual en tema claro y oscuro.
+
+El verde de WhatsApp se respeta: es marca de un tercero y funciona como señal.
+
+La carta-convenio toma los colores (membrete con regla dorada, encabezados de tabla en
+morado, viñetas con filete de oro) pero **no lleva el logotipo de CORE**: es un documento
+del hotel, no del CRM.
 
 ## Cómo usarlo
 
