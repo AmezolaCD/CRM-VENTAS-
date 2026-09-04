@@ -1,88 +1,134 @@
-# CRM de Ventas · Kanban
+# CRM de Ventas · Hotel
 
-Tablero Kanban para dar seguimiento al pipeline de ventas. Es **un solo archivo HTML**:
-no hay que instalar nada ni levantar un servidor — se abre con doble clic en cualquier navegador.
+CRM para el equipo de ventas del hotel: cartera de clientes, bitácora de actividad y
+generación de cartas-convenio con firma digital. Es **un solo archivo HTML**: no hay que
+instalar nada ni levantar un servidor — se abre con doble clic en cualquier navegador.
 
 ## Cómo usarlo
 
 1. Descarga o clona este repositorio.
 2. Abre `index.html` en Chrome, Edge, Firefox o Safari.
 
-Los datos se guardan en el **almacenamiento local del navegador** (`localStorage`), en el equipo
-donde lo abres. Al abrirlo por primera vez verás 6 negocios de ejemplo para que se entienda el
-funcionamiento: bórralos con *Exportar → Borrar todos los datos*, o simplemente marca
-**"Reemplazar todos los negocios actuales"** al importar tu archivo.
+Los datos se guardan en el **almacenamiento local del navegador** (`localStorage`), en el
+equipo donde lo abres. Trae clientes de ejemplo para que se entienda el funcionamiento;
+para empezar limpio usa *Exportar → Borrar todos los datos*, o marca **"Reemplazar la
+cartera actual"** al importar tu archivo.
 
-## Qué trae
+## Estructura
 
-- **7 etapas del pipeline**: Prospecto → Contactado → Calificado → Propuesta → Negociación → Ganado / Perdido.
-- **Arrastrar y soltar** entre columnas. En celular, los botones `‹ ›` de cada tarjeta hacen lo mismo.
-- **Indicadores en la parte superior**: pipeline abierto, valor ponderado por probabilidad, total ganado y tasa de cierre. Respetan el buscador y el filtro activos.
-- **Total por columna** (cantidad de negocios e importe).
-- **Buscador** por negocio, empresa, contacto, correo, teléfono, notas o etiquetas, y **filtro por responsable**.
-- **Alerta de fechas**: las tarjetas marcan en ámbar las que cierran en 7 días o menos, y en rojo las vencidas.
-- **Importar CSV** con mapeo de columnas asistido.
-- **Exportar** a CSV (se abre en Excel), respaldo en JSON y plantilla vacía.
-- **Tema claro y oscuro** (sigue al sistema; el botón `◐` lo cambia a mano).
+Son tres cosas encadenadas: **un cliente** tiene **muchas actividades** y **muchos convenios**.
 
-## Importar tus datos
+### Clientes
 
-Botón **Importar**. Acepta un archivo `.csv` / `.tsv` o texto pegado directamente.
+Cada cliente guarda empresa, contacto, teléfono, correo, ubicación, tarifa, ejecutivo de
+venta, estatus y notas. Se ven de dos formas:
 
-Si tus datos están en Excel o Google Sheets, primero guárdalos como CSV
-(*Archivo → Descargar → CSV* / *Guardar como → CSV UTF-8*).
+- **Tablero** — kanban por estatus, con arrastrar y soltar entre columnas. En celular los
+  botones `‹ ›` de cada tarjeta hacen lo mismo.
+- **Clientes** — tabla con todos los campos a la vista.
 
-La primera fila debe ser la de encabezados. El importador:
+El embudo tiene seis estatus: Contactado → Propuesta → Negociación → **Cotización enviada**
+→ Ganado / Perdido. Los dos últimos pasos los mueve el convenio solo (ver abajo).
+
+Hay un **acceso directo a WhatsApp** en la tarjeta, en la tabla y en la ficha, que abre el
+chat con el número registrado y un saludo ya redactado. A los números de 10 dígitos les
+antepone la lada del país (configurable, México por omisión).
+
+### Actividades
+
+Dentro de cada cliente, la pestaña **Actividad** lleva la bitácora. **No hay límite de
+registros por cliente.** Cada uno lleva:
+
+- **Tipo**: Llamada 📞, Reunión 🤝, Correo ✉️ o WhatsApp 💬
+- **Asunto**
+- **Fecha y hora**
+- **Responsable** (ejecutivo de venta)
+- **Notas**
+
+La tarjeta del tablero muestra el conteo y la última actividad. Los hitos del convenio se
+registran solos en esta bitácora.
+
+### Convenios
+
+Un convenio se arma eligiendo el cliente y capturando tarifas:
+
+- La **tarifa pública** (rack) sale del catálogo y **se muestra pero no se puede editar**.
+  Admite **N/A** para las habitaciones sin tarifa pública, como el Recovery *Care*.
+- La **tarifa convenio** se captura a mano. Al lado se calcula el descuento contra la pública.
+- Los tipos que dejes en blanco no entran en ese convenio.
+- Un interruptor decide si el convenio **incluye también las habitaciones Recovery**, con su
+  propia tarifa pública fija y su tarifa convenio capturable.
+- Hay un campo de **observaciones internas** que no se imprime en la carta.
+
+#### Flujo de firma
+
+1. **Borrador** — se puede editar libremente.
+2. **Firma el ejecutivo** (nombre, puesto, celular y firma trazada con el ratón o el dedo).
+   → El convenio queda bloqueado y **el cliente pasa automáticamente a "Cotización enviada"**.
+3. **Se envía al cliente** — el botón prepara el PDF y abre el correo o WhatsApp con el
+   mensaje ya redactado.
+4. **Firma el cliente** → **el cliente pasa automáticamente a "Ganado"** y su tarifa se
+   actualiza con la habitación más económica del convenio.
+
+Cada paso deja constancia en la bitácora del cliente.
+
+> **Límite que conviene tener claro:** al no haber servidor, la aplicación **no puede enviar
+> el documento por sí sola ni recibir la firma del cliente a distancia**. Lo que hace es
+> generar el PDF y abrir tu correo o WhatsApp para que lo adjuntes; cuando el cliente lo
+> devuelva firmado, capturas su firma con *Registrar firma del cliente*. Si necesitan firma
+> remota real (el cliente abre un enlace y firma desde su dispositivo), eso requiere backend.
+
+#### La carta
+
+El documento reproduce el machote del hotel: encabezado con nombre, dirección y teléfono;
+línea de fecha con ciudad; domicilio del destinatario; párrafo de presentación; tablas de
+tarifas por bloque (Deluxe y Recovery) con lo que incluye cada habitación; el bloque Surgery
+Recovery a dos columnas; ESPECIFICACIONES DE TARIFAS; VALORES AGREGADOS y NUESTROS SERVICIOS;
+CONDICIONES; RESERVACIONES; POLÍTICAS de garantía, pago y cancelación; y los dos bloques de
+firma (**De conformidad Hotel** y **De conformidad Empresa**) con Nombre, Puesto, Fecha y Celular.
+
+*Imprimir / Guardar PDF* saca la carta sola, sin la interfaz.
+
+### Ajustes
+
+- **Datos del hotel**: nombre, dirección, teléfono, ciudad (para la línea de fecha), moneda
+  y lada del país.
+- **Catálogo de habitaciones**: tipo, bloque (Deluxe o Recovery), tarifa pública —vacía = N/A—
+  y el texto de lo que incluye. **Es el único lugar donde se edita la tarifa pública.**
+- **Textos de la carta**: todos editables, con marcadores `{{HOTEL}}`, `{{EMPRESA}}`,
+  `{{CONTACTO}}`, `{{VIGENCIA}}` y `{{ANIO}}` que se sustituyen al generar cada carta.
+
+Un convenio guarda **su propia copia** de los textos y de las tarifas al crearse, así que
+cambiar el catálogo o los textos **no altera los convenios ya emitidos**.
+
+## Importar clientes
+
+Botón **Importar**. Acepta un `.csv` / `.tsv` o texto pegado. Si tus datos están en Excel o
+Google Sheets, guárdalos como CSV (*Archivo → Descargar → CSV*).
 
 - Detecta solo el separador (`,`, `;` o tabulador) y respeta las comillas.
-- **Adivina el mapeo** comparando tus encabezados con nombres habituales en español e inglés
-  — "Cliente" o "Cuenta" caen en *Empresa*, "Importe" o "Valor" en *Monto*, "Vendedor" o "Asesor"
-  en *Responsable*, etc. Igual puedes corregir cada columna a mano antes de importar.
-- **Lee montos escritos de cualquier forma**: `$120,000.50`, `1.250.000`, `89500,75`, `(1,200)`.
-  La regla es que el último separador es decimal solo si deja uno o dos dígitos detrás.
-- **Lee fechas** en `2026-09-04`, `04/09/2026`, `4-9-26` y también los números de serie de Excel.
-  Los formatos con diagonales se interpretan como día/mes salvo que sea imposible.
-- **Traduce la etapa** desde el texto que traigas: "Cotización" → Propuesta, "Cerrado ganado" → Ganado,
-  "Cancelado" → Perdido, y así. Lo que no reconoce se va a Prospecto.
-- Descarta filas vacías y usa la empresa como nombre del negocio cuando falta el título.
+- **Adivina el mapeo** comparando tus encabezados con nombres habituales: "Cliente" o
+  "Cuenta" → *Empresa*, "Celular" → *Teléfono*, "Dirección" → *Ubicación*, "Ejecutiva" o
+  "Vendedor" → *Ejecutivo*. Puedes corregir cada columna antes de importar.
+- **Lee montos escritos de cualquier forma**: `$2,950.00`, `3.100`, `89500,75`, `(1,200)`.
+- **Traduce el estatus** desde tu texto: "Cotización enviada", "Cerrado ganado", "Cancelado"…
+- Descarta filas vacías y usa el contacto como nombre si falta la empresa.
 
-Puedes elegir entre **agregar** los registros a lo que ya existe o **reemplazar** todo.
-
-### Columnas que reconoce
-
-| Campo del CRM | Ejemplos de encabezado que detecta |
-|---|---|
-| Negocio | Negocio, Oportunidad, Título, Concepto, Proyecto, Deal |
-| Empresa | Empresa, Cliente, Cuenta, Razón social, Compañía |
-| Contacto | Contacto, Persona, Nombre contacto |
-| Email | Email, Correo, Correo electrónico |
-| Teléfono | Teléfono, Celular, Móvil, WhatsApp |
-| Monto | Monto, Importe, Valor, Precio, Total, Cotización |
-| Probabilidad % | Probabilidad, Porcentaje |
-| Cierre estimado | Fecha de cierre, Cierre estimado, Vencimiento |
-| Responsable | Responsable, Vendedor, Asesor, Ejecutivo, Agente |
-| Origen | Origen, Fuente, Canal, Medio |
-| Etiquetas | Etiquetas, Tags, Categoría (separadas por coma) |
-| Notas | Notas, Comentarios, Observaciones |
-| Etapa | Etapa, Estatus, Estado, Fase, Pipeline |
-
-En `plantilla.csv` está el formato exacto con dos filas de ejemplo.
+En `plantilla.csv` está el formato exacto.
 
 ## Respaldos
 
-Como los datos viven en el navegador, **se pierden si borras el historial y la caché del sitio**,
-y no se comparten entre computadoras. Usa *Exportar* seguido para guardar una copia:
+Los datos viven en el navegador: **se pierden si borras el historial y la caché del sitio**,
+y no se comparten entre computadoras. Usa *Exportar* seguido:
 
-- **CSV** para abrirlo en Excel o volver a importarlo aquí (la ida y vuelta conserva montos, fechas, etapas y etiquetas).
-- **JSON** como respaldo fiel de todo.
+- **Respaldo completo (JSON)** — lo único que guarda las firmas y los textos de cada convenio.
+  Se restaura desde la misma ventana de Exportar.
+- **CSV de clientes, actividades y convenios** — para Excel. El de convenios saca una fila por
+  habitación.
 
-## Personalizar
+## Pendientes
 
-Todo está en `index.html`, en el bloque `Configuración` al inicio del `<script>`:
-
-- `STAGES` — las etapas del tablero: nombre, color y cuáles cuentan como ganado o perdido.
-- `FIELDS` — los campos de cada negocio. Los `aliases` de cada campo son los que usa el
-  auto-mapeo al importar; agregar ahí los encabezados propios de tu equipo hace que se
-  detecten solos la próxima vez.
-
-La moneda se formatea como MXN; para cambiarla, busca `currency:"MXN"`.
+- Las tarifas y los textos por omisión salen de la carta-convenio de **Quartz Hotel & Spa**
+  para *Samaha Clinik* (agosto 2026). Revisa en Ajustes que sigan vigentes.
+- Falta el apartado de **RESERVACIONES** con los medios de contacto reales: el machote lo
+  anuncia pero no los lista. Se capturan en Ajustes.

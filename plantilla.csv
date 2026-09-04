@@ -1,3 +1,4 @@
-Negocio,Empresa,Contacto,Email,Teléfono,Monto,Probabilidad %,Cierre estimado,Responsable,Origen,Etiquetas,Notas,Etapa
-Licencias anuales,Grupo Marín,Laura Marín,laura@grupomarin.mx,55 1234 5678,180000,60,2026-10-15,Ana,Referido,"software, renovación",Cotización por 25 usuarios,Propuesta
-Implementación ERP,Distribuidora Sur,Jorge Rivas,jrivas@dsur.com,33 8899 1122,420000,35,2026-11-30,Carlos,Sitio web,consultoría,,Calificado
+Empresa,Contacto,Teléfono,Correo,Ubicación,Tarifa,Ejecutivo,Estatus,Notas
+SAMAHA CLINIK,Dr. Alejandro Samaha,664-375-1986,contact@samahaclinik.mx,"La Esquina Business Point, Calle Rufino Tamayo y Dr. Atl 9990, Oficina #702, Tijuana B.C.",2800,Carmen Sotelo,Ganado,Convenio 2026 firmado. Incluye tarifas Recovery.
+Hospital Ángeles,Dra. Ruiz,6641112233,ruiz@angeles.mx,"Zona Río, Tijuana B.C.",2950,Carmen Sotelo,Cotización enviada,Pendiente firma del cliente.
+Grupo Textil del Norte,Luis Paz,6642223344,luis@textilnorte.mx,"Mesa de Otay, Tijuana B.C.",,Ana,Negociación,Piden incluir Recovery.

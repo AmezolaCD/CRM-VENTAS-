@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CRM Ventas · Kanban</title>
+<title>CRM Ventas · Hotel</title>
 <style>
   :root{
     --bg:#f4f5f7; --panel:#ffffff; --panel-2:#fafbfc; --col:#ebecf0;
@@ -13,7 +13,6 @@
     --bad:#c9372c; --bad-soft:#ffedeb;
     --warn:#b65c02; --warn-soft:#fff4e5;
     --shadow:0 1px 2px rgba(9,30,66,.16);
-    --radius:8px;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
@@ -42,268 +41,577 @@
     font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     height:100vh; display:flex; flex-direction:column; overflow:hidden;
   }
+  input,select,textarea,button{font:inherit; color:inherit}
 
-  /* ---------- Barra superior ---------- */
   header{
     background:var(--panel); border-bottom:1px solid var(--line);
-    padding:10px 16px; display:flex; flex-wrap:wrap; gap:12px; align-items:center;
+    padding:8px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; flex:0 0 auto;
   }
-  .brand{font-size:16px; font-weight:700; letter-spacing:-.01em; white-space:nowrap}
+  .brand{font-size:16px; font-weight:700; white-space:nowrap}
   .brand span{color:var(--accent)}
-  .kpis{display:flex; gap:8px; flex-wrap:wrap}
-  .kpi{
-    background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius);
-    padding:5px 10px; min-width:96px;
-  }
-  .kpi b{display:block; font-size:15px; font-variant-numeric:tabular-nums}
-  .kpi small{color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em}
+  nav{display:flex; gap:2px; background:var(--col); border-radius:8px; padding:3px}
+  nav button{background:transparent; border:0; border-radius:6px; padding:6px 13px;
+    cursor:pointer; color:var(--muted); font-weight:600; white-space:nowrap}
+  nav button:hover{color:var(--text)}
+  nav button[aria-current="true"]{background:var(--panel); color:var(--text); box-shadow:var(--shadow)}
   .spacer{flex:1 1 auto}
   .tools{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
 
-  input,select,textarea,button{font:inherit; color:inherit}
-  .field{
-    background:var(--panel-2); border:1px solid var(--line); color:var(--text);
-    border-radius:6px; padding:7px 10px;
-  }
+  .field{background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    border-radius:6px; padding:7px 10px}
   .field:focus{outline:2px solid var(--accent); outline-offset:-1px}
-  #q{min-width:190px}
-  button.btn{
-    background:var(--panel-2); border:1px solid var(--line); border-radius:6px;
-    padding:7px 12px; cursor:pointer; white-space:nowrap;
-  }
+  .field[readonly]{background:var(--col); color:var(--muted)}
+  #q{min-width:200px}
+  button.btn{background:var(--panel-2); border:1px solid var(--line); border-radius:6px;
+    padding:7px 12px; cursor:pointer; white-space:nowrap}
   button.btn:hover{background:var(--col)}
   button.btn.primary{background:var(--accent); border-color:var(--accent); color:#fff}
   button.btn.primary:hover{filter:brightness(1.08)}
-  button.btn.danger{color:var(--bad); border-color:var(--line)}
+  button.btn.ok{background:var(--ok); border-color:var(--ok); color:#fff}
+  button.btn.ok:hover{filter:brightness(1.08)}
+  button.btn.danger{color:var(--bad)}
   button.btn.danger:hover{background:var(--bad-soft)}
+  button.btn.wa{color:#25d366}
+  button.btn.wa:hover{background:rgba(37,211,102,.12)}
+  button.btn:disabled{opacity:.45; cursor:not-allowed}
+  button.btn.sm{padding:3px 8px; font-size:12px}
 
-  /* ---------- Tablero ---------- */
-  main{flex:1 1 auto; overflow-x:auto; overflow-y:hidden; padding:14px}
-  #board{display:flex; gap:12px; height:100%; align-items:stretch; min-height:0}
-  .col{
-    background:var(--col); border-radius:10px; width:290px; flex:0 0 290px;
-    display:flex; flex-direction:column; height:100%;
-  }
+  main{flex:1 1 auto; min-height:0; display:flex}
+  .view{display:none; flex:1 1 auto; min-width:0; min-height:0}
+  .view[data-on]{display:flex; flex-direction:column}
+
+  .kpis{display:flex; gap:8px; flex-wrap:wrap; padding:12px 16px 0; flex:0 0 auto}
+  .kpi{background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:6px 12px; min-width:110px}
+  .kpi b{display:block; font-size:17px; font-variant-numeric:tabular-nums}
+  .kpi small{color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em}
+
+  .board-wrap{flex:1 1 auto; overflow-x:auto; overflow-y:hidden; padding:12px 16px 16px; min-height:0}
+  #board{display:flex; gap:12px; height:100%; align-items:stretch}
+  .col{background:var(--col); border-radius:10px; width:280px; flex:0 0 280px;
+    display:flex; flex-direction:column; height:100%}
   .col.drop{outline:2px dashed var(--accent); outline-offset:-2px}
   .col-head{padding:10px 12px 8px; display:flex; align-items:center; gap:8px}
   .dot{width:9px; height:9px; border-radius:50%; flex:0 0 auto}
   .col-name{font-weight:700; font-size:13px; flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-  .count{
-    background:var(--panel); border:1px solid var(--line); color:var(--muted);
-    border-radius:20px; padding:1px 8px; font-size:11px; font-variant-numeric:tabular-nums;
-  }
-  .col-sum{
-    padding:0 12px 8px; color:var(--muted); font-size:12px;
-    font-variant-numeric:tabular-nums; border-bottom:1px solid var(--line); margin-bottom:6px;
-  }
+  .count{background:var(--panel); border:1px solid var(--line); color:var(--muted);
+    border-radius:20px; padding:1px 8px; font-size:11px; font-variant-numeric:tabular-nums}
   .cards{flex:0 1 auto; overflow-y:auto; padding:0 8px 8px; display:flex; flex-direction:column; gap:8px; min-height:40px}
-  .col-foot{padding:6px 8px 10px}
-  .add-card{
-    width:100%; text-align:left; background:transparent; border:1px dashed var(--line);
-    color:var(--muted); border-radius:6px; padding:7px 10px; cursor:pointer;
-  }
+  .col-foot{padding:2px 8px 10px}
+  .add-card{width:100%; text-align:left; background:transparent; border:1px dashed var(--line);
+    color:var(--muted); border-radius:6px; padding:7px 10px; cursor:pointer}
   .add-card:hover{background:var(--panel-2); color:var(--text)}
-
-  .card{
-    background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--accent);
-    border-radius:6px; padding:9px 10px; box-shadow:var(--shadow); cursor:grab;
-  }
-  .card:hover{border-color:var(--accent)}
-  .card.dragging{opacity:.4}
-  .card-title{font-weight:600; margin-bottom:3px; word-break:break-word}
-  .card-sub{color:var(--muted); font-size:12px; margin-bottom:7px; word-break:break-word}
-  .card-row{display:flex; align-items:center; gap:6px; flex-wrap:wrap}
-  .amount{font-weight:700; font-variant-numeric:tabular-nums}
-  .pill{
-    font-size:11px; padding:1px 7px; border-radius:20px;
-    background:var(--panel-2); border:1px solid var(--line); color:var(--muted);
-  }
-  .pill.due{background:var(--warn-soft); color:var(--warn); border-color:transparent}
-  .pill.late{background:var(--bad-soft); color:var(--bad); border-color:transparent}
-  .tags{display:flex; gap:4px; flex-wrap:wrap; margin-top:6px}
-  .tag{font-size:11px; padding:1px 7px; border-radius:4px; background:var(--accent-soft); color:var(--accent)}
-  .move{display:flex; gap:4px; margin-top:8px}
-  .move button{
-    flex:1; background:var(--panel-2); border:1px solid var(--line); color:var(--muted);
-    border-radius:4px; padding:2px 0; cursor:pointer; font-size:12px; line-height:1.6;
-  }
-  .move button:hover:not(:disabled){background:var(--accent); border-color:var(--accent); color:#fff}
-  .move button:disabled{opacity:.35; cursor:default}
   .empty-col{color:var(--muted); font-size:12px; text-align:center; padding:14px 6px}
 
-  /* ---------- Modales ---------- */
-  .overlay{
-    position:fixed; inset:0; background:rgba(9,30,66,.55); display:flex;
-    align-items:flex-start; justify-content:center; padding:24px 16px; overflow-y:auto; z-index:50;
-  }
-  .modal{
-    background:var(--panel); border:1px solid var(--line); border-radius:10px;
-    width:100%; max-width:640px; box-shadow:0 12px 40px rgba(9,30,66,.35);
-  }
-  .modal.wide{max-width:840px}
-  .modal-head{
-    padding:14px 18px; border-bottom:1px solid var(--line);
-    display:flex; align-items:center; gap:10px;
-  }
+  .card{background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--accent);
+    border-radius:6px; padding:9px 10px; box-shadow:var(--shadow); cursor:grab}
+  .card:hover{border-color:var(--accent)}
+  .card.dragging{opacity:.4}
+  .card-title{font-weight:600; margin-bottom:2px; word-break:break-word}
+  .card-sub{color:var(--muted); font-size:12px; word-break:break-word}
+  .card-row{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:7px}
+  .pill{font-size:11px; padding:1px 7px; border-radius:20px;
+    background:var(--panel-2); border:1px solid var(--line); color:var(--muted)}
+  .pill.strong{background:var(--accent-soft); color:var(--accent); border-color:transparent}
+  .pill.good{background:var(--ok-soft); color:var(--ok); border-color:transparent}
+  .pill.warn{background:var(--warn-soft); color:var(--warn); border-color:transparent}
+  .card-acts{display:flex; gap:4px; margin-top:8px}
+  .card-acts button{flex:1; background:var(--panel-2); border:1px solid var(--line); color:var(--muted);
+    border-radius:4px; padding:2px 0; cursor:pointer; font-size:12px; line-height:1.6}
+  .card-acts button:hover:not(:disabled){background:var(--accent); border-color:var(--accent); color:#fff}
+  .card-acts button.wa:hover:not(:disabled){background:#25d366; border-color:#25d366; color:#fff}
+  .card-acts button:disabled{opacity:.3; cursor:default}
+
+  .table-wrap{flex:1 1 auto; overflow:auto; padding:12px 16px 16px; min-height:0}
+  table.data{width:100%; border-collapse:collapse; background:var(--panel);
+    border:1px solid var(--line); border-radius:8px; overflow:hidden}
+  table.data th{text-align:left; font-size:11px; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.04em; padding:9px 10px; border-bottom:1px solid var(--line);
+    background:var(--panel-2); position:sticky; top:0; z-index:1; white-space:nowrap}
+  table.data td{padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:middle}
+  table.data tbody tr:last-child td{border-bottom:0}
+  table.data tbody tr:hover{background:var(--panel-2)}
+  table.data td.num, table.data th.num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
+  .row-link{cursor:pointer}
+  .nowrap{white-space:nowrap}
+  .vacio{color:var(--muted); text-align:center; padding:36px 16px}
+
+  .overlay{position:fixed; inset:0; background:rgba(9,30,66,.55); display:flex;
+    align-items:flex-start; justify-content:center; padding:24px 16px; overflow-y:auto; z-index:50}
+  .modal{background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    width:100%; max-width:640px; box-shadow:0 12px 40px rgba(9,30,66,.35)}
+  .modal.wide{max-width:920px}
+  .modal.doc{max-width:840px; background:#fff; color:#172b4d}
+  .modal-head{padding:14px 18px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px}
   .modal-head h2{margin:0; font-size:16px; flex:1 1 auto}
   .modal-body{padding:16px 18px}
-  .modal-foot{
-    padding:12px 18px; border-top:1px solid var(--line);
-    display:flex; gap:8px; align-items:center;
-  }
+  .modal-foot{padding:12px 18px; border-top:1px solid var(--line); display:flex; gap:8px; align-items:center; flex-wrap:wrap}
   .grid{display:grid; grid-template-columns:1fr 1fr; gap:12px}
   .grid .full{grid-column:1/-1}
   label.lbl{display:block; font-size:12px; color:var(--muted); margin-bottom:4px; font-weight:600}
   .grid input,.grid select,.grid textarea{width:100%}
   textarea{resize:vertical; min-height:70px}
+  textarea.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px}
   .hint{color:var(--muted); font-size:12px}
-  .note{
-    background:var(--accent-soft); color:var(--text); border-radius:6px;
-    padding:10px 12px; font-size:13px; margin-bottom:14px;
+  .note{background:var(--accent-soft); color:var(--text); border-radius:6px; padding:10px 12px; font-size:13px; margin-bottom:14px}
+  .note.warn{background:var(--warn-soft)}
+  h3.sec{margin:22px 0 8px; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted)}
+  h3.sec:first-child{margin-top:0}
+
+  .subtabs{display:flex; gap:2px; background:var(--col); border-radius:8px; padding:3px; margin-bottom:16px}
+  .subtabs button{flex:1; background:transparent; border:0; border-radius:6px; padding:7px 10px;
+    cursor:pointer; color:var(--muted); font-weight:600}
+  .subtabs button[aria-current="true"]{background:var(--panel); color:var(--text); box-shadow:var(--shadow)}
+  .pane{display:none}
+  .pane[data-on]{display:block}
+
+  .act{display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--line)}
+  .act:last-child{border-bottom:0}
+  .act-ico{width:30px; height:30px; border-radius:8px; background:var(--panel-2); border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; flex:0 0 auto; font-size:15px}
+  .act-body{flex:1 1 auto; min-width:0}
+  .act-top{display:flex; gap:8px; align-items:baseline; flex-wrap:wrap}
+  .act-asunto{font-weight:600; word-break:break-word}
+  .act-meta{color:var(--muted); font-size:12px}
+  .act-notas{white-space:pre-wrap; margin-top:4px; font-size:13px; word-break:break-word}
+  .act-del{background:transparent; border:0; color:var(--muted); cursor:pointer; padding:0 4px; flex:0 0 auto}
+  .act-del:hover{color:var(--bad)}
+
+  .sign-pad{border:1px dashed var(--line); border-radius:8px; background:var(--panel-2);
+    touch-action:none; width:100%; height:170px; display:block; cursor:crosshair}
+
+  /* ---------- Documento (carta-convenio) ---------- */
+  .doc-body{padding:30px 40px 34px; font-size:12.4px; line-height:1.5; color:#172b4d; background:#fff}
+  .doc-hotel{text-align:center; border-bottom:2px solid #172b4d; padding-bottom:8px; margin-bottom:16px}
+  .doc-hotel b{font-size:15px; letter-spacing:.04em}
+  .doc-hotel div{font-size:11px; color:#5e6c84; margin-top:2px}
+  .doc-fecha{text-align:right; margin-bottom:14px}
+  .doc-dest{margin-bottom:14px}
+  .doc-dest b{font-size:13px}
+  .doc-body p{margin:0 0 9px; text-align:justify}
+  .doc-body h2{font-size:12px; font-weight:700; letter-spacing:.05em; margin:18px 0 6px;
+    text-transform:uppercase; border-bottom:1px solid #dfe1e6; padding-bottom:3px}
+  .doc-body table.tar{width:100%; border-collapse:collapse; margin:4px 0 8px; font-size:12px}
+  .doc-body table.tar th{background:#172b4d; color:#fff; text-align:left; padding:6px 9px;
+    font-size:11px; letter-spacing:.02em; border:1px solid #172b4d}
+  .doc-body table.tar th.num, .doc-body table.tar td.num{text-align:right}
+  .doc-body table.tar td{padding:6px 9px; border:1px solid #dfe1e6}
+  .doc-body .inc{font-size:11.5px; color:#42526e; white-space:pre-wrap; margin:0 0 12px; padding-left:2px}
+  .doc-body .pol{white-space:pre-wrap; font-size:11.8px; color:#42526e; text-align:justify}
+  .doc-cols{display:flex; gap:26px}
+  .doc-cols > div{flex:1; min-width:0}
+  .doc-cols h3{font-size:11px; letter-spacing:.04em; margin:0 0 4px; color:#172b4d; font-weight:700}
+  .doc-sub{font-weight:700; margin:12px 0 4px}
+  .firmas{display:flex; gap:40px; margin-top:30px}
+  .firma{flex:1}
+  .firma h4{margin:0 0 6px; font-size:11.5px; letter-spacing:.04em; text-transform:uppercase}
+  .firma .cv{height:62px; display:flex; align-items:flex-end; border-bottom:1px solid #172b4d; margin-bottom:5px}
+  .firma .cv img{max-height:60px}
+  .firma .cv span{color:#a5adba; font-size:11px; padding-bottom:4px}
+  .firma .lin{font-size:11.5px; line-height:1.9}
+  .firma .lin i{color:#5e6c84; font-style:normal; display:inline-block; width:58px}
+  .firma .lin u{text-decoration:none; border-bottom:1px solid #b3bac5; display:inline-block;
+    min-width:150px; padding:0 3px}
+
+  .estado-chip{font-size:11px; padding:2px 9px; border-radius:20px; font-weight:600; white-space:nowrap}
+
+  @media print{
+    body{height:auto; overflow:visible}
+    body > header, body > main{display:none !important}
+    .overlay{position:static; padding:0; background:none; overflow:visible; display:block}
+    .overlay:not(.printable){display:none !important}
+    .modal.doc{max-width:none; border:0; box-shadow:none; border-radius:0}
+    .modal-head, .modal-foot{display:none !important}
+    .doc-body{padding:0; font-size:11.5px}
+    .doc-body h2{page-break-after:avoid}
+    .firmas{page-break-inside:avoid}
+    table.tar{page-break-inside:avoid}
   }
 
-  table.map{width:100%; border-collapse:collapse}
-  table.map th{
-    text-align:left; font-size:11px; color:var(--muted); text-transform:uppercase;
-    letter-spacing:.04em; padding:6px 8px; border-bottom:1px solid var(--line);
-  }
-  table.map td{padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:middle}
-  table.map td:first-child{font-weight:600; white-space:nowrap}
-  table.map select{width:100%}
-  .prev{color:var(--muted); font-size:12px; max-width:230px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-  .scroll{max-height:52vh; overflow-y:auto}
-
-  @media (max-width:640px){
-    .kpis{order:3; width:100%}
-    .col{width:82vw; flex-basis:82vw}
+  @media (max-width:760px){
+    .col{width:80vw; flex-basis:80vw}
     .grid{grid-template-columns:1fr}
+    #q{min-width:140px}
+    .firmas, .doc-cols{flex-direction:column; gap:20px}
+    .doc-body{padding:18px}
   }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="brand">CRM Ventas <span>· Kanban</span></div>
-  <div class="kpis" id="kpis"></div>
+  <div class="brand">CRM <span>Hotel</span></div>
+  <nav>
+    <button data-view="tablero" aria-current="true">Tablero</button>
+    <button data-view="clientes">Clientes</button>
+    <button data-view="convenios">Convenios</button>
+    <button data-view="ajustes">Ajustes</button>
+  </nav>
   <div class="spacer"></div>
   <div class="tools">
-    <input id="q" class="field" type="search" placeholder="Buscar negocio, empresa, contacto…" autocomplete="off">
-    <select id="fOwner" class="field" title="Filtrar por responsable"><option value="">Todos</option></select>
-    <button class="btn primary" id="bNew">+ Negocio</button>
+    <input id="q" class="field" type="search" placeholder="Buscar empresa, contacto, teléfono…" autocomplete="off">
+    <select id="fEje" class="field" title="Filtrar por ejecutivo"><option value="">Todos</option></select>
+    <button class="btn primary" id="bNuevo">+ Cliente</button>
     <button class="btn" id="bImport">Importar</button>
     <button class="btn" id="bExport">Exportar</button>
-    <button class="btn" id="bTheme" title="Cambiar tema">◐</button>
+    <button class="btn" id="bTema" title="Cambiar tema">◐</button>
   </div>
 </header>
 
-<main><div id="board"></div></main>
+<main>
+  <section class="view" id="v-tablero" data-on>
+    <div class="kpis" id="kpis"></div>
+    <div class="board-wrap"><div id="board"></div></div>
+  </section>
+  <section class="view" id="v-clientes"><div class="table-wrap" id="tblClientes"></div></section>
+  <section class="view" id="v-convenios"><div class="table-wrap" id="tblConvenios"></div></section>
+  <section class="view" id="v-ajustes"><div class="table-wrap" id="panelAjustes"></div></section>
+</main>
 
 <script>
 "use strict";
 
-/* ================= Configuración ================= */
+/* ==========================================================================
+   CONFIGURACIÓN
+   Los textos por omisión salen de la carta-convenio real de Quartz Hotel & Spa.
+   Todo esto es editable en la pestaña Ajustes.
+   ========================================================================== */
 
-const STORE_KEY = "crm-ventas-kanban-v1";
+const STORE = "crm-hotel-v3";
+const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
-const STAGES = [
-  { id:"prospecto",   name:"Prospecto",   color:"#8993a4", won:false, lost:false },
-  { id:"contactado",  name:"Contactado",  color:"#0052cc", won:false, lost:false },
-  { id:"calificado",  name:"Calificado",  color:"#5243aa", won:false, lost:false },
-  { id:"propuesta",   name:"Propuesta",   color:"#0079bf", won:false, lost:false },
-  { id:"negociacion", name:"Negociación", color:"#b65c02", won:false, lost:false },
-  { id:"ganado",      name:"Ganado",      color:"#1f845a", won:true,  lost:false },
-  { id:"perdido",     name:"Perdido",     color:"#c9372c", won:false, lost:true  }
+const ESTATUS = [
+  { id:"contactado",         name:"Contactado",         color:"#0052cc" },
+  { id:"propuesta",          name:"Propuesta",          color:"#0079bf" },
+  { id:"negociacion",        name:"Negociación",        color:"#b65c02" },
+  { id:"cotizacion_enviada", name:"Cotización enviada", color:"#5243aa" },
+  { id:"ganado",             name:"Ganado",             color:"#1f845a", won:true },
+  { id:"perdido",            name:"Perdido",            color:"#c9372c", lost:true }
 ];
-const stageById = id => STAGES.find(s => s.id === id) || STAGES[0];
+const est = id => ESTATUS.find(e => e.id === id) || ESTATUS[0];
 
-/* Campos del negocio. `aliases` alimenta el auto-mapeo al importar CSV. */
-const FIELDS = [
-  { key:"nombre",       label:"Negocio",         type:"text",   aliases:["negocio","oportunidad","titulo","título","deal","asunto","descripcion","descripción","concepto","proyecto","name","title"] },
-  { key:"empresa",      label:"Empresa",         type:"text",   aliases:["empresa","cliente","compania","compañia","compañía","cuenta","razon social","razón social","company","account","organizacion","organización"] },
-  { key:"contacto",     label:"Contacto",        type:"text",   aliases:["contacto","nombre contacto","persona","atencion","atención","contact"] },
-  { key:"email",        label:"Email",           type:"email",  aliases:["email","correo","e-mail","correo electronico","correo electrónico","mail"] },
-  { key:"telefono",     label:"Teléfono",        type:"tel",    aliases:["telefono","teléfono","tel","celular","movil","móvil","whatsapp","phone"] },
-  { key:"monto",        label:"Monto",           type:"money",  aliases:["monto","valor","importe","precio","total","cotizacion","cotización","amount","value","venta","ingreso"] },
-  { key:"probabilidad", label:"Probabilidad %",  type:"number", aliases:["probabilidad","prob","porcentaje","probability","probabilidad de cierre"] },
-  { key:"fechaCierre",  label:"Cierre estimado", type:"date",   aliases:["fecha cierre","cierre","fecha de cierre","cierre estimado","fecha estimada","vencimiento","close date","fecha"] },
-  { key:"responsable",  label:"Responsable",     type:"text",   aliases:["responsable","vendedor","asesor","ejecutivo","dueño","dueno","owner","asignado","agente"] },
-  { key:"origen",       label:"Origen",          type:"text",   aliases:["origen","fuente","canal","source","medio","como nos conocio","cómo nos conoció"] },
-  { key:"etiquetas",    label:"Etiquetas",       type:"text",   aliases:["etiquetas","etiqueta","tags","categoria","categoría","tipo"] },
-  { key:"notas",        label:"Notas",           type:"textarea",aliases:["notas","nota","comentarios","comentario","observaciones","detalle","notes"] },
-  { key:"stage",        label:"Etapa",           type:"stage",  aliases:["etapa","estatus","estado","fase","status","stage","situacion","situación","pipeline"] }
+const TIPOS_ACT = [
+  { id:"llamada",  name:"Llamada",  icon:"📞" },
+  { id:"reunion",  name:"Reunión",  icon:"🤝" },
+  { id:"correo",   name:"Correo",   icon:"✉️" },
+  { id:"whatsapp", name:"WhatsApp", icon:"💬" }
+];
+const tipoAct = id => TIPOS_ACT.find(t => t.id === id) || TIPOS_ACT[0];
+
+/* Los dos bloques de tarifas de la carta. "recovery" es el que se activa
+   opcionalmente en cada convenio. */
+const GRUPOS = [
+  { id:"deluxe",   name:"Deluxe",   opcional:false },
+  { id:"recovery", name:"Recovery", opcional:true }
+];
+const grupoDe = id => GRUPOS.find(g => g.id === id) || GRUPOS[0];
+
+const ESTADOS_CONV = {
+  borrador:          { name:"Borrador",              bg:"var(--panel-2)",   fg:"var(--muted)" },
+  firmado_ejecutiva: { name:"Firmado por ejecutivo", bg:"var(--warn-soft)", fg:"var(--warn)" },
+  firmado_cliente:   { name:"Firmado por cliente",   bg:"var(--ok-soft)",   fg:"var(--ok)" },
+  cancelado:         { name:"Cancelado",             bg:"var(--bad-soft)",  fg:"var(--bad)" }
+};
+
+const HOTEL_DEF = {
+  nombre: "QUARTZ HOTEL & SPA",
+  direccion: "Paseo del Centenario 9580, Zona Urbana Rio Tijuana, 22010 Tijuana, B.C.",
+  telefono: "(664) 862-8200",
+  ciudad: "Tijuana B.C."
+};
+
+/* Catálogo de habitaciones. La tarifa pública admite N/A (null), como el
+   Recovery Care del convenio original. */
+const HABS_DEF = [
+  { id:"d1", nombre:"Sencilla y Doble", grupo:"deluxe", publica:5300,
+    incluye:"Incluye desayuno americano" },
+  { id:"r1", nombre:"Care", grupo:"recovery", publica:null,
+    incluye:"✓ Incluye acceso a gimnasio\n✓ 20% de descuento en SENSES SPA\n✓ Transportación *Hotel- Empresa- Hotel* (sujeta a disponibilidad)" }
 ];
 
-/* ================= Estado ================= */
+/* Textos de la carta. {{EMPRESA}}, {{HOTEL}}, {{VIGENCIA}} y {{CONTACTO}}
+   se sustituyen al generar el documento. */
+const TEXTOS_DEF = {
+  saludo:
+`Estimados,
+
+Anteponiendo un cordial saludo y agradeciendo su preferencia, nos complace presentar las siguientes tarifas convenio que su prestigiada empresa podrá tener con {{HOTEL}}, la tarifa estará vigente {{VIGENCIA}}. Sujeto a los términos y condiciones contenidos en el presente.`,
+
+  recoveryTitulo: "Habitación Surgery Recovery",
+  recoveryCol1Titulo: "Habitación Surgery Recovery",
+  recoveryCol1:
+`Incluye:
+• Habitación tipo Care (con cama eléctrica)
+• Servicio médico y de enfermería 24/7
+• 3 comidas completas
+• Acceso área lounge piso 3
+• Acceso a áreas comunes.
+• 20% de descuento en senses spa
+• 1 desayuno americano para acompañante`,
+  recoveryCol2Titulo: "Enfermería y médico",
+  recoveryCol2:
+`Incluye:
+• Comunicación con el doctor para generar expediente.
+• Asistencia 24/7 en casos de emergencias
+• Suministro de medicamentos que su doctor haya recetado (no incluye medicamentos)
+• Apoyo con curaciones básicas
+• Asistencia para ducharse
+• Asistencia con alimentos
+• Se requiere de la alta médica del paciente *obligatorio*`,
+
+  especificaciones:
+`1. Tarifas cotizadas son en moneda nacional pesos, a la fecha de pago. Las tarifas están sujetas a impuestos (8% de IVA, 5% de impuesto estatal sobre hospedaje). En caso de cambios en las leyes fiscales que modifiquen los porcentajes de los impuestos indicados, las tarifas se ajustarán en consecuencia.
+2. Se solicitará voucher abierto a tarjeta de crédito al momento de realizar check in para cubrir cualquier gasto adicional y/o cubrir cualquier daño o robo a la habitación, en caso de que la empresa desee omitir esta solicitud, deberá garantizarlo con carta autorización de cargo a tarjeta de crédito.
+3. El límite para cancelar sin penalización para {{ANIO}} será hasta 72 hrs antes de la llegada.
+4. Precio del estacionamiento $110.00 mxn por 24 hrs.
+5. Tarifas por habitación, por noche.
+6. Tarifa por persona extra (3ra y 4ta): $690 MX más impuestos.
+7. Tarifas NO COMISIONABLES.
+8. NLRA: Tarifas Convenio Negociadas bajo disponibilidad, a partir del 70% de ocupación del Hotel, estas tarifas ya no estarán disponibles, sin embargo, podrán tener una tarifa menor a la Rack siendo esta nuestra tarifa Comercial.
+9. Las tarifas convenio aplican con previa reservación y sujeta a disponibilidad.`,
+
+  valores:
+`1.- Habitaciones Smart (chapas inteligentes, cortinas automatizadas, teléfono con pantalla touch, escenarios de luz).
+2.- Internet Inalámbrico en todas las áreas del hotel en cortesía
+3.- Acceso a Gimnasio
+4.- Mini bar
+5.- Cajas de seguridad en habitaciones`,
+
+  servicios:
+`1.- Restaurante
+2.- Room Service 24 horas
+3.- Gimnasio
+4.- SPA y Jacuzzi
+5.- Alberca
+6.- Salones para eventos
+7.- WiFi`,
+
+  condiciones:
+`Será necesario que la persona que solicite la reservación se identifique como parte de su empresa, ya que la tarifa especial estará dada de alta en nuestro sistema bajo el nombre de "{{EMPRESA}}".`,
+
+  reservaciones:
+`Para su mayor comodidad contamos con los siguientes medios de reservación en donde con gusto le atenderemos y recibirá de manera personalizada, la información y tarifa de nuestro hotel.`,
+
+  politicas:
+`Garantía y Pago:
+Será solicitado un número de tarjeta de crédito o cualquier otra forma de pago con el fin de garantizar su estadía y tener asegurada su habitación en fechas de alta demanda.
+
+En caso de no garantizar su reservación, esta se cancelará automáticamente a las 18:00 hrs. del mismo día de llegada, quedando la habitación disponible para venta del hotel. A partir de las 18:00 hrs. todas las reservaciones no garantizadas, estarán sujetas a disponibilidad de espacio por parte del hotel.
+
+Se requerirá el pago de cada estancia a la entrada de cada huésped en efectivo o tarjeta de crédito autorizadas.
+
+Cancelación:
+El plazo de cancelación será de 72 HORAS ANTES DE LA FECHA DE LLEGADA, toda cancelación recibida después de este plazo causará el cargo de la primera noche de estancia, bajo el concepto de "No-Show", el cual se realizará a la tarjeta de crédito o forma de pago que se tenga como garantía.`,
+
+  cierre:
+`Agradecemos nuevamente su preferencia por {{HOTEL}} y le suplicamos haga llegar esta carta-convenio debidamente firmada de aceptación, para proceder con la correcta carga de tarifas en nuestro sistema de reservaciones, de lo contrario la tarifa no podrá estar disponible.
+
+Confiando que el presente convenio sea totalmente de su agrado. Sin otro particular por el momento me despido de usted.`
+};
+
+const CAMPOS_CLIENTE = [
+  { key:"empresa",   label:"Empresa",   type:"text", req:true,
+    aliases:["empresa","cliente","compania","compañia","compañía","cuenta","razon social","razón social","company","account","negocio","organizacion","organización"] },
+  { key:"contacto",  label:"Contacto",  type:"text",
+    aliases:["contacto","nombre contacto","nombre del contacto","persona","atencion","atención","contact"] },
+  { key:"telefono",  label:"Teléfono",  type:"tel",
+    aliases:["telefono","teléfono","tel","celular","movil","móvil","whatsapp","phone","numero","número","numero de telefono"] },
+  { key:"email",     label:"Correo",    type:"email",
+    aliases:["correo","email","e-mail","correo electronico","correo electrónico","mail"] },
+  { key:"ubicacion", label:"Ubicación", type:"text",
+    aliases:["ubicacion","ubicación","direccion","dirección","ciudad","domicilio","plaza","localidad","zona","location"] },
+  { key:"tarifa",    label:"Tarifa",    type:"money",
+    aliases:["tarifa","tarifa convenio","monto","importe","precio","valor","rate","tarifa negociada"] },
+  { key:"ejecutivo", label:"Ejecutivo", type:"text",
+    aliases:["ejecutivo","ejecutiva","responsable","vendedor","asesor","agente","owner","ejecutivo de venta","ejecutivo de ventas"] },
+  { key:"estatus",   label:"Estatus",   type:"estatus",
+    aliases:["estatus","estado","etapa","fase","status","situacion","situación","pipeline"] },
+  { key:"notas",     label:"Notas",     type:"textarea",
+    aliases:["notas","nota","comentarios","comentario","observaciones","detalle","notes"] }
+];
+
+/* ==========================================================================
+   ESTADO
+   ========================================================================== */
 
 let idCounter = 0;
-let state = load();
-let filters = { q:"", owner:"" };
-let dragId = null;
+let state = cargar();
+let filtros = { q:"", ejecutivo:"" };
+let vista = "tablero";
+let arrastrando = null;
 
-function load(){
+const nuevoId = p => (p||"x") + Date.now().toString(36) + "-" + (++idCounter);
+
+function cargar(){
   try{
-    const raw = localStorage.getItem(STORE_KEY);
-    if (raw){
-      const p = JSON.parse(raw);
-      if (p && Array.isArray(p.deals)) return { deals: p.deals.map(normalize) };
-    }
+    const raw = localStorage.getItem(STORE);
+    if (raw) return sanear(JSON.parse(raw));
   }catch(e){ console.warn("No se pudo leer el almacenamiento local:", e); }
-  return { deals: demoDeals() };
+
+  for (const k of VIEJOS){
+    try{
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+      const p = JSON.parse(raw);
+      if (p && Array.isArray(p.clientes) && p.clientes.length) return sanear(p);
+      if (p && Array.isArray(p.deals) && p.deals.length){
+        const mapa = { prospecto:"contactado", contactado:"contactado", calificado:"propuesta",
+                       propuesta:"propuesta", negociacion:"negociacion", ganado:"ganado", perdido:"perdido" };
+        return sanear({ clientes: p.deals.map(d => ({
+          id: nuevoId("c"), empresa: d.empresa || d.nombre || "", contacto: d.contacto || "",
+          telefono: d.telefono || "", email: d.email || "", ubicacion: "",
+          tarifa: Number(d.monto) || 0, ejecutivo: d.responsable || "",
+          estatus: mapa[d.stage] || "contactado", notas: d.notas || ""
+        })) });
+      }
+    }catch(e){ console.warn("No se pudo migrar " + k + ":", e); }
+  }
+  return sanear({ clientes: clientesDemo() });
 }
 
-function save(){
-  try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
-  catch(e){ console.warn("No se pudo guardar en el almacenamiento local:", e); }
+function sanear(s){
+  s = s || {};
+  const out = {
+    clientes:     Array.isArray(s.clientes) ? s.clientes.map(saneaCliente) : [],
+    actividades:  Array.isArray(s.actividades) ? s.actividades.map(saneaAct) : [],
+    convenios:    Array.isArray(s.convenios) ? s.convenios.map(saneaConv) : [],
+    habitaciones: Array.isArray(s.habitaciones) && s.habitaciones.length
+                    ? s.habitaciones.map(saneaHab) : HABS_DEF.map(saneaHab),
+    ajustes: {
+      hotel:  Object.assign({}, HOTEL_DEF, (s.ajustes && s.ajustes.hotel) || {}),
+      textos: Object.assign({}, TEXTOS_DEF, (s.ajustes && s.ajustes.textos) || {}),
+      moneda: (s.ajustes && s.ajustes.moneda) || "MXN",
+      ladaPais: (s.ajustes && s.ajustes.ladaPais) || "52"
+    }
+  };
+  const ids = new Set(out.clientes.map(c => c.id));
+  out.actividades = out.actividades.filter(a => ids.has(a.clienteId));
+  out.convenios   = out.convenios.filter(c => ids.has(c.clienteId));
+  return out;
 }
 
-function normalize(d){
-  const o = Object.assign({
-    id:"", nombre:"", empresa:"", contacto:"", email:"", telefono:"",
-    monto:0, probabilidad:"", fechaCierre:"", responsable:"", origen:"",
-    etiquetas:[], notas:"", stage:"prospecto", createdAt:"", updatedAt:""
-  }, d || {});
-  o.id = String(o.id || nextId());
-  o.monto = Number(o.monto) || 0;
-  o.etiquetas = Array.isArray(o.etiquetas)
-    ? o.etiquetas.filter(Boolean)
-    : String(o.etiquetas || "").split(/[,;|]/).map(s => s.trim()).filter(Boolean);
-  if (!stageById(o.stage) || o.stage !== stageById(o.stage).id) o.stage = "prospecto";
+function saneaCliente(c){
+  const o = Object.assign({ id:"", empresa:"", contacto:"", telefono:"", email:"", ubicacion:"",
+    tarifa:0, ejecutivo:"", estatus:"contactado", notas:"", createdAt:"", updatedAt:"" }, c || {});
+  o.id = o.id || nuevoId("c");
+  o.tarifa = Number(o.tarifa) || 0;
+  if (!ESTATUS.some(e => e.id === o.estatus)) o.estatus = "contactado";
   return o;
 }
 
-function nextId(){ return "d" + Date.now().toString(36) + "-" + (++idCounter); }
-
-function demoDeals(){
-  const hoy = new Date();
-  const en = n => new Date(hoy.getTime() + n*864e5).toISOString().slice(0,10);
-  return [
-    { id:"d1", nombre:"Licencias anuales", empresa:"Grupo Marín", contacto:"Laura Marín", email:"laura@grupomarin.mx", telefono:"55 1234 5678", monto:180000, probabilidad:60, fechaCierre:en(14), responsable:"Ana", origen:"Referido", etiquetas:["software"], notas:"Pidieron cotización por 25 usuarios.", stage:"propuesta" },
-    { id:"d2", nombre:"Implementación ERP", empresa:"Distribuidora Sur", contacto:"Jorge Rivas", email:"jrivas@dsur.com", telefono:"33 8899 1122", monto:420000, probabilidad:35, fechaCierre:en(45), responsable:"Carlos", origen:"Sitio web", etiquetas:["consultoría","alto valor"], notas:"", stage:"calificado" },
-    { id:"d3", nombre:"Renovación soporte", empresa:"Textiles Ávila", contacto:"Mónica Ávila", email:"monica@avila.mx", telefono:"", monto:95000, probabilidad:85, fechaCierre:en(5), responsable:"Ana", origen:"Cliente actual", etiquetas:["renovación"], notas:"Alta probabilidad, sólo falta firma.", stage:"negociacion" },
-    { id:"d4", nombre:"Capacitación equipo", empresa:"Constructora León", contacto:"Raúl León", email:"", telefono:"81 4455 6677", monto:60000, probabilidad:20, fechaCierre:en(30), responsable:"Carlos", origen:"Feria", etiquetas:[], notas:"", stage:"contactado" },
-    { id:"d5", nombre:"Módulo facturación", empresa:"Farmacias Delta", contacto:"Sofía Cruz", email:"scruz@delta.mx", telefono:"", monto:150000, probabilidad:100, fechaCierre:en(-10), responsable:"Ana", origen:"Referido", etiquetas:["software"], notas:"Cerrado, facturado en agosto.", stage:"ganado" },
-    { id:"d6", nombre:"Servidor dedicado", empresa:"Logística Pacífico", contacto:"Iván Ortega", email:"", telefono:"", monto:75000, probabilidad:0, fechaCierre:en(-20), responsable:"Carlos", origen:"Llamada fría", etiquetas:[], notas:"Se fueron con la competencia por precio.", stage:"perdido" }
-  ].map(normalize);
+function saneaAct(a){
+  const o = Object.assign({ id:"", clienteId:"", tipo:"llamada", asunto:"", fecha:"",
+    responsable:"", notas:"", createdAt:"" }, a || {});
+  o.id = o.id || nuevoId("a");
+  if (!TIPOS_ACT.some(t => t.id === o.tipo)) o.tipo = "llamada";
+  return o;
 }
 
-/* ================= Utilidades ================= */
+function saneaFirma(f){
+  if (!f || !f.img) return null;
+  return { nombre:f.nombre||"", puesto:f.puesto||"", celular:f.celular||"", fecha:f.fecha||"", img:f.img };
+}
 
-const money = n => new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",maximumFractionDigits:0}).format(Number(n)||0);
+function saneaConv(c){
+  const o = Object.assign({ id:"", folio:"", clienteId:"", fecha:"", vigenciaDesde:"", vigenciaHasta:"",
+    habitaciones:[], incluyeRecovery:false, notas:"", textos:null,
+    estado:"borrador", firmaHotel:null, firmaEmpresa:null, createdAt:"", updatedAt:"" }, c || {});
+  o.id = o.id || nuevoId("v");
+  if (!ESTADOS_CONV[o.estado]) o.estado = "borrador";
+  o.textos = Object.assign({}, TEXTOS_DEF, o.textos || {});
+  o.firmaHotel   = saneaFirma(o.firmaHotel);
+  o.firmaEmpresa = saneaFirma(o.firmaEmpresa);
+  o.habitaciones = (Array.isArray(o.habitaciones) ? o.habitaciones : []).map(h => ({
+    tipoId: h.tipoId || "", nombre: h.nombre || "",
+    grupo: GRUPOS.some(g => g.id === h.grupo) ? h.grupo : "deluxe",
+    publica: h.publica === null || h.publica === "" || h.publica === undefined ? null : Number(h.publica) || 0,
+    incluye: h.incluye || "",
+    convenio: Number(h.convenio) || 0
+  }));
+  return o;
+}
+
+function saneaHab(h){
+  const o = Object.assign({ id:"", nombre:"", grupo:"deluxe", publica:null, incluye:"" }, h || {});
+  o.id = o.id || nuevoId("h");
+  if (!GRUPOS.some(g => g.id === o.grupo)) o.grupo = "deluxe";
+  o.publica = (o.publica === null || o.publica === "" || o.publica === undefined) ? null : (Number(o.publica) || 0);
+  return o;
+}
+
+function guardar(){
+  try{ localStorage.setItem(STORE, JSON.stringify(state)); }
+  catch(e){
+    console.warn("No se pudo guardar:", e);
+    alert("No se pudo guardar en este navegador (almacenamiento lleno o bloqueado).\n\n" +
+          "Exporta un respaldo JSON antes de seguir trabajando.");
+  }
+}
+
+function clientesDemo(){
+  return [
+    { id:"c1", empresa:"SAMAHA CLINIK", contacto:"Dirección General", telefono:"6643751986",
+      email:"contact@samahaclinik.mx",
+      ubicacion:"La Esquina Business Point, Calle Rufino Tamayo y Dr. Atl 9990, Oficina #702, Tijuana B.C.",
+      tarifa:2800, ejecutivo:"Carmen Sotelo", estatus:"ganado",
+      notas:"Convenio 2026 firmado. Incluye tarifas Recovery." },
+    { id:"c2", empresa:"Grupo Marín", contacto:"Laura Marín", telefono:"5512345678",
+      email:"laura@grupomarin.mx", ubicacion:"Ciudad de México", tarifa:0,
+      ejecutivo:"Carmen Sotelo", estatus:"negociacion", notas:"Pidieron tarifa para 25 noches al mes." },
+    { id:"c3", empresa:"Textiles Ávila", contacto:"Mónica Ávila", telefono:"8144556677",
+      email:"monica@avila.mx", ubicacion:"Monterrey", tarifa:0,
+      ejecutivo:"Ana", estatus:"propuesta", notas:"Comparando con dos hoteles más." },
+    { id:"c4", empresa:"Distribuidora Sur", contacto:"Jorge Rivas", telefono:"3388991122",
+      email:"jrivas@dsur.com", ubicacion:"Guadalajara", tarifa:0,
+      ejecutivo:"Ana", estatus:"contactado", notas:"" }
+  ].map(saneaCliente);
+}
+
+/* ==========================================================================
+   UTILIDADES
+   ========================================================================== */
+
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const todayISO = () => new Date().toISOString().slice(0,10);
+const hoyISO = () => new Date().toISOString().slice(0,10);
+const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 
-function daysTo(iso){
-  if (!iso) return null;
-  const d = new Date(iso + "T00:00:00");
-  if (isNaN(d)) return null;
-  const t = new Date(todayISO() + "T00:00:00");
-  return Math.round((d - t) / 864e5);
+const money = n => new Intl.NumberFormat("es-MX",
+  { style:"currency", currency: (state && state.ajustes && state.ajustes.moneda) || "MXN",
+    maximumFractionDigits:2, minimumFractionDigits:2 }).format(Number(n)||0);
+
+/** "$2,800.00 MN", como en la carta original. */
+const moneyMN = n => money(n) + " MN";
+
+function fechaTexto(iso){
+  if (!iso) return "";
+  const d = new Date(iso.slice(0,10) + "T00:00:00");
+  if (isNaN(d)) return iso;
+  return `${d.getDate()} de ${MESES[d.getMonth()]} del ${d.getFullYear()}`;
+}
+function fechaCorta(iso){
+  if (!iso) return "—";
+  const d = new Date((iso.length <= 10 ? iso + "T00:00:00" : iso));
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString("es-MX", { day:"2-digit", month:"short", year:"numeric" });
+}
+function fechaHora(iso){
+  if (!iso) return "—";
+  const d = new Date((iso.length <= 10 ? iso + "T00:00:00" : iso));
+  if (isNaN(d)) return iso;
+  return d.toLocaleString("es-MX", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" });
+}
+/** Fecha en el formato de las firmas de la carta: 18 – 08- 2026 */
+function fechaFirma(iso){
+  if (!iso) return "";
+  const d = new Date(iso.slice(0,10) + "T00:00:00");
+  if (isNaN(d)) return iso.slice(0,10);
+  const p = n => String(n).padStart(2,"0");
+  return `${p(d.getDate())} – ${p(d.getMonth()+1)} – ${d.getFullYear()}`;
 }
 
 /**
  * Lee montos escritos como sea: "$120,000.50", "1.250.000", "89500,75", "(1,200)".
- * Regla: el último separador es decimal sólo si deja 1 o 2 dígitos detrás;
- * si deja 3 o más, es separador de miles. Sirve igual para formato latino y anglosajón.
+ * El último separador es decimal sólo si deja 1 o 2 dígitos detrás; si deja 3 o
+ * más es separador de miles. Sirve igual para formato latino y anglosajón.
  */
 function parseMoney(v){
   if (v == null || v === "") return 0;
@@ -323,23 +631,18 @@ function parseMoney(v){
   return isNaN(n) ? 0 : (neg ? -Math.abs(n) : n);
 }
 
-/** Acepta 2026-09-04, 04/09/2026, 4-9-26, seriales de Excel. */
+/** Acepta 2026-09-04, 04/09/2026, 4-9-26 y los seriales de Excel. */
 function parseDate(v){
   if (!v) return "";
   const s = String(v).trim();
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
-  if (/^\d{5}$/.test(s)){ // serial de Excel (base 1899-12-30)
-    const d = new Date(Date.UTC(1899,11,30) + Number(s)*864e5);
-    return d.toISOString().slice(0,10);
-  }
+  if (/^\d{5}$/.test(s)) return new Date(Date.UTC(1899,11,30) + Number(s)*864e5).toISOString().slice(0,10);
   const m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
   if (m){
     let [,a,b,y] = m;
     if (y.length === 2) y = "20" + y;
-    // Formato latino: día primero, salvo que sea imposible.
     let dd = +a, mm = +b;
-    if (dd > 12 && mm <= 12){ /* ok */ }
-    else if (mm > 12 && dd <= 12){ [dd, mm] = [mm, dd]; }
+    if (mm > 12 && dd <= 12){ const t = dd; dd = mm; mm = t; }
     if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return "";
     return `${y}-${String(mm).padStart(2,"0")}-${String(dd).padStart(2,"0")}`;
   }
@@ -347,472 +650,456 @@ function parseDate(v){
   return isNaN(d) ? "" : d.toISOString().slice(0,10);
 }
 
-/** Empata el texto de una etapa del archivo con una etapa del tablero. */
-function matchStage(v){
+function matchEstatus(v){
   const s = String(v || "").trim().toLowerCase();
-  if (!s) return "prospecto";
-  const hit = STAGES.find(st => st.id === s || st.name.toLowerCase() === s);
+  if (!s) return "contactado";
+  const hit = ESTATUS.find(e => e.id === s || e.name.toLowerCase() === s);
   if (hit) return hit.id;
-  const rules = [
-    [/gan[oa]|won|exito|éxito|vendid|facturad|cobrad/, "ganado"],
+  const reglas = [
+    [/gan[oa]|won|cerrad[oa]\s*gan|exito|éxito|firmad/, "ganado"],
     [/perd|lost|cancel|rechaz|declin|no\s*interes/, "perdido"],
-    [/negoc|cierre|firma/, "negociacion"],
+    [/cotiz.*enviad|enviad.*cotiz|propuesta\s*enviad/, "cotizacion_enviada"],
+    [/negoc|cierre/, "negociacion"],
     [/propuesta|cotiz|oferta|proposal|quote/, "propuesta"],
-    [/calific|qualified|interes|demo|reunion|reunión/, "calificado"],
-    [/contact|seguimiento|llamad|first|primer/, "contactado"],
-    [/prospec|nuevo|lead|inicial|sin\s*contact/, "prospecto"]
+    [/contact|seguimiento|llamad|prospec|nuevo|lead|inicial/, "contactado"]
   ];
-  for (const [re, id] of rules) if (re.test(s)) return id;
-  return "prospecto";
+  for (const [re, id] of reglas) if (re.test(s)) return id;
+  return "contactado";
 }
 
-/* ================= CSV ================= */
+function waLink(tel, texto){
+  let d = String(tel || "").replace(/\D/g, "");
+  if (!d) return "";
+  const lada = String((state && state.ajustes && state.ajustes.ladaPais) || "52").replace(/\D/g, "");
+  if (d.length === 10) d = lada + d;
+  else if (d.length === 11 && d[0] === "1" && lada === "52") d = lada + d.slice(1);
+  return "https://wa.me/" + d + (texto ? "?text=" + encodeURIComponent(texto) : "");
+}
 
-/** Parser de CSV/TSV que respeta comillas, saltos de línea y comillas escapadas. */
+function abrirWhatsApp(c){
+  if (!c) return;
+  const url = waLink(c.telefono,
+    `Hola${c.contacto ? " " + c.contacto.split(" ")[0] : ""}, le escribo de ${state.ajustes.hotel.nombre}.`);
+  if (!url){ alert("Este cliente no tiene teléfono registrado."); return; }
+  window.open(url, "_blank", "noopener");
+}
+
+/** Sustituye los marcadores de los textos de la carta. */
+function vars(txt, conv, cli){
+  const vig = textoVigencia(conv);
+  const anio = (conv.vigenciaHasta || conv.fecha || hoyISO()).slice(0,4);
+  return String(txt || "")
+    .replace(/\{\{HOTEL\}\}/g,    state.ajustes.hotel.nombre)
+    .replace(/\{\{EMPRESA\}\}/g,  (cli && cli.empresa) || "")
+    .replace(/\{\{CONTACTO\}\}/g, (cli && cli.contacto) || "")
+    .replace(/\{\{VIGENCIA\}\}/g, vig)
+    .replace(/\{\{ANIO\}\}/g,     anio);
+}
+
+function textoVigencia(v){
+  const d = v.vigenciaDesde, h = v.vigenciaHasta;
+  if (d && h) return `a partir del ${fechaTexto(d)} y hasta el ${fechaTexto(h)}`;
+  if (h)      return `a partir de hoy y hasta el ${fechaTexto(h)}`;
+  if (d)      return `a partir del ${fechaTexto(d)}`;
+  return "según lo acordado";
+}
+
+/* ----- CSV ----- */
+
 function parseCSV(text){
   text = text.replace(/^\uFEFF/, "");
-  const head = text.slice(0, text.indexOf("\n") === -1 ? text.length : text.indexOf("\n"));
+  const nl = text.indexOf("\n");
+  const head = text.slice(0, nl === -1 ? text.length : nl);
   const delim = (head.match(/\t/g)||[]).length > (head.match(/,/g)||[]).length ? "\t"
               : (head.match(/;/g)||[]).length > (head.match(/,/g)||[]).length ? ";" : ",";
-  const rows = []; let row = []; let cell = ""; let quoted = false;
-
+  const filas = []; let fila = [], celda = "", comillas = false;
   for (let i = 0; i < text.length; i++){
     const c = text[i];
-    if (quoted){
-      if (c === '"'){
-        if (text[i+1] === '"'){ cell += '"'; i++; }
-        else quoted = false;
-      } else cell += c;
+    if (comillas){
+      if (c === '"'){ if (text[i+1] === '"'){ celda += '"'; i++; } else comillas = false; }
+      else celda += c;
       continue;
     }
-    if (c === '"'){ quoted = true; }
-    else if (c === delim){ row.push(cell); cell = ""; }
-    else if (c === "\n"){ row.push(cell); rows.push(row); row = []; cell = ""; }
-    else if (c === "\r"){ /* ignora */ }
-    else cell += c;
+    if (c === '"') comillas = true;
+    else if (c === delim){ fila.push(celda); celda = ""; }
+    else if (c === "\n"){ fila.push(celda); filas.push(fila); fila = []; celda = ""; }
+    else if (c !== "\r") celda += c;
   }
-  if (cell !== "" || row.length){ row.push(cell); rows.push(row); }
-  return rows.filter(r => r.some(c => String(c).trim() !== ""));
+  if (celda !== "" || fila.length){ fila.push(celda); filas.push(fila); }
+  return filas.filter(f => f.some(c => String(c).trim() !== ""));
 }
 
-function toCSV(rows){
-  return rows.map(r => r.map(c => {
-    const s = String(c ?? "");
-    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
-  }).join(",")).join("\r\n");
-}
+const toCSV = filas => filas.map(f => f.map(c => {
+  const s = String(c ?? "");
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+}).join(",")).join("\r\n");
 
-function download(name, content, mime){
-  const blob = new Blob(["\uFEFF" + content], { type: (mime||"text/plain") + ";charset=utf-8" });
+function descargar(nombre, contenido, mime){
+  const blob = new Blob(["\uFEFF" + contenido], { type: (mime||"text/plain") + ";charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = name;
+  a.href = url; a.download = nombre;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-/* ================= Render ================= */
+/* ----- Consultas ----- */
 
-function visibleDeals(){
-  const q = filters.q.trim().toLowerCase();
-  return state.deals.filter(d => {
-    if (filters.owner && d.responsable !== filters.owner) return false;
+const cliente     = id => state.clientes.find(c => c.id === id);
+const actsDe      = id => state.actividades.filter(a => a.clienteId === id)
+                            .sort((a,b) => String(b.fecha).localeCompare(String(a.fecha)));
+const conveniosDe = id => state.convenios.filter(c => c.clienteId === id)
+                            .sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+const ultimaAct   = id => actsDe(id)[0] || null;
+const nombreCli   = id => (cliente(id) || {}).empresa || "(cliente eliminado)";
+
+function clientesVisibles(){
+  const q = filtros.q.trim().toLowerCase();
+  return state.clientes.filter(c => {
+    if (filtros.ejecutivo && c.ejecutivo !== filtros.ejecutivo) return false;
     if (!q) return true;
-    return [d.nombre,d.empresa,d.contacto,d.email,d.telefono,d.responsable,d.origen,d.notas,d.etiquetas.join(" ")]
+    return [c.empresa,c.contacto,c.telefono,c.email,c.ubicacion,c.ejecutivo,c.notas]
       .join(" ").toLowerCase().includes(q);
   });
 }
 
+/* ==========================================================================
+   RENDER
+   ========================================================================== */
+
 function render(){
-  renderKpis();
-  renderOwners();
-  renderBoard();
+  document.querySelectorAll("nav button").forEach(b =>
+    b.setAttribute("aria-current", String(b.dataset.view === vista)));
+  document.querySelectorAll(".view").forEach(v =>
+    v.id === "v-" + vista ? v.setAttribute("data-on","") : v.removeAttribute("data-on"));
+
+  const buscando = vista === "tablero" || vista === "clientes";
+  document.getElementById("q").style.display      = buscando ? "" : "none";
+  document.getElementById("fEje").style.display   = buscando ? "" : "none";
+  document.getElementById("bNuevo").style.display = (vista === "convenios" || vista === "ajustes") ? "none" : "";
+
+  renderEjecutivos();
+  if (vista === "tablero")   { renderKpis(); renderTablero(); }
+  if (vista === "clientes")  renderClientes();
+  if (vista === "convenios") renderConvenios();
+  if (vista === "ajustes")   renderAjustes();
+}
+
+function renderEjecutivos(){
+  const sel = document.getElementById("fEje");
+  const lista = [...new Set(state.clientes.map(c => c.ejecutivo).filter(Boolean))].sort();
+  sel.innerHTML = `<option value="">Todos</option>` + lista.map(o =>
+    `<option value="${esc(o)}"${o === filtros.ejecutivo ? " selected" : ""}>${esc(o)}</option>`).join("");
 }
 
 function renderKpis(){
-  const ds = visibleDeals();
-  const abiertos = ds.filter(d => !stageById(d.stage).won && !stageById(d.stage).lost);
-  const ganados  = ds.filter(d => stageById(d.stage).won);
-  const perdidos = ds.filter(d => stageById(d.stage).lost);
-  const sum = a => a.reduce((t,d) => t + (Number(d.monto)||0), 0);
-  const ponderado = abiertos.reduce((t,d) => t + (Number(d.monto)||0) * ((Number(d.probabilidad)||0)/100), 0);
-  const cerrados = ganados.length + perdidos.length;
-  const tasa = cerrados ? Math.round(ganados.length / cerrados * 100) : 0;
+  const cs = clientesVisibles();
+  const abiertos = cs.filter(c => !est(c.estatus).won && !est(c.estatus).lost);
+  const ganados  = cs.filter(c => est(c.estatus).won);
+  const ids = new Set(cs.map(c => c.id));
+  const firmados = state.convenios.filter(v => ids.has(v.clienteId) && v.estado === "firmado_cliente");
+  const pend     = state.convenios.filter(v => ids.has(v.clienteId) && v.estado === "firmado_ejecutiva");
 
-  const items = [
-    ["Pipeline abierto", money(sum(abiertos)), abiertos.length + " negocios"],
-    ["Ponderado", money(ponderado), "por probabilidad"],
-    ["Ganado", money(sum(ganados)), ganados.length + " cerrados"],
-    ["Tasa de cierre", tasa + "%", cerrados + " resueltos"]
-  ];
-  document.getElementById("kpis").innerHTML = items
-    .map(([t,v,s]) => `<div class="kpi"><small>${esc(t)}</small><b>${esc(v)}</b><small>${esc(s)}</small></div>`)
-    .join("");
+  document.getElementById("kpis").innerHTML = [
+    ["Clientes",           String(cs.length),       "en la cartera"],
+    ["En proceso",         String(abiertos.length), "sin cerrar"],
+    ["Ganados",            String(ganados.length),  "convenio cerrado"],
+    ["Convenios firmados", String(firmados.length), "por el cliente"],
+    ["Esperando cliente",  String(pend.length),     "firma pendiente"]
+  ].map(([t,v,s]) => `<div class="kpi"><small>${esc(t)}</small><b>${esc(v)}</b><small>${esc(s)}</small></div>`).join("");
 }
 
-function renderOwners(){
-  const sel = document.getElementById("fOwner");
-  const owners = [...new Set(state.deals.map(d => d.responsable).filter(Boolean))].sort();
-  const cur = filters.owner;
-  sel.innerHTML = `<option value="">Todos</option>` +
-    owners.map(o => `<option value="${esc(o)}"${o===cur?" selected":""}>${esc(o)}</option>`).join("");
-}
-
-function renderBoard(){
-  const ds = visibleDeals();
+function renderTablero(){
+  const cs = clientesVisibles();
   const board = document.getElementById("board");
   board.innerHTML = "";
 
-  for (const st of STAGES){
-    const mine = ds.filter(d => d.stage === st.id)
-                   .sort((a,b) => (Number(b.monto)||0) - (Number(a.monto)||0));
-    const total = mine.reduce((t,d) => t + (Number(d.monto)||0), 0);
-
+  for (const e of ESTATUS){
+    const mios = cs.filter(c => c.estatus === e.id).sort((a,b) => a.empresa.localeCompare(b.empresa, "es"));
     const col = document.createElement("section");
     col.className = "col";
-    col.dataset.stage = st.id;
+    col.dataset.estatus = e.id;
     col.innerHTML = `
       <div class="col-head">
-        <span class="dot" style="background:${st.color}"></span>
-        <span class="col-name">${esc(st.name)}</span>
-        <span class="count">${mine.length}</span>
+        <span class="dot" style="background:${e.color}"></span>
+        <span class="col-name">${esc(e.name)}</span>
+        <span class="count">${mios.length}</span>
       </div>
-      <div class="col-sum">${money(total)}</div>
       <div class="cards"></div>
-      <div class="col-foot"><button class="add-card" data-stage="${st.id}">+ Agregar negocio</button></div>`;
+      <div class="col-foot"><button class="add-card" data-estatus="${e.id}">+ Agregar cliente</button></div>`;
 
-    const cards = col.querySelector(".cards");
-    if (!mine.length){
-      cards.innerHTML = `<div class="empty-col">Sin negocios</div>`;
-    } else {
-      for (const d of mine) cards.appendChild(cardEl(d, st));
-    }
+    const cont = col.querySelector(".cards");
+    if (!mios.length) cont.innerHTML = `<div class="empty-col">Sin clientes</div>`;
+    else mios.forEach(c => cont.appendChild(tarjeta(c, e)));
 
-    // Zona de soltado
-    col.addEventListener("dragover", e => { e.preventDefault(); col.classList.add("drop"); });
+    col.addEventListener("dragover", ev => { ev.preventDefault(); col.classList.add("drop"); });
     col.addEventListener("dragleave", () => col.classList.remove("drop"));
-    col.addEventListener("drop", e => {
-      e.preventDefault();
-      col.classList.remove("drop");
-      moveDeal(dragId, st.id);
-    });
-
+    col.addEventListener("drop", ev => { ev.preventDefault(); col.classList.remove("drop"); moverCliente(arrastrando, e.id); });
     board.appendChild(col);
   }
 }
 
-function cardEl(d, st){
+function tarjeta(c, e){
   const el = document.createElement("article");
   el.className = "card";
   el.draggable = true;
-  el.dataset.id = d.id;
-  el.style.borderLeftColor = st.color;
+  el.dataset.id = c.id;
+  el.style.borderLeftColor = e.color;
 
-  const dias = daysTo(d.fechaCierre);
-  let fecha = "";
-  if (d.fechaCierre){
-    const cls = (!st.won && !st.lost && dias !== null && dias < 0) ? "late"
-              : (!st.won && !st.lost && dias !== null && dias <= 7) ? "due" : "";
-    const txt = dias === null ? d.fechaCierre
-              : dias < 0 ? `Vencido ${Math.abs(dias)} d`
-              : dias === 0 ? "Cierra hoy"
-              : `${dias} d`;
-    fecha = `<span class="pill ${cls}">${esc(txt)}</span>`;
-  }
+  const ua = ultimaAct(c.id);
+  const n = actsDe(c.id).length;
+  const convs = conveniosDe(c.id);
+  const firmado = convs.some(v => v.estado === "firmado_cliente");
+  const espera  = convs.some(v => v.estado === "firmado_ejecutiva");
+  const i = ESTATUS.findIndex(x => x.id === c.estatus);
 
-  const idx = STAGES.findIndex(s => s.id === d.stage);
   el.innerHTML = `
-    <div class="card-title">${esc(d.nombre || "(sin título)")}</div>
-    <div class="card-sub">${esc([d.empresa, d.contacto].filter(Boolean).join(" · ") || "—")}</div>
+    <div class="card-title">${esc(c.empresa || "(sin empresa)")}</div>
+    <div class="card-sub">${esc([c.contacto, c.ubicacion].filter(Boolean).join(" · ") || "—")}</div>
     <div class="card-row">
-      <span class="amount">${money(d.monto)}</span>
-      ${d.probabilidad !== "" && d.probabilidad !== null ? `<span class="pill">${esc(d.probabilidad)}%</span>` : ""}
-      ${fecha}
-      ${d.responsable ? `<span class="pill">${esc(d.responsable)}</span>` : ""}
+      ${c.tarifa ? `<span class="pill strong">${esc(money(c.tarifa))}</span>` : ""}
+      ${c.ejecutivo ? `<span class="pill">${esc(c.ejecutivo)}</span>` : ""}
+      ${n ? `<span class="pill" title="Actividades registradas">${n} act.</span>` : ""}
+      ${firmado ? `<span class="pill good">Convenio firmado</span>`
+                : espera ? `<span class="pill warn">Espera firma</span>` : ""}
     </div>
-    ${d.etiquetas.length ? `<div class="tags">${d.etiquetas.map(t => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
-    <div class="move">
-      <button data-dir="-1" ${idx <= 0 ? "disabled" : ""} title="Etapa anterior">‹</button>
-      <button data-dir="1" ${idx >= STAGES.length-1 ? "disabled" : ""} title="Etapa siguiente">›</button>
+    ${ua ? `<div class="card-sub" style="margin-top:6px">${tipoAct(ua.tipo).icon} ${esc(ua.asunto || tipoAct(ua.tipo).name)} · ${esc(fechaHora(ua.fecha))}</div>` : ""}
+    <div class="card-acts">
+      <button data-dir="-1" ${i <= 0 ? "disabled" : ""} title="Estatus anterior">‹</button>
+      <button class="wa" data-wa ${c.telefono ? "" : "disabled"} title="Enviar WhatsApp">WhatsApp</button>
+      <button data-dir="1" ${i >= ESTATUS.length-1 ? "disabled" : ""} title="Estatus siguiente">›</button>
     </div>`;
 
-  el.addEventListener("dragstart", e => {
-    dragId = d.id;
-    el.classList.add("dragging");
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", d.id);
+  el.addEventListener("dragstart", ev => {
+    arrastrando = c.id; el.classList.add("dragging");
+    ev.dataTransfer.effectAllowed = "move";
+    ev.dataTransfer.setData("text/plain", c.id);
   });
   el.addEventListener("dragend", () => el.classList.remove("dragging"));
-
-  el.addEventListener("click", e => {
-    const b = e.target.closest("button[data-dir]");
+  el.addEventListener("click", ev => {
+    if (ev.target.closest("[data-wa]")){ ev.stopPropagation(); abrirWhatsApp(c); return; }
+    const b = ev.target.closest("button[data-dir]");
     if (b){
-      e.stopPropagation();
-      const target = STAGES[idx + Number(b.dataset.dir)];
-      if (target) moveDeal(d.id, target.id);
+      ev.stopPropagation();
+      const destino = ESTATUS[i + Number(b.dataset.dir)];
+      if (destino) moverCliente(c.id, destino.id);
       return;
     }
-    openDeal(d.id);
+    abrirCliente(c.id);
   });
-
   return el;
 }
 
-function moveDeal(id, stage){
-  const d = state.deals.find(x => x.id === id);
-  if (!d || d.stage === stage) return;
-  d.stage = stage;
-  d.updatedAt = new Date().toISOString();
-  if (stageById(stage).won) d.probabilidad = 100;
-  if (stageById(stage).lost) d.probabilidad = 0;
-  save(); render();
+function moverCliente(id, estatus){
+  const c = cliente(id);
+  if (!c || c.estatus === estatus) return;
+  c.estatus = estatus;
+  c.updatedAt = new Date().toISOString();
+  guardar(); render();
 }
 
-/* ================= Modal de negocio ================= */
+function renderClientes(){
+  const cs = clientesVisibles().sort((a,b) => a.empresa.localeCompare(b.empresa, "es"));
+  const cont = document.getElementById("tblClientes");
+  if (!cs.length){
+    cont.innerHTML = `<div class="vacio">No hay clientes que coincidan.<br><br>
+      <button class="btn primary" id="bVacio">+ Agregar cliente</button></div>`;
+    cont.querySelector("#bVacio").onclick = () => abrirCliente(null);
+    return;
+  }
+  cont.innerHTML = `<table class="data">
+    <thead><tr>
+      <th>Empresa</th><th>Contacto</th><th>Teléfono</th><th>Correo</th><th>Ubicación</th>
+      <th>Estatus</th><th class="num">Tarifa</th><th>Ejecutivo</th>
+      <th class="num">Act.</th><th class="num">Conv.</th><th></th>
+    </tr></thead>
+    <tbody>${cs.map(c => {
+      const e = est(c.estatus);
+      return `<tr class="row-link" data-id="${c.id}">
+        <td><b>${esc(c.empresa)}</b></td>
+        <td>${esc(c.contacto || "—")}</td>
+        <td class="nowrap">${esc(c.telefono || "—")}</td>
+        <td>${esc(c.email || "—")}</td>
+        <td>${esc(c.ubicacion || "—")}</td>
+        <td><span class="estado-chip" style="background:${e.color}22;color:${e.color}">${esc(e.name)}</span></td>
+        <td class="num">${c.tarifa ? esc(money(c.tarifa)) : "—"}</td>
+        <td>${esc(c.ejecutivo || "—")}</td>
+        <td class="num">${actsDe(c.id).length}</td>
+        <td class="num">${conveniosDe(c.id).length}</td>
+        <td class="nowrap"><button class="btn sm wa" data-wa="${c.id}" ${c.telefono ? "" : "disabled"}>WhatsApp</button></td>
+      </tr>`;
+    }).join("")}</tbody></table>`;
 
-function openDeal(id, presetStage){
-  const d = id ? state.deals.find(x => x.id === id) : null;
-  const v = d || normalize({ stage: presetStage || "prospecto", fechaCierre:"" });
+  cont.querySelectorAll("tr[data-id]").forEach(tr => tr.addEventListener("click", ev => {
+    const wa = ev.target.closest("[data-wa]");
+    if (wa){ ev.stopPropagation(); abrirWhatsApp(cliente(wa.dataset.wa)); return; }
+    abrirCliente(tr.dataset.id);
+  }));
+}
 
-  const inputs = FIELDS.map(f => {
-    let val = f.key === "etiquetas" ? v.etiquetas.join(", ") : (v[f.key] ?? "");
-    if (f.key === "monto") val = Number(val) ? val : "";   // no arrastres un 0 en un alta nueva
-    const wide = (f.key === "notas" || f.key === "nombre") ? " full" : "";
-    let ctl;
-    if (f.type === "textarea") ctl = `<textarea class="field" name="${f.key}">${esc(val)}</textarea>`;
-    else if (f.type === "stage") ctl = `<select class="field" name="stage">${
-        STAGES.map(s => `<option value="${s.id}"${s.id===v.stage?" selected":""}>${esc(s.name)}</option>`).join("")}</select>`;
-    else if (f.type === "money") ctl = `<input class="field" type="text" inputmode="decimal" name="monto" value="${esc(val)}" placeholder="0.00">`;
-    else ctl = `<input class="field" type="${f.type}" name="${f.key}" value="${esc(val)}"${f.key==="probabilidad"?' min="0" max="100"':""}>`;
-    return `<div class="${wide.trim()}"><label class="lbl">${esc(f.label)}</label>${ctl}</div>`;
-  }).join("");
+function renderConvenios(){
+  const cont = document.getElementById("tblConvenios");
+  const vs = [...state.convenios].sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  const cab = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+      <b style="font-size:15px">Convenios</b><span class="hint">${vs.length} en total</span>
+      <span style="flex:1"></span>
+      <button class="btn primary" id="bNuevoConv">+ Nuevo convenio</button></div>`;
 
-  const ov = modal(`
-    <div class="modal">
-      <div class="modal-head"><h2>${d ? "Editar negocio" : "Nuevo negocio"}</h2>
-        <button class="btn" data-close>✕</button></div>
-      <div class="modal-body"><form id="dealForm"><div class="grid">${inputs}</div></form></div>
-      <div class="modal-foot">
-        ${d ? `<button class="btn danger" id="del">Eliminar</button>` : ""}
-        <div class="spacer"></div>
-        <button class="btn" data-close>Cancelar</button>
-        <button class="btn primary" id="ok">Guardar</button>
+  if (!vs.length){
+    cont.innerHTML = cab + `<div class="vacio">Todavía no hay convenios.<br>
+      Se crean desde aquí o desde la ficha de un cliente.</div>`;
+  } else {
+    cont.innerHTML = cab + `<table class="data">
+      <thead><tr><th>Folio</th><th>Cliente</th><th>Fecha</th><th>Vigencia</th>
+        <th class="num">Hab.</th><th>Recovery</th><th>Estado</th><th>Firmas</th><th></th></tr></thead>
+      <tbody>${vs.map(v => {
+        const ec = ESTADOS_CONV[v.estado];
+        return `<tr class="row-link" data-id="${v.id}">
+          <td><b>${esc(v.folio || "—")}</b></td>
+          <td>${esc(nombreCli(v.clienteId))}</td>
+          <td class="nowrap">${esc(fechaCorta(v.fecha))}</td>
+          <td class="nowrap">${v.vigenciaHasta ? "hasta " + esc(fechaCorta(v.vigenciaHasta)) : "—"}</td>
+          <td class="num">${v.habitaciones.length}</td>
+          <td>${v.incluyeRecovery ? "Sí" : "No"}</td>
+          <td><span class="estado-chip" style="background:${ec.bg};color:${ec.fg}">${esc(ec.name)}</span></td>
+          <td class="nowrap">${v.firmaHotel ? "✍️ Hotel" : "—"}${v.firmaEmpresa ? " · ✍️ Empresa" : ""}</td>
+          <td class="nowrap"><button class="btn sm" data-doc="${v.id}">Ver carta</button></td>
+        </tr>`;
+      }).join("")}</tbody></table>`;
+
+    cont.querySelectorAll("tr[data-id]").forEach(tr => tr.addEventListener("click", ev => {
+      const d = ev.target.closest("[data-doc]");
+      if (d){ ev.stopPropagation(); verConvenio(d.dataset.doc); return; }
+      editarConvenio(tr.dataset.id);
+    }));
+  }
+  cont.querySelector("#bNuevoConv").onclick = () => editarConvenio(null);
+}
+
+function renderAjustes(){
+  const a = state.ajustes, t = a.textos, h = a.hotel;
+  const filaHab = x => `<tr data-id="${x.id}">
+      <td><input class="field" data-k="nombre" value="${esc(x.nombre)}" style="width:100%"></td>
+      <td><select class="field" data-k="grupo" style="width:100%">${
+        GRUPOS.map(g => `<option value="${g.id}"${x.grupo===g.id?" selected":""}>${esc(g.name)}</option>`).join("")}</select></td>
+      <td><input class="field" data-k="publica" inputmode="decimal" placeholder="N/A"
+            value="${x.publica === null ? "" : esc(x.publica)}" style="width:120px;text-align:right"></td>
+      <td><textarea class="field" data-k="incluye" style="width:100%;min-height:56px;font-size:12px">${esc(x.incluye)}</textarea></td>
+      <td><button class="btn sm danger" data-del="${x.id}">Eliminar</button></td></tr>`;
+
+  const areaTexto = (k, label, alto, ayuda) => `
+    <div class="full"><label class="lbl">${esc(label)}</label>
+      ${ayuda ? `<div class="hint" style="margin:-2px 0 5px">${ayuda}</div>` : ""}
+      <textarea class="field mono" data-t="${k}" style="width:100%;min-height:${alto}px">${esc(t[k])}</textarea></div>`;
+
+  document.getElementById("panelAjustes").innerHTML = `
+    <div style="max-width:900px">
+      <h3 class="sec">Datos del hotel</h3>
+      <div class="grid">
+        <div class="full"><label class="lbl">Nombre</label><input class="field" id="hNombre" value="${esc(h.nombre)}"></div>
+        <div class="full"><label class="lbl">Dirección</label><input class="field" id="hDir" value="${esc(h.direccion)}"></div>
+        <div><label class="lbl">Teléfono</label><input class="field" id="hTel" value="${esc(h.telefono)}"></div>
+        <div><label class="lbl">Ciudad (para la línea de fecha)</label><input class="field" id="hCiudad" value="${esc(h.ciudad)}">
+          <div class="hint">Aparece como “${esc(h.ciudad)} a ${esc(fechaTexto(hoyISO()))}”.</div></div>
+        <div><label class="lbl">Moneda (código ISO)</label><input class="field" id="hMoneda" value="${esc(a.moneda)}"></div>
+        <div><label class="lbl">Lada del país para WhatsApp</label><input class="field" id="hLada" value="${esc(a.ladaPais)}">
+          <div class="hint">Se antepone a los teléfonos de 10 dígitos. México = 52.</div></div>
       </div>
-    </div>`);
 
-  const form = ov.querySelector("#dealForm");
-  form.querySelector('[name="nombre"]').focus();
-  form.addEventListener("submit", e => { e.preventDefault(); guardar(); });
+      <h3 class="sec">Catálogo de habitaciones y tarifas públicas</h3>
+      <div class="note warn">La <b>tarifa pública</b> (rack) se administra <b>sólo aquí</b>: en el convenio
+        se muestra pero no se puede editar. Déjala <b>vacía</b> para que salga <b>N/A</b>, como el
+        Recovery Care del convenio original. Un convenio ya firmado conserva la tarifa que tenía al firmarse.</div>
+      <table class="data"><thead><tr>
+        <th>Tipo de habitación</th><th style="width:150px">Bloque</th>
+        <th style="width:140px">Tarifa pública</th><th>Incluye (una línea por viñeta)</th><th style="width:100px"></th>
+      </tr></thead><tbody id="tHab">${state.habitaciones.map(filaHab).join("")}</tbody></table>
+      <p><button class="btn" id="bAddHab">+ Agregar tipo de habitación</button></p>
 
-  ov.querySelector("#ok").onclick = guardar;
-  const delBtn = ov.querySelector("#del");
-  if (delBtn) delBtn.onclick = () => {
-    if (!confirm(`¿Eliminar "${v.nombre || "este negocio"}"? Esta acción no se puede deshacer.`)) return;
-    state.deals = state.deals.filter(x => x.id !== v.id);
-    save(); render(); ov.remove();
+      <h3 class="sec">Textos de la carta-convenio</h3>
+      <div class="note">Marcadores disponibles: <code>{{HOTEL}}</code>, <code>{{EMPRESA}}</code>,
+        <code>{{CONTACTO}}</code>, <code>{{VIGENCIA}}</code>, <code>{{ANIO}}</code>.
+        Se sustituyen al generar cada carta. Un convenio guarda su propia copia de estos textos
+        al crearse, así que editarlos aquí no altera los convenios ya emitidos.</div>
+      <div class="grid">
+        ${areaTexto("saludo", "Párrafo de apertura", 120)}
+        ${areaTexto("especificaciones", "ESPECIFICACIONES DE TARIFAS", 210)}
+        <div><label class="lbl">VALORES AGREGADOS EN LA TARIFA COMERCIAL</label>
+          <textarea class="field mono" data-t="valores" style="width:100%;min-height:130px">${esc(t.valores)}</textarea></div>
+        <div><label class="lbl">NUESTROS SERVICIOS</label>
+          <textarea class="field mono" data-t="servicios" style="width:100%;min-height:130px">${esc(t.servicios)}</textarea></div>
+        ${areaTexto("condiciones", "CONDICIONES", 80)}
+        ${areaTexto("reservaciones", "RESERVACIONES", 80)}
+        ${areaTexto("politicas", "POLÍTICAS (garantía, pago y cancelación)", 230)}
+        ${areaTexto("cierre", "Párrafo de cierre", 110)}
+      </div>
+
+      <h3 class="sec">Bloque Surgery Recovery</h3>
+      <p class="hint" style="margin-top:0">Sólo se imprime en los convenios que incluyen Recovery.</p>
+      <div class="grid">
+        <div><label class="lbl">Columna izquierda · título</label>
+          <input class="field" data-t="recoveryCol1Titulo" value="${esc(t.recoveryCol1Titulo)}"></div>
+        <div><label class="lbl">Columna derecha · título</label>
+          <input class="field" data-t="recoveryCol2Titulo" value="${esc(t.recoveryCol2Titulo)}"></div>
+        <div><textarea class="field mono" data-t="recoveryCol1" style="width:100%;min-height:170px">${esc(t.recoveryCol1)}</textarea></div>
+        <div><textarea class="field mono" data-t="recoveryCol2" style="width:100%;min-height:170px">${esc(t.recoveryCol2)}</textarea></div>
+      </div>
+
+      <p style="margin:18px 0 40px">
+        <button class="btn primary" id="bGuardarAj">Guardar ajustes</button>
+        <button class="btn" id="bResetTextos">Restaurar textos originales</button>
+        <span class="hint" id="ajOk" style="margin-left:10px"></span></p>
+    </div>`;
+
+  const p = document.getElementById("panelAjustes");
+  p.querySelector("#bAddHab").onclick = () => {
+    state.habitaciones.push(saneaHab({ nombre:"Nuevo tipo", grupo:"deluxe", publica:null, incluye:"" }));
+    guardar(); renderAjustes();
   };
-
-  function guardar(){
-    const fd = new FormData(form);
-    const obj = Object.assign({}, v);
-    for (const f of FIELDS){
-      let val = (fd.get(f.key) ?? "").toString().trim();
-      if (f.key === "monto") val = parseMoney(val);
-      else if (f.key === "probabilidad") val = val === "" ? "" : Math.max(0, Math.min(100, Number(val) || 0));
-      else if (f.key === "etiquetas") val = val.split(/[,;]/).map(s => s.trim()).filter(Boolean);
-      obj[f.key] = val;
-    }
-    if (!obj.nombre && !obj.empresa){ alert("Escribe al menos el nombre del negocio o la empresa."); return; }
-    obj.updatedAt = new Date().toISOString();
-
-    if (d) Object.assign(d, normalize(obj));
-    else {
-      obj.id = nextId();
-      obj.createdAt = new Date().toISOString();
-      state.deals.push(normalize(obj));
-    }
-    save(); render(); ov.remove();
-  }
-}
-
-/* ================= Importar ================= */
-
-function openImport(){
-  const ov = modal(`
-    <div class="modal wide">
-      <div class="modal-head"><h2>Importar negocios</h2><button class="btn" data-close>✕</button></div>
-      <div class="modal-body">
-        <div class="note">
-          Sube un <b>CSV</b> (o TSV) con la primera fila como encabezados. Si tus datos están en Excel o Google Sheets,
-          usa <i>Archivo → Descargar → CSV</i>. También puedes pegar el contenido abajo.
-        </div>
-        <p><input type="file" id="file" class="field" accept=".csv,.tsv,.txt,text/csv,text/plain"></p>
-        <p class="hint">o pega aquí las filas (incluye la fila de encabezados):</p>
-        <textarea id="paste" class="field" style="width:100%" placeholder="Negocio,Empresa,Contacto,Monto,Etapa&#10;Licencias,ACME,Ana López,120000,Propuesta"></textarea>
-        <div id="mapArea"></div>
-      </div>
-      <div class="modal-foot">
-        <span class="hint" id="impInfo"></span>
-        <div class="spacer"></div>
-        <button class="btn" data-close>Cancelar</button>
-        <button class="btn primary" id="doImport" disabled>Importar</button>
-      </div>
-    </div>`);
-
-  let rows = null, headers = [];
-
-  ov.querySelector("#file").addEventListener("change", e => {
-    const f = e.target.files[0];
-    if (!f) return;
-    const r = new FileReader();
-    r.onload = () => prepare(String(r.result));
-    r.onerror = () => alert("No se pudo leer el archivo.");
-    r.readAsText(f, "utf-8");
+  p.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
+    const id = b.dataset.del;
+    const usos = state.convenios.filter(v => v.habitaciones.some(x => x.tipoId === id)).length;
+    if (usos && !confirm(`Este tipo aparece en ${usos} convenio(s). Los convenios ya guardados conservan su copia. ¿Eliminarlo del catálogo?`)) return;
+    state.habitaciones = state.habitaciones.filter(x => x.id !== id);
+    guardar(); renderAjustes();
   });
-  ov.querySelector("#paste").addEventListener("input", e => {
-    const t = e.target.value.trim();
-    if (t.length > 10) prepare(t); else clearPrep();
-  });
+  p.querySelector("#bResetTextos").onclick = () => {
+    if (!confirm("Se restaurarán todos los textos de la carta a los originales. ¿Continuar?")) return;
+    a.textos = Object.assign({}, TEXTOS_DEF);
+    guardar(); renderAjustes();
+  };
+  p.querySelector("#bGuardarAj").onclick = () => {
+    h.nombre    = p.querySelector("#hNombre").value.trim() || "Hotel";
+    h.direccion = p.querySelector("#hDir").value.trim();
+    h.telefono  = p.querySelector("#hTel").value.trim();
+    h.ciudad    = p.querySelector("#hCiudad").value.trim();
+    a.ladaPais  = p.querySelector("#hLada").value.replace(/\D/g,"") || "52";
 
-  function clearPrep(){
-    rows = null;
-    ov.querySelector("#mapArea").innerHTML = "";
-    ov.querySelector("#impInfo").textContent = "";
-    ov.querySelector("#doImport").disabled = true;
-  }
+    const mon = p.querySelector("#hMoneda").value.trim().toUpperCase() || "MXN";
+    const antes = a.moneda;
+    a.moneda = mon;
+    try{ money(0); }
+    catch(err){ a.moneda = antes; alert(`El código de moneda "${mon}" no es válido; se dejó ${antes}.`); }
 
-  function prepare(text){
-    const all = parseCSV(text);
-    if (all.length < 2){ clearPrep(); ov.querySelector("#impInfo").textContent = "Se necesitan encabezados y al menos una fila."; return; }
-    headers = all[0].map(h => String(h).trim());
-    rows = all.slice(1);
-
-    const norm = s => String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
-    const hNorm = headers.map(norm);
-    const cands = f => [f.label, f.key, ...f.aliases].map(norm).filter(Boolean);
-    const used = new Set(), found = {};
-
-    // Pase 1: TODAS las coincidencias exactas primero, para que una parcial
-    // de otro campo no se lleve una columna que alguien más nombra igualito.
-    for (const f of FIELDS){
-      const cs = cands(f);
-      for (let i = 0; i < hNorm.length; i++){
-        if (used.has(i) || !hNorm[i]) continue;
-        if (cs.includes(hNorm[i])){ found[f.key] = i; used.add(i); break; }
-      }
-    }
-    // Pase 2: coincidencia parcial, sólo con lo que quedó libre.
-    for (const f of FIELDS){
-      if (found[f.key] != null) continue;
-      const cs = cands(f).filter(c => c.length > 3);
-      for (let i = 0; i < hNorm.length; i++){
-        if (used.has(i) || hNorm[i].length < 3) continue;
-        if (cs.some(c => hNorm[i].includes(c) || c.includes(hNorm[i]))){ found[f.key] = i; used.add(i); break; }
-      }
-    }
-    const guess = f => found[f.key] != null ? found[f.key] : -1;
-
-    const rowsHtml = FIELDS.map(f => {
-      const g = guess(f);
-      const opts = [`<option value="-1">— ignorar —</option>`]
-        .concat(headers.map((h,i) => `<option value="${i}"${i===g?" selected":""}>${esc(h || "(columna " + (i+1) + ")")}</option>`))
-        .join("");
-      const prev = g > -1 ? (rows.find(r => String(r[g]||"").trim()) || [])[g] || "" : "";
-      return `<tr><td>${esc(f.label)}</td><td><select class="field" data-f="${f.key}">${opts}</select></td>
-              <td class="prev" data-p="${f.key}">${esc(prev)}</td></tr>`;
-    }).join("");
-
-    ov.querySelector("#mapArea").innerHTML = `
-      <h3 style="margin:18px 0 8px;font-size:14px">Relaciona tus columnas</h3>
-      <p class="hint" style="margin-top:0">Ya adiviné el mapeo según tus encabezados. Corrige lo que haga falta.</p>
-      <div class="scroll"><table class="map">
-        <thead><tr><th>Campo del CRM</th><th>Columna de tu archivo</th><th>Ejemplo</th></tr></thead>
-        <tbody>${rowsHtml}</tbody></table></div>
-      <p style="margin:12px 0 0"><label><input type="checkbox" id="replace"> Reemplazar todos los negocios actuales (en vez de agregar)</label></p>`;
-
-    ov.querySelectorAll("#mapArea select").forEach(sel => {
-      sel.addEventListener("change", () => {
-        const i = Number(sel.value);
-        const cell = ov.querySelector(`[data-p="${sel.dataset.f}"]`);
-        cell.textContent = i > -1 ? ((rows.find(r => String(r[i]||"").trim()) || [])[i] || "") : "";
-      });
+    p.querySelectorAll("[data-t]").forEach(el => { a.textos[el.dataset.t] = el.value; });
+    p.querySelectorAll("#tHab tr[data-id]").forEach(tr => {
+      const x = state.habitaciones.find(y => y.id === tr.dataset.id);
+      if (!x) return;
+      x.nombre  = tr.querySelector('[data-k="nombre"]').value.trim() || "Sin nombre";
+      x.grupo   = tr.querySelector('[data-k="grupo"]').value;
+      const pub = tr.querySelector('[data-k="publica"]').value.trim();
+      x.publica = pub === "" ? null : parseMoney(pub);
+      x.incluye = tr.querySelector('[data-k="incluye"]').value;
     });
-
-    ov.querySelector("#impInfo").textContent = `${rows.length} filas · ${headers.length} columnas detectadas`;
-    ov.querySelector("#doImport").disabled = false;
-  }
-
-  ov.querySelector("#doImport").onclick = () => {
-    if (!rows) return;
-    const map = {};
-    ov.querySelectorAll("#mapArea select").forEach(s => { map[s.dataset.f] = Number(s.value); });
-    const replace = ov.querySelector("#replace")?.checked;
-
-    const nuevos = [];
-    for (const r of rows){
-      const o = {};
-      for (const f of FIELDS){
-        const i = map[f.key];
-        const raw = (i > -1 ? r[i] : "") ?? "";
-        const val = String(raw).trim();
-        if (f.key === "monto") o.monto = parseMoney(val);
-        else if (f.key === "fechaCierre") o.fechaCierre = parseDate(val);
-        else if (f.key === "stage") o.stage = matchStage(val);
-        else if (f.key === "probabilidad") o.probabilidad = val === "" ? "" : Math.max(0, Math.min(100, Math.round(parseMoney(val))));
-        else if (f.key === "etiquetas") o.etiquetas = val;
-        else o[f.key] = val;
-      }
-      if (!o.nombre && !o.empresa && !o.contacto && !o.monto) continue; // fila vacía
-      if (!o.nombre) o.nombre = o.empresa || o.contacto;
-      o.id = nextId();
-      o.createdAt = new Date().toISOString();
-      nuevos.push(normalize(o));
-    }
-
-    if (!nuevos.length){ alert("No se encontraron filas con datos utilizables. Revisa el mapeo."); return; }
-    state.deals = replace ? nuevos : state.deals.concat(nuevos);
-    save(); render(); ov.remove();
-    alert(`Se importaron ${nuevos.length} negocios.`);
+    guardar(); renderAjustes();
+    const ok = document.getElementById("ajOk");
+    if (ok){ ok.textContent = "Guardado ✓"; setTimeout(() => { if (ok) ok.textContent = ""; }, 2500); }
   };
 }
 
-/* ================= Exportar ================= */
-
-function openExport(){
-  const ov = modal(`
-    <div class="modal">
-      <div class="modal-head"><h2>Exportar</h2><button class="btn" data-close>✕</button></div>
-      <div class="modal-body">
-        <p class="hint" style="margin-top:0">Tus datos viven en este navegador. Descarga una copia para respaldarla o abrirla en Excel.</p>
-        <p><button class="btn" id="csv">Descargar CSV (Excel)</button></p>
-        <p><button class="btn" id="json">Descargar respaldo JSON</button></p>
-        <p><button class="btn" id="tpl">Descargar plantilla CSV vacía</button></p>
-        <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
-        <p><button class="btn danger" id="wipe">Borrar todos los datos</button></p>
-      </div>
-    </div>`);
-
-  const stamp = todayISO();
-  ov.querySelector("#csv").onclick = () => {
-    const cols = FIELDS.map(f => f.label);
-    const rows = [cols].concat(state.deals.map(d => FIELDS.map(f =>
-      f.key === "stage" ? stageById(d.stage).name :
-      f.key === "etiquetas" ? d.etiquetas.join(", ") : (d[f.key] ?? ""))));
-    download(`crm-ventas-${stamp}.csv`, toCSV(rows), "text/csv");
-  };
-  ov.querySelector("#json").onclick = () =>
-    download(`crm-ventas-respaldo-${stamp}.json`, JSON.stringify(state, null, 2), "application/json");
-  ov.querySelector("#tpl").onclick = () =>
-    download("plantilla-crm-ventas.csv", toCSV([FIELDS.map(f => f.label)]), "text/csv");
-  ov.querySelector("#wipe").onclick = () => {
-    if (!confirm("Se borrarán TODOS los negocios de este navegador. ¿Continuar?")) return;
-    if (!confirm("Confirma otra vez: esta acción no se puede deshacer.")) return;
-    state = { deals: [] };
-    save(); render(); ov.remove();
-  };
-}
-
-/* ================= Infra de modales ================= */
+/* ==========================================================================
+   MODALES
+   ========================================================================== */
 
 function modal(html){
   const ov = document.createElement("div");
@@ -827,33 +1114,902 @@ function modal(html){
 document.addEventListener("keydown", e => {
   if (e.key === "Escape"){
     const ovs = document.querySelectorAll(".overlay");
-    if (ovs.length) ovs[ovs.length - 1].remove();
+    if (ovs.length) ovs[ovs.length-1].remove();
   }
 });
 
-/* ================= Eventos ================= */
+/* ----- Ficha del cliente ----- */
 
-document.getElementById("q").addEventListener("input", e => { filters.q = e.target.value; render(); });
-document.getElementById("fOwner").addEventListener("change", e => { filters.owner = e.target.value; render(); });
-document.getElementById("bNew").onclick = () => openDeal(null);
-document.getElementById("bImport").onclick = openImport;
-document.getElementById("bExport").onclick = openExport;
-document.getElementById("bTheme").onclick = () => {
-  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
-  const cur = document.documentElement.dataset.theme || (dark ? "dark" : "light");
-  document.documentElement.dataset.theme = cur === "dark" ? "light" : "dark";
-  try{ localStorage.setItem(STORE_KEY + ":theme", document.documentElement.dataset.theme); }catch(e){}
+function abrirCliente(id, estatusInicial, pane){
+  const existente = id ? cliente(id) : null;
+  const c = existente || saneaCliente({ estatus: estatusInicial || "contactado" });
+
+  const campos = CAMPOS_CLIENTE.map(f => {
+    const val = f.key === "tarifa" ? (Number(c.tarifa) ? c.tarifa : "") : (c[f.key] ?? "");
+    const ancho = (f.key === "notas" || f.key === "ubicacion") ? " full" : "";
+    let ctl;
+    if (f.type === "textarea") ctl = `<textarea class="field" name="${f.key}">${esc(val)}</textarea>`;
+    else if (f.type === "estatus") ctl = `<select class="field" name="estatus">${
+        ESTATUS.map(e => `<option value="${e.id}"${e.id===c.estatus?" selected":""}>${esc(e.name)}</option>`).join("")}</select>`;
+    else if (f.type === "money") ctl = `<input class="field" type="text" inputmode="decimal" name="tarifa" value="${esc(val)}" placeholder="0.00">`;
+    else ctl = `<input class="field" type="${f.type}" name="${f.key}" value="${esc(val)}">`;
+    return `<div class="${ancho.trim()}"><label class="lbl">${esc(f.label)}</label>${ctl}</div>`;
+  }).join("");
+
+  const ov = modal(`
+    <div class="modal wide">
+      <div class="modal-head">
+        <h2>${existente ? esc(c.empresa || "Cliente") : "Nuevo cliente"}</h2>
+        ${existente && c.telefono ? `<button class="btn wa" id="bWa">WhatsApp</button>` : ""}
+        <button class="btn" data-close>✕</button>
+      </div>
+      <div class="modal-body">
+        ${existente ? `<div class="subtabs">
+          <button data-pane="datos" aria-current="true">Datos</button>
+          <button data-pane="acts">Actividad <span class="hint">(${actsDe(c.id).length})</span></button>
+          <button data-pane="convs">Convenios <span class="hint">(${conveniosDe(c.id).length})</span></button>
+        </div>` : ""}
+        <div class="pane" id="p-datos" data-on><form id="fCliente"><div class="grid">${campos}</div></form></div>
+        <div class="pane" id="p-acts"></div>
+        <div class="pane" id="p-convs"></div>
+      </div>
+      <div class="modal-foot" id="footCli">
+        ${existente ? `<button class="btn danger" id="bDel">Eliminar cliente</button>` : ""}
+        <div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="bOk">Guardar</button>
+      </div>
+    </div>`);
+
+  const form = ov.querySelector("#fCliente");
+  form.querySelector('[name="empresa"]').focus();
+  form.addEventListener("submit", e => { e.preventDefault(); guardarCliente(); });
+  ov.querySelector("#bOk").onclick = guardarCliente;
+  const bWa = ov.querySelector("#bWa");
+  if (bWa) bWa.onclick = () => abrirWhatsApp(c);
+
+  const bDel = ov.querySelector("#bDel");
+  if (bDel) bDel.onclick = () => {
+    const na = actsDe(c.id).length, nv = conveniosDe(c.id).length;
+    const extra = (na || nv) ? `\n\nSe borrarán también ${na} actividad(es) y ${nv} convenio(s).` : "";
+    if (!confirm(`¿Eliminar a "${c.empresa}"?${extra}\n\nEsta acción no se puede deshacer.`)) return;
+    state.clientes    = state.clientes.filter(x => x.id !== c.id);
+    state.actividades = state.actividades.filter(a => a.clienteId !== c.id);
+    state.convenios   = state.convenios.filter(v => v.clienteId !== c.id);
+    guardar(); render(); ov.remove();
+  };
+
+  if (existente){
+    const foot = ov.querySelector("#footCli");
+    ov.querySelectorAll(".subtabs button").forEach(b => b.onclick = () => {
+      ov.querySelectorAll(".subtabs button").forEach(x => x.setAttribute("aria-current", String(x === b)));
+      ov.querySelectorAll(".pane").forEach(pn =>
+        pn.id === "p-" + b.dataset.pane ? pn.setAttribute("data-on","") : pn.removeAttribute("data-on"));
+      foot.style.display = b.dataset.pane === "datos" ? "" : "none";
+      if (b.dataset.pane === "acts")  pintaActs();
+      if (b.dataset.pane === "convs") pintaConvs();
+    });
+    if (pane){
+      const b = ov.querySelector(`.subtabs button[data-pane="${pane}"]`);
+      if (b) b.click();
+    }
+  }
+
+  function pintaActs(){
+    const lista = actsDe(c.id);
+    ov.querySelector("#p-acts").innerHTML = `
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+        <b>Actividad registrada</b><span class="hint">${lista.length} registro(s) · sin límite</span>
+        <span style="flex:1"></span>
+        <button class="btn primary" id="bAddAct">+ Registrar actividad</button>
+      </div>
+      ${lista.length ? lista.map(a => `
+        <div class="act" data-act="${a.id}">
+          <div class="act-ico" title="${esc(tipoAct(a.tipo).name)}">${tipoAct(a.tipo).icon}</div>
+          <div class="act-body">
+            <div class="act-top">
+              <span class="act-asunto">${esc(a.asunto || tipoAct(a.tipo).name)}</span>
+              <span class="act-meta">${esc(tipoAct(a.tipo).name)} · ${esc(fechaHora(a.fecha))}${a.responsable ? " · " + esc(a.responsable) : ""}</span>
+            </div>
+            ${a.notas ? `<div class="act-notas">${esc(a.notas)}</div>` : ""}
+          </div>
+          <button class="act-del" data-delact="${a.id}" title="Eliminar">✕</button>
+        </div>`).join("")
+        : `<div class="vacio">Todavía no hay actividad registrada para este cliente.</div>`}`;
+
+    ov.querySelector("#bAddAct").onclick = () => modalActividad(c.id, null, pintaActs);
+    ov.querySelectorAll("[data-delact]").forEach(b => b.onclick = ev => {
+      ev.stopPropagation();
+      if (!confirm("¿Eliminar esta actividad?")) return;
+      state.actividades = state.actividades.filter(x => x.id !== b.dataset.delact);
+      guardar(); pintaActs(); render();
+    });
+    ov.querySelectorAll(".act").forEach(d => d.addEventListener("click", ev => {
+      if (ev.target.closest("[data-delact]")) return;
+      modalActividad(c.id, d.dataset.act, pintaActs);
+    }));
+  }
+
+  function pintaConvs(){
+    const lista = conveniosDe(c.id);
+    ov.querySelector("#p-convs").innerHTML = `
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+        <b>Convenios</b><span style="flex:1"></span>
+        <button class="btn primary" id="bAddConv">+ Nuevo convenio</button>
+      </div>
+      ${lista.length ? `<table class="data"><thead><tr>
+          <th>Folio</th><th>Fecha</th><th class="num">Hab.</th><th>Estado</th><th></th></tr></thead>
+        <tbody>${lista.map(v => {
+          const ec = ESTADOS_CONV[v.estado];
+          return `<tr class="row-link" data-conv="${v.id}">
+            <td><b>${esc(v.folio || "—")}</b></td>
+            <td class="nowrap">${esc(fechaCorta(v.fecha))}</td>
+            <td class="num">${v.habitaciones.length}</td>
+            <td><span class="estado-chip" style="background:${ec.bg};color:${ec.fg}">${esc(ec.name)}</span></td>
+            <td class="nowrap"><button class="btn sm" data-verconv="${v.id}">Ver carta</button></td></tr>`;
+        }).join("")}</tbody></table>`
+        : `<div class="vacio">Este cliente todavía no tiene convenios.</div>`}`;
+
+    ov.querySelector("#bAddConv").onclick = () => editarConvenio(null, c.id, pintaConvs);
+    ov.querySelectorAll("tr[data-conv]").forEach(tr => tr.addEventListener("click", ev => {
+      const b = ev.target.closest("[data-verconv]");
+      if (b){ ev.stopPropagation(); verConvenio(b.dataset.verconv, pintaConvs); return; }
+      editarConvenio(tr.dataset.conv, null, pintaConvs);
+    }));
+  }
+
+  function guardarCliente(){
+    const fd = new FormData(form);
+    const obj = Object.assign({}, c);
+    for (const f of CAMPOS_CLIENTE){
+      let v = (fd.get(f.key) ?? "").toString().trim();
+      if (f.key === "tarifa") v = parseMoney(v);
+      obj[f.key] = v;
+    }
+    if (!obj.empresa){ alert("El nombre de la empresa es obligatorio."); form.querySelector('[name="empresa"]').focus(); return; }
+    obj.updatedAt = new Date().toISOString();
+    if (existente) Object.assign(c, saneaCliente(obj));
+    else { obj.id = nuevoId("c"); obj.createdAt = new Date().toISOString(); state.clientes.push(saneaCliente(obj)); }
+    guardar(); render(); ov.remove();
+  }
+}
+
+/* ----- Actividad ----- */
+
+const ahoraLocal = () => new Date(Date.now() - new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16);
+
+function modalActividad(clienteId, actId, alCerrar){
+  const a = actId ? state.actividades.find(x => x.id === actId) : null;
+  const v = a || saneaAct({ clienteId, fecha: ahoraLocal() });
+
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>${a ? "Editar actividad" : "Registrar actividad"}</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body"><form id="fAct"><div class="grid">
+        <div><label class="lbl">Tipo</label>
+          <select class="field" name="tipo">${TIPOS_ACT.map(t =>
+            `<option value="${t.id}"${t.id===v.tipo?" selected":""}>${t.icon} ${esc(t.name)}</option>`).join("")}</select></div>
+        <div><label class="lbl">Fecha y hora</label>
+          <input class="field" type="datetime-local" name="fecha" value="${esc(String(v.fecha).slice(0,16))}"></div>
+        <div class="full"><label class="lbl">Asunto</label>
+          <input class="field" name="asunto" value="${esc(v.asunto)}" placeholder="Seguimiento de cotización"></div>
+        <div class="full"><label class="lbl">Responsable (ejecutivo de venta)</label>
+          <input class="field" name="responsable" value="${esc(v.responsable || (cliente(clienteId)||{}).ejecutivo || "")}"></div>
+        <div class="full"><label class="lbl">Notas</label>
+          <textarea class="field" name="notas" style="min-height:110px">${esc(v.notas)}</textarea></div>
+      </div></form></div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="bOk">Guardar</button></div>
+    </div>`);
+
+  const form = ov.querySelector("#fAct");
+  form.querySelector('[name="asunto"]').focus();
+  form.addEventListener("submit", e => { e.preventDefault(); ok(); });
+  ov.querySelector("#bOk").onclick = ok;
+
+  function ok(){
+    const fd = new FormData(form);
+    const obj = Object.assign({}, v, {
+      clienteId,
+      tipo: fd.get("tipo"),
+      fecha: fd.get("fecha") || ahoraLocal(),
+      asunto: (fd.get("asunto")||"").trim(),
+      responsable: (fd.get("responsable")||"").trim(),
+      notas: (fd.get("notas")||"").trim()
+    });
+    if (a) Object.assign(a, saneaAct(obj));
+    else { obj.id = nuevoId("a"); obj.createdAt = new Date().toISOString(); state.actividades.push(saneaAct(obj)); }
+    guardar(); ov.remove(); render();
+    if (alCerrar) alCerrar();
+  }
+}
+
+/** Deja constancia automática de los hitos del convenio en la bitácora del cliente. */
+function registrarAuto(clienteId, asunto, notas, responsable){
+  state.actividades.push(saneaAct({
+    id: nuevoId("a"), clienteId, tipo:"correo", asunto, fecha: ahoraLocal(),
+    responsable: responsable || "", notas: notas || "", createdAt: new Date().toISOString()
+  }));
+}
+
+/* ----- Editor de convenio ----- */
+
+function editarConvenio(id, clientePre, alCerrar){
+  const existente = id ? state.convenios.find(v => v.id === id) : null;
+
+  if (existente && existente.estado !== "borrador"){
+    alert("Este convenio ya está firmado y no se puede editar.\n\nSe abrirá la carta en modo lectura.");
+    verConvenio(existente.id, alCerrar);
+    return;
+  }
+
+  const finAnio = new Date().getFullYear() + "-12-31";
+  const v = existente || saneaConv({
+    clienteId: clientePre || "",
+    folio: "CV-" + new Date().getFullYear() + "-" + String(state.convenios.length + 1).padStart(3,"0"),
+    fecha: hoyISO(),
+    vigenciaDesde: hoyISO(),
+    vigenciaHasta: finAnio,
+    textos: Object.assign({}, state.ajustes.textos)
+  });
+
+  // En borrador la tarifa pública se refresca desde el catálogo; el precio convenio se conserva.
+  const previos = new Map(v.habitaciones.map(h => [h.tipoId, h.convenio]));
+  const filas = state.habitaciones.map(h => ({
+    tipoId:h.id, nombre:h.nombre, grupo:h.grupo, publica:h.publica, incluye:h.incluye,
+    convenio: previos.has(h.tipoId) ? previos.get(h.tipoId) : (previos.has(h.id) ? previos.get(h.id) : "")
+  }));
+
+  const bloque = gid => {
+    const fs = filas.filter(f => f.grupo === gid);
+    if (!fs.length) return `<p class="hint">No hay habitaciones de este bloque en el catálogo (pestaña Ajustes).</p>`;
+    return `<table class="data"><thead><tr>
+        <th>Tipo de habitación</th><th class="num" style="width:150px">Tarifa pública</th>
+        <th class="num" style="width:170px">Tarifa convenio</th><th class="num" style="width:100px">Dcto.</th>
+      </tr></thead><tbody>${fs.map(f => `<tr data-tipo="${f.tipoId}">
+        <td><b>${esc(f.nombre)}</b>${f.incluye ? `<div class="hint" style="white-space:pre-wrap">${esc(f.incluye)}</div>` : ""}</td>
+        <td class="num">${f.publica === null ? `<b>N/A</b>` : `<b>${esc(moneyMN(f.publica))}</b>`}
+          <div class="hint">fija</div></td>
+        <td class="num"><input class="field conv" inputmode="decimal" data-pub="${f.publica === null ? "" : f.publica}"
+              value="${f.convenio === "" ? "" : esc(f.convenio)}" placeholder="—" style="width:100%;text-align:right"></td>
+        <td class="num desc">—</td></tr>`).join("")}</tbody></table>`;
+  };
+
+  const ov = modal(`
+    <div class="modal wide">
+      <div class="modal-head"><h2>${existente ? "Editar convenio" : "Nuevo convenio"}</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="grid">
+          <div class="full"><label class="lbl">Cliente</label>
+            <select class="field" id="cCli">
+              <option value="">— Selecciona un cliente —</option>
+              ${[...state.clientes].sort((a,b)=>a.empresa.localeCompare(b.empresa,"es")).map(c =>
+                `<option value="${c.id}"${c.id===v.clienteId?" selected":""}>${esc(c.empresa)}${c.contacto?" · "+esc(c.contacto):""}</option>`).join("")}
+            </select></div>
+          <div><label class="lbl">Folio</label><input class="field" id="cFolio" value="${esc(v.folio)}"></div>
+          <div><label class="lbl">Fecha de la carta</label><input class="field" type="date" id="cFecha" value="${esc(v.fecha)}"></div>
+          <div><label class="lbl">Vigencia desde</label><input class="field" type="date" id="cDesde" value="${esc(v.vigenciaDesde)}"></div>
+          <div><label class="lbl">Vigencia hasta</label><input class="field" type="date" id="cHasta" value="${esc(v.vigenciaHasta)}"></div>
+        </div>
+
+        <h3 class="sec">Bloque Deluxe</h3>
+        <div class="note">La <b>tarifa pública</b> viene del catálogo y no se edita aquí.
+          Captura sólo la <b>tarifa convenio</b>; deja en blanco los tipos que no entren en este convenio.</div>
+        <div>${bloque("deluxe")}</div>
+
+        <h3 class="sec">Bloque Recovery</h3>
+        <p><label><input type="checkbox" id="cRec" ${v.incluyeRecovery ? "checked" : ""}>
+          Considerar también habitaciones Recovery en este convenio</label></p>
+        <div id="bRecovery" ${v.incluyeRecovery ? "" : 'style="display:none"'}>${bloque("recovery")}</div>
+
+        <h3 class="sec">Observaciones internas</h3>
+        <p class="hint" style="margin-top:0">No se imprimen en la carta; son notas para el equipo.</p>
+        <textarea class="field" id="cNotas" style="width:100%;min-height:80px">${esc(v.notas)}</textarea>
+      </div>
+      <div class="modal-foot">
+        ${existente ? `<button class="btn danger" id="bDel">Eliminar</button>` : ""}
+        <div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn" id="bOk">Guardar borrador</button>
+        <button class="btn ok" id="bFirmar">Guardar y firmar</button>
+      </div>
+    </div>`);
+
+  const recalcular = () => ov.querySelectorAll("tr[data-tipo]").forEach(tr => {
+    const inp = tr.querySelector(".conv");
+    const pub = inp.dataset.pub === "" ? null : Number(inp.dataset.pub);
+    const celda = tr.querySelector(".desc");
+    const val = inp.value.trim();
+    if (!val || pub === null || !pub){ celda.textContent = "—"; celda.style.color = ""; return; }
+    const pct = Math.round((1 - parseMoney(val)/pub) * 100);
+    celda.textContent = (pct >= 0 ? "-" : "+") + Math.abs(pct) + "%";
+    celda.style.color = pct < 0 ? "var(--bad)" : "var(--muted)";
+  });
+  ov.addEventListener("input", e => { if (e.target.classList.contains("conv")) recalcular(); });
+  recalcular();
+
+  ov.querySelector("#cRec").onchange = e => {
+    ov.querySelector("#bRecovery").style.display = e.target.checked ? "" : "none";
+  };
+
+  const bDel = ov.querySelector("#bDel");
+  if (bDel) bDel.onclick = () => {
+    if (!confirm("¿Eliminar este convenio? Esta acción no se puede deshacer.")) return;
+    state.convenios = state.convenios.filter(x => x.id !== v.id);
+    guardar(); render(); ov.remove();
+    if (alCerrar) alCerrar();
+  };
+
+  ov.querySelector("#bOk").onclick = () => { if (recoger()){ ov.remove(); if (alCerrar) alCerrar(); } };
+  ov.querySelector("#bFirmar").onclick = () => {
+    if (!recoger()) return;
+    ov.remove();
+    verConvenio(v.id, alCerrar, true);
+  };
+
+  function recoger(){
+    const cid = ov.querySelector("#cCli").value;
+    if (!cid){ alert("Selecciona el cliente del convenio."); return false; }
+
+    const incRec = ov.querySelector("#cRec").checked;
+    const habs = [];
+    ov.querySelectorAll("tr[data-tipo]").forEach(tr => {
+      const tipoId = tr.dataset.tipo;
+      const cat = state.habitaciones.find(h => h.id === tipoId);
+      if (!cat) return;
+      if (cat.grupo === "recovery" && !incRec) return;
+      const val = tr.querySelector(".conv").value.trim();
+      if (!val) return;                                  // sin tarifa convenio = no entra
+      habs.push({ tipoId, nombre:cat.nombre, grupo:cat.grupo, publica:cat.publica,
+                  incluye:cat.incluye, convenio: parseMoney(val) });
+    });
+    if (!habs.length){ alert("Captura al menos una tarifa convenio."); return false; }
+
+    const desde = ov.querySelector("#cDesde").value, hasta = ov.querySelector("#cHasta").value;
+    if (desde && hasta && hasta < desde){ alert('La vigencia "hasta" no puede ser anterior a "desde".'); return false; }
+
+    Object.assign(v, {
+      clienteId: cid,
+      folio: ov.querySelector("#cFolio").value.trim(),
+      fecha: ov.querySelector("#cFecha").value || hoyISO(),
+      vigenciaDesde: desde, vigenciaHasta: hasta,
+      incluyeRecovery: incRec,
+      habitaciones: habs,
+      notas: ov.querySelector("#cNotas").value.trim(),
+      updatedAt: new Date().toISOString()
+    });
+    if (!existente){ v.createdAt = new Date().toISOString(); state.convenios.push(v); }
+    guardar(); render();
+    return true;
+  }
+}
+
+/* ----- La carta-convenio ----- */
+
+function verConvenio(id, alCerrar, pedirFirma){
+  const v = state.convenios.find(x => x.id === id);
+  if (!v) return;
+  const c = cliente(v.clienteId);
+  const h = state.ajustes.hotel;
+  const t = v.textos;
+  const ec = ESTADOS_CONV[v.estado];
+  const T = k => vars(t[k], v, c);
+
+  const tablaGrupo = gid => {
+    const hs = v.habitaciones.filter(x => x.grupo === gid);
+    if (!hs.length) return "";
+    const g = grupoDe(gid);
+    return `<table class="tar"><thead><tr>
+        <th>${esc(g.name)} / ${esc(h.nombre)}</th>
+        <th class="num" style="width:150px">Tarifa pública</th>
+        <th class="num" style="width:150px">Tarifa convenio</th></tr></thead>
+      <tbody>${hs.map(x => `<tr>
+        <td>${esc(x.nombre)}</td>
+        <td class="num">${x.publica === null ? "N/A" : esc(moneyMN(x.publica))}</td>
+        <td class="num"><b>${esc(moneyMN(x.convenio))}</b></td></tr>`).join("")}</tbody></table>
+      ${hs.some(x => x.incluye) ? `<div class="inc">${esc(hs.map(x => x.incluye).filter(Boolean).join("\n"))}</div>` : ""}`;
+  };
+
+  const bloqueFirma = (f, titulo, nombreDef, puestoDef, celDef) => `
+    <div class="firma">
+      <h4>${esc(titulo)}</h4>
+      <div class="cv">${f ? `<img src="${f.img}" alt="Firma">` : `<span>Pendiente de firma</span>`}</div>
+      <div class="lin">
+        <i>Nombre</i> <u>${esc(f ? f.nombre : (nombreDef || ""))}</u><br>
+        <i>Puesto</i> <u>${esc(f ? f.puesto : (puestoDef || ""))}</u><br>
+        <i>Fecha</i> <u>${esc(f ? fechaFirma(f.fecha) : "")}</u><br>
+        <i>Celular</i> <u>${esc(f ? f.celular : (celDef || ""))}</u>
+      </div>
+    </div>`;
+
+  const ov = modal(`
+    <div class="modal doc">
+      <div class="modal-head">
+        <h2>Convenio ${esc(v.folio || "")}</h2>
+        <span class="estado-chip" style="background:${ec.bg};color:${ec.fg}">${esc(ec.name)}</span>
+        <button class="btn" data-close>✕</button>
+      </div>
+      <div class="doc-body">
+        <div class="doc-hotel">
+          <b>${esc(h.nombre)}</b>
+          <div>${esc(h.direccion)}</div>
+          <div>Tel. ${esc(h.telefono)}</div>
+        </div>
+
+        <div class="doc-fecha">${esc(h.ciudad)} a ${esc(fechaTexto(v.fecha))}</div>
+
+        <div class="doc-dest">
+          <b>${esc((c && c.empresa) || "—")}</b><br>
+          ${c && c.ubicacion ? esc(c.ubicacion) + "<br>" : ""}
+          ${c && c.telefono ? "Tel: " + esc(c.telefono) + "<br>" : ""}
+          ${c && c.email ? "Email: " + esc(c.email) : ""}
+        </div>
+
+        <p style="white-space:pre-wrap">${esc(T("saludo"))}</p>
+
+        ${tablaGrupo("deluxe")}
+        ${v.incluyeRecovery ? tablaGrupo("recovery") : ""}
+
+        ${v.incluyeRecovery && (t.recoveryCol1 || t.recoveryCol2) ? `
+          <div class="doc-cols" style="margin-top:14px">
+            <div><h3>${esc(t.recoveryCol1Titulo)}</h3><div class="pol">${esc(T("recoveryCol1"))}</div></div>
+            <div><h3>${esc(t.recoveryCol2Titulo)}</h3><div class="pol">${esc(T("recoveryCol2"))}</div></div>
+          </div>` : ""}
+
+        <h2>Especificaciones de tarifas</h2>
+        <div class="pol">${esc(T("especificaciones"))}</div>
+
+        <div class="doc-cols" style="margin-top:16px">
+          <div><h3>VALORES AGREGADOS EN LA TARIFA COMERCIAL:</h3><div class="pol">${esc(T("valores"))}</div></div>
+          <div><h3>NUESTROS SERVICIOS:</h3><div class="pol">${esc(T("servicios"))}</div></div>
+        </div>
+
+        <h2>Condiciones</h2>
+        <div class="pol">${esc(T("condiciones"))}</div>
+
+        <h2>Reservaciones</h2>
+        <div class="pol">${esc(T("reservaciones"))}</div>
+
+        <h2>Políticas</h2>
+        <div class="pol">${esc(T("politicas"))}</div>
+
+        <p style="white-space:pre-wrap;margin-top:14px">${esc(T("cierre"))}</p>
+
+        <div class="firmas">
+          ${bloqueFirma(v.firmaHotel, "De conformidad · Hotel", (c && c.ejecutivo) || "", "Ejecutivo de ventas", "")}
+          ${bloqueFirma(v.firmaEmpresa, "De conformidad · Empresa", (c && c.contacto) || "", "", (c && c.telefono) || "")}
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="bPrint">Imprimir / Guardar PDF</button>
+        ${v.estado === "borrador" ? `<button class="btn" id="bEdit">Editar</button>` : ""}
+        <div class="spacer"></div>
+        ${!v.firmaHotel ? `<button class="btn ok" id="bF1">Firmar como ejecutivo</button>` : ""}
+        ${v.firmaHotel && !v.firmaEmpresa ? `<button class="btn" id="bEnviar">Enviar al cliente</button>
+          <button class="btn ok" id="bF2">Registrar firma del cliente</button>` : ""}
+        ${v.firmaEmpresa ? `<span class="hint">Convenio cerrado. El cliente pasó a <b>Ganado</b>.</span>` : ""}
+      </div>
+    </div>`);
+
+  ov.querySelector("#bPrint").onclick = () => {
+    ov.classList.add("printable");
+    const quitar = () => { ov.classList.remove("printable"); window.removeEventListener("afterprint", quitar); };
+    window.addEventListener("afterprint", quitar);
+    window.print();
+    setTimeout(quitar, 1500);   // respaldo si el navegador no dispara afterprint
+  };
+  const bEdit = ov.querySelector("#bEdit");
+  if (bEdit) bEdit.onclick = () => { ov.remove(); editarConvenio(v.id, null, alCerrar); };
+
+  const f1 = ov.querySelector("#bF1");
+  if (f1) f1.onclick = () => padFirma("Firma del ejecutivo de ventas",
+    { nombre:(c && c.ejecutivo) || "", puesto:"Ejecutivo de ventas", celular:"" },
+    d => { firmar(v, "hotel", d); ov.remove(); verConvenio(v.id, alCerrar); });
+
+  const f2 = ov.querySelector("#bF2");
+  if (f2) f2.onclick = () => padFirma("Firma del cliente",
+    { nombre:(c && c.contacto) || "", puesto:"", celular:(c && c.telefono) || "" },
+    d => { firmar(v, "empresa", d); ov.remove(); verConvenio(v.id, alCerrar); });
+
+  const env = ov.querySelector("#bEnviar");
+  if (env) env.onclick = () => enviarConvenio(v, c);
+
+  if (pedirFirma && !v.firmaHotel && f1) setTimeout(() => f1.click(), 60);
+}
+
+/** Aplica la firma y empuja al cliente por el embudo. */
+function firmar(v, quien, d){
+  const fecha = new Date().toISOString();
+  const c = cliente(v.clienteId);
+  const f = { nombre:d.nombre, puesto:d.puesto, celular:d.celular, fecha, img:d.img };
+
+  if (quien === "hotel"){
+    v.firmaHotel = f;
+    v.estado = "firmado_ejecutiva";
+    if (c && !est(c.estatus).lost){ c.estatus = "cotizacion_enviada"; c.updatedAt = fecha; }
+    registrarAuto(v.clienteId, `Convenio ${v.folio} firmado por el ejecutivo`,
+      `Firmado por ${d.nombre}. Listo para enviarse al cliente.\nEl cliente pasó a "Cotización enviada".`, d.nombre);
+  } else {
+    if (!v.firmaHotel){ alert("Primero debe firmar el ejecutivo de ventas."); return; }
+    v.firmaEmpresa = f;
+    v.estado = "firmado_cliente";
+    if (c){
+      c.estatus = "ganado";
+      c.updatedAt = fecha;
+      const precios = v.habitaciones.map(x => Number(x.convenio)).filter(n => n > 0);
+      if (precios.length) c.tarifa = Math.min(...precios);
+    }
+    registrarAuto(v.clienteId, `Convenio ${v.folio} firmado por el cliente`,
+      `Firmado por ${d.nombre}. El cliente pasó automáticamente a "Ganado".`, (c && c.ejecutivo) || "");
+  }
+  v.updatedAt = fecha;
+  guardar(); render();
+}
+
+function enviarConvenio(v, c){
+  const asunto = `Carta-convenio ${v.folio} · ${state.ajustes.hotel.nombre}`;
+  const cuerpo = `Estimado(a) ${(c && c.contacto) || ""}:\n\n` +
+    `Adjunto la carta-convenio ${v.folio} de ${state.ajustes.hotel.nombre}, vigente ` +
+    `${textoVigencia(v)}, ya firmada por nuestra parte.\n\n` +
+    `Le suplicamos hacerla llegar debidamente firmada de aceptación para proceder con la carga ` +
+    `de tarifas en nuestro sistema de reservaciones.\n\nSaludos cordiales,\n` +
+    `${(v.firmaHotel && v.firmaHotel.nombre) || (c && c.ejecutivo) || ""}\n${state.ajustes.hotel.nombre}`;
+
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>Enviar convenio al cliente</h2><button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note warn"><b>Ojo:</b> esta aplicación no tiene servidor, así que no puede enviar
+          el documento por sí sola ni recibir la firma del cliente a distancia. Lo que hace es prepararte
+          el envío y abrir tu correo o WhatsApp; el PDF lo generas con <i>Imprimir / Guardar PDF</i>
+          y lo adjuntas tú.</div>
+        <p><b>Paso 1.</b> Genera el PDF de la carta y guárdalo.</p>
+        <p><button class="btn" id="bPdf">Abrir la carta para guardarla en PDF</button></p>
+        <p><b>Paso 2.</b> Envíala con el mensaje ya redactado:</p>
+        <p style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" id="bMail" ${(c && c.email) ? "" : "disabled"}>Enviar por correo</button>
+          <button class="btn wa" id="bWa2" ${(c && c.telefono) ? "" : "disabled"}>Enviar por WhatsApp</button>
+        </p>
+        <p><b>Paso 3.</b> Cuando el cliente la devuelva firmada, regresa a la carta y usa
+          <i>Registrar firma del cliente</i>. El cliente pasará a <b>Ganado</b> automáticamente.</p>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div><button class="btn" data-close>Cerrar</button></div>
+    </div>`);
+
+  ov.querySelector("#bPdf").onclick = () => { ov.remove(); verConvenio(v.id); };
+  const m = ov.querySelector("#bMail");
+  if (m) m.onclick = () => {
+    window.location.href = `mailto:${encodeURIComponent(c.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+    registrarAuto(v.clienteId, `Convenio ${v.folio} enviado por correo`, `Enviado a ${c.email}.`, c.ejecutivo || "");
+    guardar(); render();
+  };
+  const w = ov.querySelector("#bWa2");
+  if (w) w.onclick = () => {
+    window.open(waLink(c.telefono, cuerpo), "_blank", "noopener");
+    registrarAuto(v.clienteId, `Convenio ${v.folio} enviado por WhatsApp`, `Enviado al ${c.telefono}.`, c.ejecutivo || "");
+    guardar(); render();
+  };
+}
+
+/** Lienzo de firma: ratón, dedo o lápiz. */
+function padFirma(titulo, def, alFirmar){
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>${esc(titulo)}</h2><button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="grid" style="margin-bottom:14px">
+          <div class="full"><label class="lbl">Nombre</label>
+            <input class="field" id="fNombre" value="${esc(def.nombre||"")}" placeholder="Nombre completo"></div>
+          <div><label class="lbl">Puesto</label>
+            <input class="field" id="fPuesto" value="${esc(def.puesto||"")}"></div>
+          <div><label class="lbl">Celular</label>
+            <input class="field" id="fCel" value="${esc(def.celular||"")}"></div>
+        </div>
+        <label class="lbl">Firma (traza con el ratón o el dedo)</label>
+        <canvas class="sign-pad" id="pad"></canvas>
+        <p class="hint" style="margin-top:6px">Una vez firmado, el convenio ya no se puede editar.</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="bClear">Borrar trazo</button>
+        <div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn ok" id="bOk">Firmar</button>
+      </div>
+    </div>`);
+
+  const cv = ov.querySelector("#pad");
+  const ctx = cv.getContext("2d");
+  let trazando = false, huboTrazo = false, last = null;
+
+  // Se dimensiona en píxeles físicos para que la firma no salga pixelada al imprimir.
+  requestAnimationFrame(() => {
+    const r = cv.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    cv.width  = Math.max(1, Math.round(r.width * dpr));
+    cv.height = Math.max(1, Math.round(r.height * dpr));
+    ctx.scale(dpr, dpr);
+    ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.strokeStyle = "#172b4d";
+  });
+
+  const punto = ev => { const r = cv.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; };
+  cv.addEventListener("pointerdown", ev => {
+    ev.preventDefault(); trazando = true; huboTrazo = true;
+    try{ cv.setPointerCapture(ev.pointerId); }catch(e){}
+    last = punto(ev);
+  });
+  cv.addEventListener("pointermove", ev => {
+    if (!trazando) return;
+    const p = punto(ev);
+    ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+    last = p;
+  });
+  const fin = () => { trazando = false; };
+  cv.addEventListener("pointerup", fin);
+  cv.addEventListener("pointercancel", fin);
+  cv.addEventListener("pointerleave", fin);
+
+  ov.querySelector("#bClear").onclick = () => { ctx.clearRect(0,0,cv.width,cv.height); huboTrazo = false; };
+  ov.querySelector("#bOk").onclick = () => {
+    const nombre = ov.querySelector("#fNombre").value.trim();
+    if (!nombre){ alert("Escribe el nombre de quien firma."); return; }
+    if (!huboTrazo){ alert("Falta trazar la firma."); return; }
+    // Fondo blanco: un PNG transparente se ve mal al imprimir.
+    const out = document.createElement("canvas");
+    out.width = cv.width; out.height = cv.height;
+    const o = out.getContext("2d");
+    o.fillStyle = "#fff"; o.fillRect(0,0,out.width,out.height);
+    o.drawImage(cv, 0, 0);
+    ov.remove();
+    alFirmar({ nombre,
+      puesto: ov.querySelector("#fPuesto").value.trim(),
+      celular: ov.querySelector("#fCel").value.trim(),
+      img: out.toDataURL("image/png") });
+  };
+}
+
+/* ==========================================================================
+   IMPORTAR / EXPORTAR
+   ========================================================================== */
+
+function abrirImportar(){
+  const ov = modal(`
+    <div class="modal wide">
+      <div class="modal-head"><h2>Importar clientes</h2><button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note">Sube un <b>CSV</b> (o TSV) con la primera fila de encabezados. Desde Excel o
+          Google Sheets usa <i>Archivo → Descargar → CSV</i>. También puedes pegar las filas abajo.
+          Esto importa <b>clientes</b>; actividades y convenios se capturan dentro de cada ficha.</div>
+        <p><input type="file" id="file" class="field" accept=".csv,.tsv,.txt,text/csv,text/plain"></p>
+        <p class="hint">o pega aquí las filas (con su fila de encabezados):</p>
+        <textarea id="paste" class="field" style="width:100%"
+          placeholder="Empresa,Contacto,Teléfono,Correo,Ubicación,Estatus&#10;ACME,Ana López,5512345678,ana@acme.mx,Tijuana,Propuesta"></textarea>
+        <div id="mapArea"></div>
+      </div>
+      <div class="modal-foot"><span class="hint" id="impInfo"></span><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="doImport" disabled>Importar</button></div>
+    </div>`);
+
+  let filas = null, heads = [];
+
+  ov.querySelector("#file").addEventListener("change", e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => preparar(String(r.result));
+    r.onerror = () => alert("No se pudo leer el archivo.");
+    r.readAsText(f, "utf-8");
+  });
+  ov.querySelector("#paste").addEventListener("input", e => {
+    const t = e.target.value.trim();
+    if (t.length > 10) preparar(t); else limpiar();
+  });
+
+  function limpiar(){
+    filas = null;
+    ov.querySelector("#mapArea").innerHTML = "";
+    ov.querySelector("#impInfo").textContent = "";
+    ov.querySelector("#doImport").disabled = true;
+  }
+
+  function preparar(texto){
+    const todo = parseCSV(texto);
+    if (todo.length < 2){ limpiar(); ov.querySelector("#impInfo").textContent = "Hacen falta encabezados y al menos una fila."; return; }
+    heads = todo[0].map(x => String(x).trim());
+    filas = todo.slice(1);
+
+    const norm = s => String(s).toLowerCase().normalize("NFD")
+      .replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+    const hN = heads.map(norm);
+    const cands = f => [f.label, f.key, ...f.aliases].map(norm).filter(Boolean);
+    const usados = new Set(), hallado = {};
+
+    // Primero TODAS las coincidencias exactas, para que una parcial de otro campo
+    // no se lleve una columna que alguien más nombra igualito.
+    for (const f of CAMPOS_CLIENTE){
+      const cs = cands(f);
+      for (let i = 0; i < hN.length; i++){
+        if (usados.has(i) || !hN[i]) continue;
+        if (cs.includes(hN[i])){ hallado[f.key] = i; usados.add(i); break; }
+      }
+    }
+    for (const f of CAMPOS_CLIENTE){
+      if (hallado[f.key] != null) continue;
+      const cs = cands(f).filter(x => x.length > 3);
+      for (let i = 0; i < hN.length; i++){
+        if (usados.has(i) || hN[i].length < 3) continue;
+        if (cs.some(x => hN[i].includes(x) || x.includes(hN[i]))){ hallado[f.key] = i; usados.add(i); break; }
+      }
+    }
+
+    const cuerpo = CAMPOS_CLIENTE.map(f => {
+      const g = hallado[f.key] != null ? hallado[f.key] : -1;
+      const opts = [`<option value="-1">— ignorar —</option>`].concat(
+        heads.map((x,i) => `<option value="${i}"${i===g?" selected":""}>${esc(x || "(columna "+(i+1)+")")}</option>`)).join("");
+      const ej = g > -1 ? ((filas.find(r => String(r[g]||"").trim()) || [])[g] || "") : "";
+      return `<tr><td><b>${esc(f.label)}</b>${f.req ? ' <span style="color:var(--bad)">*</span>' : ""}</td>
+        <td><select class="field" data-f="${f.key}" style="width:100%">${opts}</select></td>
+        <td class="hint" data-p="${f.key}" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(ej)}</td></tr>`;
+    }).join("");
+
+    ov.querySelector("#mapArea").innerHTML = `
+      <h3 class="sec">Relaciona tus columnas</h3>
+      <p class="hint" style="margin-top:0">Ya adiviné el mapeo según tus encabezados. Corrige lo que haga falta.</p>
+      <div style="max-height:42vh;overflow:auto"><table class="data">
+        <thead><tr><th>Campo del CRM</th><th>Columna de tu archivo</th><th>Ejemplo</th></tr></thead>
+        <tbody>${cuerpo}</tbody></table></div>
+      <p style="margin:12px 0 0"><label><input type="checkbox" id="replace">
+        Reemplazar la cartera actual (borra clientes, actividades y convenios existentes)</label></p>`;
+
+    ov.querySelectorAll("#mapArea select").forEach(sel => sel.addEventListener("change", () => {
+      const i = Number(sel.value);
+      ov.querySelector(`[data-p="${sel.dataset.f}"]`).textContent =
+        i > -1 ? ((filas.find(r => String(r[i]||"").trim()) || [])[i] || "") : "";
+    }));
+
+    ov.querySelector("#impInfo").textContent = `${filas.length} filas · ${heads.length} columnas detectadas`;
+    ov.querySelector("#doImport").disabled = false;
+  }
+
+  ov.querySelector("#doImport").onclick = () => {
+    if (!filas) return;
+    const map = {};
+    ov.querySelectorAll("#mapArea select").forEach(s => map[s.dataset.f] = Number(s.value));
+    const reemplazar = ov.querySelector("#replace") && ov.querySelector("#replace").checked;
+    if (reemplazar && !confirm("Se borrarán TODOS los clientes actuales junto con sus actividades y convenios. ¿Continuar?")) return;
+
+    const nuevos = [];
+    for (const r of filas){
+      const o = {};
+      for (const f of CAMPOS_CLIENTE){
+        const i = map[f.key];
+        const val = String((i > -1 ? r[i] : "") ?? "").trim();
+        if (f.key === "tarifa") o.tarifa = parseMoney(val);
+        else if (f.key === "estatus") o.estatus = matchEstatus(val);
+        else o[f.key] = val;
+      }
+      if (!o.empresa && !o.contacto && !o.telefono && !o.email) continue;
+      if (!o.empresa) o.empresa = o.contacto || o.email || "(sin nombre)";
+      o.id = nuevoId("c");
+      o.createdAt = new Date().toISOString();
+      nuevos.push(saneaCliente(o));
+    }
+    if (!nuevos.length){ alert("No se encontraron filas con datos utilizables. Revisa el mapeo."); return; }
+
+    if (reemplazar){ state.clientes = nuevos; state.actividades = []; state.convenios = []; }
+    else state.clientes = state.clientes.concat(nuevos);
+    guardar(); render(); ov.remove();
+    alert(`Se importaron ${nuevos.length} clientes.`);
+  };
+}
+
+function abrirExportar(){
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>Exportar</h2><button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <p class="hint" style="margin-top:0">Los datos viven en este navegador. Descarga una copia
+          para respaldarla o abrirla en Excel.</p>
+        <p><button class="btn" id="eCli">Clientes (CSV)</button></p>
+        <p><button class="btn" id="eAct">Actividades (CSV)</button></p>
+        <p><button class="btn" id="eConv">Convenios (CSV)</button></p>
+        <p><button class="btn primary" id="eJson">Respaldo completo (JSON)</button>
+          <span class="hint">incluye firmas y textos</span></p>
+        <p><button class="btn" id="eTpl">Plantilla de clientes vacía (CSV)</button></p>
+        <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+        <p><label class="lbl">Restaurar respaldo JSON</label>
+          <input type="file" id="rJson" class="field" accept=".json,application/json" style="width:100%"></p>
+        <p><button class="btn danger" id="wipe">Borrar todos los datos</button></p>
+      </div>
+    </div>`);
+
+  const hoy = hoyISO();
+
+  ov.querySelector("#eCli").onclick = () => {
+    const cols = CAMPOS_CLIENTE.map(f => f.label);
+    descargar(`clientes-${hoy}.csv`, toCSV([cols].concat(state.clientes.map(c =>
+      CAMPOS_CLIENTE.map(f => f.key === "estatus" ? est(c.estatus).name : (c[f.key] ?? ""))))), "text/csv");
+  };
+  ov.querySelector("#eAct").onclick = () => {
+    descargar(`actividades-${hoy}.csv`, toCSV(
+      [["Empresa","Tipo","Asunto","Fecha y hora","Responsable","Notas"]].concat(
+        [...state.actividades].sort((a,b) => String(b.fecha).localeCompare(String(a.fecha)))
+          .map(a => [nombreCli(a.clienteId), tipoAct(a.tipo).name, a.asunto, a.fecha, a.responsable, a.notas]))), "text/csv");
+  };
+  ov.querySelector("#eConv").onclick = () => {
+    const fs = [["Folio","Empresa","Fecha","Vigencia desde","Vigencia hasta","Bloque","Tipo de habitación",
+                 "Tarifa pública","Tarifa convenio","Estado","Firmó hotel","Firmó empresa","Observaciones"]];
+    for (const v of state.convenios){
+      const base = [v.folio, nombreCli(v.clienteId), v.fecha, v.vigenciaDesde, v.vigenciaHasta];
+      const cola = [ESTADOS_CONV[v.estado].name, (v.firmaHotel||{}).nombre || "",
+                    (v.firmaEmpresa||{}).nombre || "", v.notas];
+      if (!v.habitaciones.length) fs.push(base.concat(["","","",""], cola));
+      for (const h of v.habitaciones)
+        fs.push(base.concat([grupoDe(h.grupo).name, h.nombre, h.publica === null ? "N/A" : h.publica, h.convenio], cola));
+    }
+    descargar(`convenios-${hoy}.csv`, toCSV(fs), "text/csv");
+  };
+  ov.querySelector("#eJson").onclick = () =>
+    descargar(`crm-respaldo-${hoy}.json`, JSON.stringify(state, null, 2), "application/json");
+  ov.querySelector("#eTpl").onclick = () =>
+    descargar("plantilla-clientes.csv", toCSV([CAMPOS_CLIENTE.map(f => f.label)]), "text/csv");
+
+  ov.querySelector("#rJson").addEventListener("change", e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      let datos;
+      try{ datos = JSON.parse(String(r.result)); }
+      catch(err){ alert("El archivo no es un JSON válido."); return; }
+      if (!datos || !Array.isArray(datos.clientes)){ alert("Este JSON no parece un respaldo del CRM."); return; }
+      if (!confirm(`El respaldo trae ${datos.clientes.length} clientes. Reemplazará todo lo que hay ahora. ¿Continuar?`)) return;
+      state = sanear(datos);
+      guardar(); render(); ov.remove();
+      alert("Respaldo restaurado.");
+    };
+    r.readAsText(f, "utf-8");
+  });
+
+  ov.querySelector("#wipe").onclick = () => {
+    if (!confirm("Se borrarán TODOS los clientes, actividades y convenios de este navegador. ¿Continuar?")) return;
+    if (!confirm("Confirma otra vez: esta acción no se puede deshacer.")) return;
+    state = sanear({ habitaciones: state.habitaciones, ajustes: state.ajustes });
+    guardar(); render(); ov.remove();
+  };
+}
+
+/* ==========================================================================
+   EVENTOS
+   ========================================================================== */
+
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => { vista = b.dataset.view; render(); });
+document.getElementById("q").addEventListener("input", e => { filtros.q = e.target.value; render(); });
+document.getElementById("fEje").addEventListener("change", e => { filtros.ejecutivo = e.target.value; render(); });
+document.getElementById("bNuevo").onclick = () => abrirCliente(null);
+document.getElementById("bImport").onclick = abrirImportar;
+document.getElementById("bExport").onclick = abrirExportar;
+document.getElementById("bTema").onclick = () => {
+  const oscuro = matchMedia("(prefers-color-scheme: dark)").matches;
+  const actual = document.documentElement.dataset.theme || (oscuro ? "dark" : "light");
+  document.documentElement.dataset.theme = actual === "dark" ? "light" : "dark";
+  try{ localStorage.setItem(STORE + ":tema", document.documentElement.dataset.theme); }catch(e){}
 };
 document.getElementById("board").addEventListener("click", e => {
   const b = e.target.closest(".add-card");
-  if (b) openDeal(null, b.dataset.stage);
+  if (b) abrirCliente(null, b.dataset.estatus);
 });
 
 try{
-  const t = localStorage.getItem(STORE_KEY + ":theme");
+  const t = localStorage.getItem(STORE + ":tema");
   if (t) document.documentElement.dataset.theme = t;
 }catch(e){}
 
+guardar();
 render();
 </script>
 </body>
