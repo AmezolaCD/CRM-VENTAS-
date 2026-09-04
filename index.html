@@ -197,6 +197,8 @@
   .doc-body table.tar td{padding:6px 9px; border:1px solid #dfe1e6}
   .doc-body .inc{font-size:11.5px; color:#42526e; white-space:pre-wrap; margin:0 0 12px; padding-left:2px}
   .doc-body .pol{white-space:pre-wrap; font-size:11.8px; color:#42526e; text-align:justify}
+  .doc-body .doc-res{margin-top:7px; font-size:12.5px; line-height:1.8}
+  .doc-body .doc-res i{color:#5e6c84; font-style:normal; display:inline-block; width:74px}
   .doc-cols{display:flex; gap:26px}
   .doc-cols > div{flex:1; min-width:0}
   .doc-cols h3{font-size:11px; letter-spacing:.04em; margin:0 0 4px; color:#172b4d; font-weight:700}
@@ -316,7 +318,9 @@ const HOTEL_DEF = {
   nombre: "QUARTZ HOTEL & SPA",
   direccion: "Paseo del Centenario 9580, Zona Urbana Rio Tijuana, 22010 Tijuana, B.C.",
   telefono: "(664) 862-8200",
-  ciudad: "Tijuana B.C."
+  ciudad: "Tijuana B.C.",
+  telReservaciones: "664 374 2487",
+  emailReservaciones: "reservaciones@quartzhotel.mx"
 };
 
 /* Catálogo de habitaciones. La tarifa pública admite N/A (null), como el
@@ -1001,6 +1005,10 @@ function renderAjustes(){
         <div><label class="lbl">Teléfono</label><input class="field" id="hTel" value="${esc(h.telefono)}"></div>
         <div><label class="lbl">Ciudad (para la línea de fecha)</label><input class="field" id="hCiudad" value="${esc(h.ciudad)}">
           <div class="hint">Aparece como “${esc(h.ciudad)} a ${esc(fechaTexto(hoyISO()))}”.</div></div>
+        <div><label class="lbl">Teléfono de reservaciones</label>
+          <input class="field" id="hTelRes" value="${esc(h.telReservaciones)}"></div>
+        <div><label class="lbl">Correo de reservaciones</label>
+          <input class="field" id="hMailRes" value="${esc(h.emailReservaciones)}"></div>
         <div><label class="lbl">Moneda (código ISO)</label><input class="field" id="hMoneda" value="${esc(a.moneda)}"></div>
         <div><label class="lbl">Lada del país para WhatsApp</label><input class="field" id="hLada" value="${esc(a.ladaPais)}">
           <div class="hint">Se antepone a los teléfonos de 10 dígitos. México = 52.</div></div>
@@ -1073,6 +1081,8 @@ function renderAjustes(){
     h.direccion = p.querySelector("#hDir").value.trim();
     h.telefono  = p.querySelector("#hTel").value.trim();
     h.ciudad    = p.querySelector("#hCiudad").value.trim();
+    h.telReservaciones   = p.querySelector("#hTelRes").value.trim();
+    h.emailReservaciones = p.querySelector("#hMailRes").value.trim();
     a.ladaPais  = p.querySelector("#hLada").value.replace(/\D/g,"") || "52";
 
     const mon = p.querySelector("#hMoneda").value.trim().toUpperCase() || "MXN";
@@ -1572,6 +1582,10 @@ function verConvenio(id, alCerrar, pedirFirma){
 
         <h2>Reservaciones</h2>
         <div class="pol">${esc(T("reservaciones"))}</div>
+        ${h.telReservaciones || h.emailReservaciones ? `<div class="doc-res">
+          ${h.telReservaciones ? `<div><i>Teléfono</i> ${esc(h.telReservaciones)}</div>` : ""}
+          ${h.emailReservaciones ? `<div><i>Correo</i> ${esc(h.emailReservaciones)}</div>` : ""}
+        </div>` : ""}
 
         <h2>Políticas</h2>
         <div class="pol">${esc(T("politicas"))}</div>

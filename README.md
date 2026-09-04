@@ -91,8 +91,8 @@ firma (**De conformidad Hotel** y **De conformidad Empresa**) con Nombre, Puesto
 
 ### Ajustes
 
-- **Datos del hotel**: nombre, dirección, teléfono, ciudad (para la línea de fecha), moneda
-  y lada del país.
+- **Datos del hotel**: nombre, dirección, teléfono, ciudad (para la línea de fecha), teléfono
+  y correo de reservaciones, moneda y lada del país.
 - **Catálogo de habitaciones**: tipo, bloque (Deluxe o Recovery), tarifa pública —vacía = N/A—
   y el texto de lo que incluye. **Es el único lugar donde se edita la tarifa pública.**
 - **Textos de la carta**: todos editables, con marcadores `{{HOTEL}}`, `{{EMPRESA}}`,
@@ -130,5 +130,3 @@ y no se comparten entre computadoras. Usa *Exportar* seguido:
 
 - Las tarifas y los textos por omisión salen de la carta-convenio de **Quartz Hotel & Spa**
   para *Samaha Clinik* (agosto 2026). Revisa en Ajustes que sigan vigentes.
-- Falta el apartado de **RESERVACIONES** con los medios de contacto reales: el machote lo
-  anuncia pero no los lista. Se capturan en Ajustes.
