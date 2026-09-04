@@ -57,7 +57,14 @@
     background:var(--panel); border-bottom:1px solid var(--line);
     padding:8px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; flex:0 0 auto;
   }
-  .brand{display:flex; align-items:center; gap:9px; white-space:nowrap}
+  .brand{display:flex; align-items:center; gap:9px; white-space:nowrap;
+    background:transparent; border:0; color:inherit; font:inherit;
+    padding:5px 9px; margin-left:-9px; border-radius:9px; cursor:pointer}
+  .brand:hover{background:var(--col)}
+  .brand:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+  .brand:active{transform:translateY(1px)}
+  .brand .logo{transition:transform .15s ease}
+  .brand:hover .logo{transform:rotate(-30deg)}
   .brand .logo{width:30px; height:30px; flex:0 0 auto}
   .brand b{font-size:17px; font-weight:800; letter-spacing:.07em}
   .brand i{font-style:normal; color:var(--muted); font-size:12px; letter-spacing:.08em;
@@ -277,7 +284,7 @@
 <body>
 
 <header>
-  <div class="brand">
+  <button class="brand" id="bHome" type="button" title="Ir al tablero" aria-label="Ir al tablero">
     <svg class="logo" viewBox="0 0 120 120" aria-hidden="true">
       <polygon points="60,14 20.16,37 20.16,83 60,106 99.84,83 99.84,37"
         fill="none" stroke="var(--logo-morado)" stroke-width="6"/>
@@ -310,7 +317,7 @@
       <circle cx="60" cy="60" r="14" fill="var(--logo-morado)"/>
     </svg>
     <b>CORE</b><i>CRM</i>
-  </div>
+  </button>
   <nav>
     <button data-view="tablero" aria-current="true">Tablero</button>
     <button data-view="clientes">Clientes</button>
@@ -2325,6 +2332,7 @@ function abrirExportar(){
    ========================================================================== */
 
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => { vista = b.dataset.view; render(); });
+document.getElementById("bHome").onclick = () => { vista = "tablero"; render(); };
 document.getElementById("q").addEventListener("input", e => { filtros.q = e.target.value; render(); });
 document.getElementById("fEje").addEventListener("change", e => { filtros.ejecutivo = e.target.value; render(); });
 document.getElementById("bNuevo").onclick = () => abrirCliente(null);

@@ -42,7 +42,8 @@ Cada cliente guarda empresa, contacto, teléfono, correo, ubicación, tarifa, ej
 venta, estatus y notas. Se ven de dos formas:
 
 - **Tablero** — kanban por estatus, con arrastrar y soltar entre columnas. En celular los
-  botones `‹ ›` de cada tarjeta hacen lo mismo.
+  botones `‹ ›` de cada tarjeta hacen lo mismo. El logotipo CORE del encabezado funciona
+  como botón de inicio: desde cualquier pestaña regresa aquí.
 - **Clientes** — tabla con todos los campos a la vista.
 
 El embudo tiene seis estatus: Contactado → Propuesta → Negociación → **Cotización enviada**
