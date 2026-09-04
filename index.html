@@ -213,6 +213,8 @@
   .doc-contenido{position:relative; z-index:1}
   .doc-logo{max-height:78px; max-width:76%; display:block; margin:0 auto 6px}
   .doc-mono{width:52px; height:52px; margin:0 auto 5px; display:block}
+  .doc-wordmark{width:270px; margin:0 auto 6px}
+  .doc-wordmark svg{width:100%; height:auto; display:block}
   .doc-hotel{text-align:center; border-bottom:2px solid #39104e; padding-bottom:8px; margin-bottom:3px}
   .doc-regla{height:3px; background:#b2aa6d; margin-bottom:16px}
   .doc-hotel b{font-size:15px; letter-spacing:.04em}
@@ -404,6 +406,36 @@ const monogramaQ = (color) => `<svg viewBox="0 0 100 100" aria-hidden="true">
   <path d="M56 77.3 H82" fill="none" stroke="${color}" stroke-width="3.1"/>
 </svg>`;
 const MORADO_QUARTZ = "#43305e";
+
+/* Logotipo QUARTZ reconstruido a partir de la geometría del original: es una
+   tipografía geométrica, así que las letras se arman con círculos y rectas.
+   NO es el archivo oficial —la A no lleva travesaño y el subtítulo depende de
+   la tipografía instalada— así que en Ajustes se puede subir el original, que
+   siempre gana sobre este dibujo. */
+const logoQuartz = (color) => {
+  const T = 37, B = 423;
+  return `<svg viewBox="0 0 2010 640" aria-hidden="true">
+    <g fill="none" stroke="${color}" stroke-width="14" stroke-linecap="butt">
+      <circle cx="240" cy="230" r="193"/>
+      <path d="M272 396 H448"/>
+      <path d="M468 ${T} V292 A138 138 0 0 0 744 292 V${T}"/>
+      <path d="M788 ${B} L950 ${T} L1113 ${B}"/>
+      <path d="M1218 ${B} V${T}"/>
+      <path d="M1218 ${T} H1340 A122 122 0 0 1 1340 281 H1218"/>
+      <path d="M1310 275 L1462 ${B}"/>
+      <path d="M1492 ${T} H1770 M1631 ${T} V${B}"/>
+      <path d="M1790 ${T} H1990 L1790 ${B} H1995"/>
+      <path d="M30 545 H612 M1408 545 H1980" stroke-width="5"/>
+    </g>
+    <text x="1010" y="586" text-anchor="middle" fill="${color}"
+      font-family="Futura, 'Century Gothic', 'Avenir Next', 'Trebuchet MS', system-ui, sans-serif"
+      font-weight="300" font-size="112" letter-spacing="13">HOTEL &amp; SPA</text>
+  </svg>`;
+};
+
+/* El dibujo dice "QUARTZ HOTEL & SPA": sólo se usa si ese sigue siendo el
+   nombre configurado. Con otro hotel se cae al monograma más el nombre. */
+const esQuartz = n => String(n || "").trim().toUpperCase() === "QUARTZ HOTEL & SPA";
 
 /* Catálogo de habitaciones del hotel. La tarifa pública admite N/A (null),
    como el Recovery Care del convenio original. */
@@ -1138,8 +1170,10 @@ function renderAjustes(){
                  style="max-height:46px;max-width:190px;border:1px solid var(--line);border-radius:6px;padding:4px;background:#fff">
                <button class="btn sm danger" id="bQuitarLogo">Quitar</button>` : ""}
           </div>
-          <div class="hint">PNG, JPG o SVG, máximo 400 KB. Sustituye el monograma y el nombre
-            en el encabezado de la carta. Sin logotipo se usa el monograma Q.</div></div>
+          <div class="hint"><b>Recomendado:</b> sube aquí el archivo oficial del logotipo.
+            Mientras no lo hagas, la carta usa un dibujo reconstruido a mano que se le parece
+            mucho, pero cuyo subtítulo depende de la tipografía instalada en cada computadora.
+            PNG, JPG o SVG, máximo 400 KB.</div></div>
 
         <div><label class="lbl">Marca de agua de la carta</label>
           <select class="field" id="hAgua">
@@ -1828,7 +1862,9 @@ function verConvenio(id, alCerrar, pedirFirma){
         <div class="doc-hotel">
           ${h.logo
             ? `<img class="doc-logo" src="${esc(h.logo)}" alt="${esc(h.nombre)}">`
-            : `<div class="doc-mono">${monogramaQ(MORADO_QUARTZ)}</div><b>${esc(h.nombre)}</b>`}
+            : esQuartz(h.nombre)
+              ? `<div class="doc-wordmark">${logoQuartz(MORADO_QUARTZ)}</div>`
+              : `<div class="doc-mono">${monogramaQ(MORADO_QUARTZ)}</div><b>${esc(h.nombre)}</b>`}
           <div>${esc(h.direccion)}</div>
           <div>Tel. ${esc(h.telefono)}</div>
         </div>

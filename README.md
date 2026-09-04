@@ -128,8 +128,11 @@ viejas se reimprimen con el logotipo vigente.
 
 - **Datos del hotel**: nombre, dirección, teléfono, ciudad (para la línea de fecha), teléfono
   y correo de reservaciones, moneda y lada del país.
-- **Logotipo del membrete**: se sube una imagen (PNG, JPG o SVG, máximo 400 KB) y sustituye
-  al monograma y al nombre en el encabezado de la carta. Sin logotipo se usa el monograma Q.
+- **Logotipo del membrete**: se sube una imagen (PNG, JPG o SVG, máximo 400 KB) y encabeza la
+  carta. Sin logotipo, se dibuja una **reconstrucción en SVG** del logotipo QUARTZ; se le
+  parece mucho, pero su subtítulo "HOTEL & SPA" se compone con la tipografía instalada en cada
+  computadora, así que puede variar. **Para fidelidad exacta, sube el archivo oficial.**
+  Si el hotel se llama de otra forma, la carta usa el monograma Q más el nombre en texto.
 - **Marca de agua**: monograma Q, el mismo logotipo, o ninguna. Se imprime al fondo de la
   primera hoja, como papel membretado.
 - **Catálogo de habitaciones**: clave, tipo, bloque (Deluxe o Recovery) y tarifa pública
