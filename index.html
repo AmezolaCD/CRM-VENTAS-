@@ -274,6 +274,11 @@
   @media print{ .hoja{page-break-after:always} .hoja:last-child{page-break-after:auto}
     .hoja + .hoja{border-top:0; margin-top:0; padding-top:0} }
 
+  /* Sin esto el tamaño lo decide la impresora de cada quien: el mismo
+     documento salía en Carta o en A4 según el diálogo. Se fija en Carta,
+     que es el estándar en México. Para A4, cambiar "letter" por "A4". */
+  @page{ size: letter; margin: 16mm 18mm; }
+
   @media print{
     body{height:auto; overflow:visible}
     body > header, body > main{display:none !important}

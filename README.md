@@ -125,7 +125,13 @@ El logotipo **no se congela** en los convenios firmados, a diferencia de las tar
 textos: es identidad del hotel, no una condición pactada, así que si cambia, las cartas
 viejas se reimprimen con el logotipo vigente.
 
-*Imprimir / Guardar PDF* saca la carta sola, sin la interfaz.
+*Imprimir / Guardar PDF* saca la carta sola, sin la interfaz, en **tamaño carta**
+(216 × 279 mm) con márgenes de 16 × 18 mm. El tamaño se fija con una regla `@page`: sin ella
+lo decidía la impresora de cada quien y el mismo documento podía salir en A4. Para cambiarlo,
+es una palabra en el CSS (`size: letter` → `size: A4`).
+
+La carta-convenio ocupa tres hojas, con los dos bloques de firma juntos en la última. Cada
+confirmación de hospedaje cabe en una.
 
 ### Ajustes
 
