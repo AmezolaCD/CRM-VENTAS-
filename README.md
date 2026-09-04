@@ -16,7 +16,9 @@ Los tres estados que cargan significado se derivan de esa paleta para no perder 
 es una rampa de morado que se cierra hacia la venta. Los chips de estatus van sólidos con su
 propia tinta, para que se lean igual en tema claro y oscuro.
 
-El verde de WhatsApp se respeta: es marca de un tercero y funciona como señal.
+El verde de WhatsApp se respeta: es marca de un tercero y funciona como señal. Sus botones
+llevan el glifo de WhatsApp en vez de la palabra —identifica el destino mejor y ocupa la
+mitad— con `title` y `aria-label` para que sigan teniendo nombre accesible.
 
 La carta-convenio toma los colores (membrete con regla dorada, encabezados de tabla en
 morado, viñetas con filete de oro) pero **no lleva el logotipo de CORE**: es un documento

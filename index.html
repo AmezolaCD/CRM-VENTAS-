@@ -87,7 +87,7 @@
   .field[readonly]{background:var(--col); color:var(--muted)}
   #q{min-width:200px}
   button.btn{background:var(--panel-2); border:1px solid var(--line); border-radius:6px;
-    padding:7px 12px; cursor:pointer; white-space:nowrap}
+    color:var(--text); padding:7px 12px; cursor:pointer; white-space:nowrap}
   button.btn:hover{background:var(--col)}
   button.btn.primary{background:var(--accent); border-color:var(--accent); color:var(--ink-solido)}
   button.btn.primary:hover{filter:brightness(1.08)}
@@ -96,6 +96,10 @@
   button.btn.danger{color:var(--bad)}
   button.btn.danger:hover{background:var(--bad-soft)}
   button.btn.wa{color:#25d366}
+  .ico-wa{width:18px; height:18px; display:block; margin:0 auto}
+  button.btn.wa:has(.ico-wa){padding:6px 11px}
+  .card-acts button.wa{display:flex; align-items:center; justify-content:center; padding:3px 0}
+  .card-acts button.wa .ico-wa{width:15px; height:15px}
   button.btn.wa:hover{background:rgba(37,211,102,.12)}
   button.btn:disabled{opacity:.45; cursor:not-allowed}
   button.btn.sm{padding:3px 8px; font-size:12px}
@@ -173,7 +177,7 @@
   .modal{background:var(--panel); border:1px solid var(--line); border-radius:10px;
     width:100%; max-width:640px; box-shadow:0 12px 40px rgba(28,8,40,.4)}
   .modal.wide{max-width:920px}
-  .modal.doc{max-width:840px; background:#fff; color:#2b0d3a}
+  .modal.doc{max-width:840px}
   .modal-head{padding:14px 18px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px}
   .modal-head h2{margin:0; font-size:16px; flex:1 1 auto}
   .modal-body{padding:16px 18px}
@@ -275,7 +279,7 @@
     body > header, body > main{display:none !important}
     .overlay{position:static; padding:0; background:none; overflow:visible; display:block}
     .overlay:not(.printable){display:none !important}
-    .modal.doc{max-width:none; border:0; box-shadow:none; border-radius:0}
+    .modal.doc{max-width:none; border:0; box-shadow:none; border-radius:0; background:#fff}
     .modal-head, .modal-foot{display:none !important}
     .doc-body{padding:0; font-size:11.5px}
     .doc-body h2{page-break-after:avoid}
@@ -426,6 +430,10 @@ const monogramaQ = (color) => `<svg viewBox="0 0 100 100" aria-hidden="true">
   <path d="M56 77.3 H82" fill="none" stroke="${color}" stroke-width="3.1"/>
 </svg>`;
 const MORADO_QUARTZ = "#43305e";
+
+/* Glifo de WhatsApp: identifica el destino del mensaje mejor que la palabra,
+   y ocupa la mitad. Los botones que lo usan llevan title y aria-label. */
+const ICONO_WA = `<svg class="ico-wa" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>`;
 
 /* Logotipo QUARTZ reconstruido a partir de la geometría del original: es una
    tipografía geométrica, así que las letras se arman con círculos y rectas.
@@ -1226,7 +1234,7 @@ function tarjeta(c, e){
     ${ua ? `<div class="card-sub" style="margin-top:6px">${tipoAct(ua.tipo).icon} ${esc(ua.asunto || tipoAct(ua.tipo).name)} · ${esc(fechaHora(ua.fecha))}</div>` : ""}
     <div class="card-acts">
       <button data-dir="-1" ${i <= 0 ? "disabled" : ""} title="Estatus anterior">‹</button>
-      <button class="wa" data-wa ${c.telefono ? "" : "disabled"} title="Enviar WhatsApp">WhatsApp</button>
+      <button class="wa" data-wa ${c.telefono ? "" : "disabled"} title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button>
       <button data-dir="1" ${i >= ESTATUS.length-1 ? "disabled" : ""} title="Estatus siguiente">›</button>
     </div>`;
 
@@ -1286,7 +1294,7 @@ function renderClientes(){
         <td>${esc(c.ejecutivo || "—")}</td>
         <td class="num">${actsDe(c.id).length}</td>
         <td class="num">${conveniosDe(c.id).length}</td>
-        <td class="nowrap"><button class="btn sm wa" data-wa="${c.id}" ${c.telefono ? "" : "disabled"}>WhatsApp</button></td>
+        <td class="nowrap"><button class="btn sm wa" data-wa="${c.id}" ${c.telefono ? "" : "disabled"} title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button></td>
       </tr>`;
     }).join("")}</tbody></table>`;
 
@@ -1374,7 +1382,7 @@ function renderConfirmaciones(){
         <td class="nowrap">
           <button class="btn sm" data-vercarta="${g.id}">Ver carta</button>
           <button class="btn sm" data-mail="${g.id}" ${g.email ? "" : "disabled"}>Correo</button>
-          <button class="btn sm wa" data-wa2="${g.id}" ${g.telefono ? "" : "disabled"}>WhatsApp</button>
+          <button class="btn sm wa" data-wa2="${g.id}" ${g.telefono ? "" : "disabled"} title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button>
         </td></tr>`).join("")}</tbody></table>`;
   }
 
@@ -1480,7 +1488,7 @@ function verConfirmacion(id, lote){
         <button class="btn" id="bPrintC">${varias ? "Imprimir las " + gs.length : "Imprimir / Guardar PDF"}</button>
         <div class="spacer"></div>
         ${!varias ? `<button class="btn" id="bMailC" ${gs[0].email ? "" : "disabled"}>Enviar por correo</button>
-          <button class="btn wa" id="bWaC" ${gs[0].telefono ? "" : "disabled"}>Enviar por WhatsApp</button>` : ""}
+          <button class="btn wa" id="bWaC" ${gs[0].telefono ? "" : "disabled"} title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button>` : ""}
       </div>
     </div>`);
 
@@ -1825,7 +1833,7 @@ function abrirCliente(id, estatusInicial, pane){
     <div class="modal wide">
       <div class="modal-head">
         <h2>${existente ? esc(c.empresa || "Cliente") : "Nuevo cliente"}</h2>
-        ${existente && c.telefono ? `<button class="btn wa" id="bWa">WhatsApp</button>` : ""}
+        ${existente && c.telefono ? `<button class="btn wa" id="bWa" title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button>` : ""}
         <button class="btn" data-close>✕</button>
       </div>
       <div class="modal-body">
@@ -2464,7 +2472,7 @@ function enviarConvenio(v, c){
         <p><b>Paso 2.</b> Envíala con el mensaje ya redactado:</p>
         <p style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn" id="bMail" ${(c && c.email) ? "" : "disabled"}>Enviar por correo</button>
-          <button class="btn wa" id="bWa2" ${(c && c.telefono) ? "" : "disabled"}>Enviar por WhatsApp</button>
+          <button class="btn wa" id="bWa2" ${(c && c.telefono) ? "" : "disabled"} title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button>
         </p>
         <p><b>Paso 3.</b> Cuando el cliente la devuelva firmada, regresa a la carta y usa
           <i>Registrar firma del cliente</i>. El cliente pasará a <b>Ganado</b> automáticamente.</p>
