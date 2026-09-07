@@ -43,6 +43,9 @@ En **Project Settings** → **API** (o **Data API**) están:
 | **Project URL** — `https://xxxxxxxx.supabase.co` | Dirección del proyecto |
 | **anon public** — una cadena larguísima que empieza con `eyJ...` | Llave pública |
 
+Si la copiaste de la pantalla de la API y viene con `/rest/v1/` pegado al final, no
+importa: la aplicación lo recorta sola.
+
 > La llave **anon** es pública a propósito: viaja dentro de la página. Por sí
 > sola no abre nada, porque la tabla exige haber entrado con una cuenta. La que
 > **nunca** se comparte ni se pega en ningún lado es la `service_role`.

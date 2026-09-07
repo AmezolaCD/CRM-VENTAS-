@@ -899,12 +899,24 @@ let nube = { url:"", anon:"", sesion:null, estado:"local", ultimo:"", timer:null
 let sincronizado = new Map();     // id de fila -> JSON ya confirmado en la nube
 
 const nubeActiva = () => !!(nube.url && nube.anon && nube.sesion);
+
+/**
+ * Supabase enseña la dirección del proyecto en varios lados y no siempre igual:
+ * en Settings sale limpia, pero en la pantalla de la API sale ya con /rest/v1/
+ * pegado. La aplicación arma esas rutas por su cuenta, así que aquí se recorta
+ * lo que sobre en vez de dejar que el usuario adivine cuál de las dos era.
+ */
+const normalizaUrlNube = u =>
+  String(u || "").trim()
+    .replace(/\/+$/, "")
+    .replace(/\/(rest|auth|storage|realtime|functions)\/v\d+$/i, "")
+    .replace(/\/+$/, "");
 const correoSesion = () => (nube.sesion && nube.sesion.user && nube.sesion.user.email) || "";
 
 function cargarNube(){
   try{
     const c = JSON.parse(localStorage.getItem(NUBE_CFG) || "{}");
-    nube.url = (c.url || "").replace(/\/+$/, "");
+    nube.url = normalizaUrlNube(c.url);
     nube.anon = c.anon || "";
   }catch(e){}
   try{ nube.sesion = JSON.parse(localStorage.getItem(NUBE_SESION) || "null"); }catch(e){}
@@ -2625,7 +2637,7 @@ function renderAjustes(){
     p.querySelector("#bNbQuitar").style.display = (nube.url || nube.anon) ? "" : "none";
 
     p.querySelector("#bNbGuardar").onclick = () => {
-      const url  = p.querySelector("#nbUrl").value.trim().replace(/\/+$/, "");
+      const url  = normalizaUrlNube(p.querySelector("#nbUrl").value);
       const anon = p.querySelector("#nbAnon").value.trim();
       if (!url || !anon){ alert("Hacen falta la dirección del proyecto y la llave pública."); return; }
       if (!/^https:\/\//.test(url)){ alert("La dirección debe empezar con https://"); return; }
