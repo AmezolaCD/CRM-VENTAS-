@@ -2093,6 +2093,143 @@ async function pdfDeHuespedes(gs){
   return pdfDesdeImagenes(imgs);
 }
 
+/* --------------------------------------------------------------------------
+   El convenio no cabe en una hoja: hay que paginarlo
+
+   La confirmación es una carta de una página, así que basta con rasterizarla
+   tal cual. El convenio son tres o cuatro, y el navegador sólo sabe partirlo
+   al imprimir —no al dibujar—, así que aquí se hace a mano: se mide dónde
+   termina cada bloque, se decide en cuál cortar sin partirlo a la mitad, se
+   dibuja el documento entero de una vez y esa tira se reparte en hojas.
+   -------------------------------------------------------------------------- */
+
+const MM = 96 / 25.4;                        // milímetros a píxeles de pantalla
+const MARGEN_X = Math.round(18 * MM);
+const MARGEN_Y = Math.round(16 * MM);
+const ALTO_UTIL = PX_ALTO - MARGEN_Y * 2;
+
+/** Rasteriza el documento completo, de ancho fijo y alto libre. */
+function rasterizarTira(html, alto){
+  return new Promise((resolve, reject) => {
+    const css = [...document.querySelectorAll("style")].map(s => s.textContent).join("\n");
+
+    // Se arma como DOM y se serializa: dentro del SVG el contenido tiene que
+    // ser XML bien formado, y el HTML escrito a mano —<br>, <img> sin cerrar—
+    // no lo es. El serializador se encarga.
+    // El papel va aparte de la envoltura: la tipografía base se hereda, pero si
+    // se pusiera en el mismo elemento pisaría al tamaño propio de .doc-body y
+    // el texto se acomodaría distinto de como se midió.
+    const papel = document.createElement("div");
+    papel.className = "doc-body";
+    papel.style.cssText = `width:100%;margin:0;padding:0 ${MARGEN_X}px;` +
+      `box-sizing:border-box;background:#fff`;
+    papel.innerHTML = html;
+
+    const envoltura = document.createElement("div");
+    envoltura.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+    envoltura.style.cssText = `width:${PX_ANCHO}px;height:${alto}px;background:#fff;` +
+      `font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif`;
+    const est = document.createElement("style");
+    est.textContent = css;
+    envoltura.appendChild(est);
+    envoltura.appendChild(papel);
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${PX_ANCHO}" height="${alto}">` +
+      `<foreignObject width="100%" height="100%">` +
+      new XMLSerializer().serializeToString(envoltura) + `</foreignObject></svg>`;
+
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement("canvas");
+      cv.width = PX_ANCHO * ESCALA_PDF;
+      cv.height = alto * ESCALA_PDF;
+      const g = cv.getContext("2d");
+      g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height);
+      g.drawImage(img, 0, 0, cv.width, cv.height);
+      resolve(cv);
+    };
+    img.onerror = () => reject(new Error("Este navegador no pudo convertir el convenio a imagen."));
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  });
+}
+
+/**
+ * Dónde cortar. Se recorre bloque por bloque: si el siguiente ya no cabe en la
+ * hoja, la hoja termina antes de él. Un bloque más alto que la hoja entera
+ * —no debería haberlo— se deja pasar para no quedarse en un ciclo sin fin.
+ */
+function cortesDe(caja){
+  const bloques = [...caja.children].filter(el => el.className !== "doc-agua");
+  const cortes = [0];
+  let inicio = 0;
+  for (let i = 0; i < bloques.length; i++){
+    const el = bloques[i];
+    const arriba = el.offsetTop, abajo = arriba + el.offsetHeight;
+    if (abajo - inicio <= ALTO_UTIL || arriba <= inicio) continue;
+    // Un título no se queda solo al pie de una hoja con su texto en la siguiente.
+    let corte = arriba;
+    const previo = bloques[i-1];
+    if (previo && /^H[23]$/.test(previo.tagName) && previo.offsetTop > inicio)
+      corte = previo.offsetTop;
+    cortes.push(corte);
+    inicio = corte;
+  }
+  return cortes;
+}
+
+/** PDF de la carta-convenio, ya paginada. */
+async function pdfDeConvenio(v, c){
+  const h = state.ajustes.hotel;
+  const agua = h.marcaAgua === "ninguna" ? ""
+             : (h.marcaAgua === "logo" && h.logo) ? `<img src="${esc(h.logo)}" alt="">`
+             : monogramaQ(MORADO_QUARTZ);
+
+  // Se mide con el documento colocado de verdad —fuera de la vista, pero con
+  // el ancho real— porque de otro modo no hay alturas que consultar.
+  // Se mide con la misma envoltura que después se dibuja —misma tipografía
+  // base, mismo ancho, mismo .doc-body— o los renglones se acomodan distinto y
+  // los cortes caen donde no deben.
+  const medidor = document.createElement("div");
+  medidor.style.cssText = `position:fixed;left:-10000px;top:0;width:${PX_ANCHO}px;` +
+    `background:#fff;visibility:hidden;` +
+    `font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif`;
+  medidor.innerHTML = `<div class="doc-body" style="width:100%;margin:0;` +
+    `padding:0 ${MARGEN_X}px;box-sizing:border-box">` +
+    `<div class="doc-contenido">${cuerpoConvenio(v, c)}</div></div>`;
+  document.body.appendChild(medidor);
+
+  let cortes, alto, html;
+  try{
+    const cont = medidor.firstElementChild.firstElementChild;
+    alto = Math.max(cont.scrollHeight, ALTO_UTIL);
+    cortes = cortesDe(cont);
+    html = `<div class="doc-contenido" style="position:relative">` +
+           (agua ? `<div class="doc-agua">${agua}</div>` : "") +
+           cuerpoConvenio(v, c) + `</div>`;
+  } finally { medidor.remove(); }
+
+  const tira = await rasterizarTira(html, alto);
+
+  const hojas = [];
+  for (let i = 0; i < cortes.length; i++){
+    const desde = cortes[i] * ESCALA_PDF;
+    const hasta = Math.min((i + 1 < cortes.length ? cortes[i+1] : alto) * ESCALA_PDF, tira.height);
+    const cv = document.createElement("canvas");
+    cv.width = PX_ANCHO * ESCALA_PDF;
+    cv.height = PX_ALTO * ESCALA_PDF;
+    const g = cv.getContext("2d");
+    g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height);
+    const recorte = Math.min(hasta - desde, ALTO_UTIL * ESCALA_PDF);
+    if (recorte > 0)
+      g.drawImage(tira, 0, desde, cv.width, recorte, 0, MARGEN_Y * ESCALA_PDF, cv.width, recorte);
+    hojas.push(cv.toDataURL("image/jpeg", 0.92));
+  }
+  return pdfDesdeImagenes(hojas);
+}
+
+const nombrePdfConvenio = (v, c) =>
+  "Convenio-" + nombreArchivo([v.folio, c && c.empresa].filter(Boolean).join(" ")) + ".pdf";
+
 function nombrePdf(gs){
   if (gs.length === 1){
     const g = gs[0];
@@ -3028,17 +3165,11 @@ function editarConvenio(id, clientePre, alCerrar){
 
 /* ----- La carta-convenio ----- */
 
-function verConvenio(id, alCerrar, pedirFirma){
-  const v = state.convenios.find(x => x.id === id);
-  if (!v) return;
-  const c = cliente(v.clienteId);
+/** Cuerpo de la carta-convenio. Se usa para verla, imprimirla y armar el PDF. */
+function cuerpoConvenio(v, c){
   const h = state.ajustes.hotel;
   const t = v.textos;
-  const ec = ESTADOS_CONV[v.estado];
   const T = k => vars(t[k], v, c);
-  const agua = h.marcaAgua === "ninguna" ? ""
-             : (h.marcaAgua === "logo" && h.logo) ? `<img src="${esc(h.logo)}" alt="">`
-             : monogramaQ(MORADO_QUARTZ);
 
   const tablaGrupo = gid => {
     const hs = v.habitaciones.filter(x => x.grupo === gid);
@@ -3067,6 +3198,76 @@ function verConvenio(id, alCerrar, pedirFirma){
       </div>
     </div>`;
 
+  return `      <div class="doc-hotel">
+        ${h.logo
+          ? `<img class="doc-logo" src="${esc(h.logo)}" alt="${esc(h.nombre)}">`
+          : esQuartz(h.nombre)
+            ? `<div class="doc-wordmark">${logoQuartz(MORADO_QUARTZ)}</div>`
+            : `<div class="doc-mono">${monogramaQ(MORADO_QUARTZ)}</div><b>${esc(h.nombre)}</b>`}
+        <div>${esc(h.direccion)}</div>
+        <div>Tel. ${esc(h.telefono)}</div>
+      </div>
+      <div class="doc-regla"></div>
+
+      <div class="doc-fecha">${esc(h.ciudad)} a ${esc(fechaTexto(v.fecha))}</div>
+
+      <div class="doc-dest">
+        <b>${esc((c && c.empresa) || "—")}</b><br>
+        ${c && c.ubicacion ? esc(c.ubicacion) + "<br>" : ""}
+        ${c && c.telefono ? "Tel: " + esc(c.telefono) + "<br>" : ""}
+        ${c && c.email ? "Email: " + esc(c.email) : ""}
+      </div>
+
+      <p style="white-space:pre-wrap">${esc(T("saludo"))}</p>
+
+      ${tablaGrupo("deluxe")}
+      ${v.incluyeRecovery ? tablaGrupo("recovery") : ""}
+
+      ${v.incluyeRecovery && (t.recoveryCol1 || t.recoveryCol2) ? `
+        <div class="doc-cols" style="margin-top:14px">
+          <div><h3>${esc(t.recoveryCol1Titulo)}</h3><div class="pol">${esc(T("recoveryCol1"))}</div></div>
+          <div><h3>${esc(t.recoveryCol2Titulo)}</h3><div class="pol">${esc(T("recoveryCol2"))}</div></div>
+        </div>` : ""}
+
+      <h2>Especificaciones de tarifas</h2>
+      <div class="pol">${esc(T("especificaciones"))}</div>
+
+      <div class="doc-cols" style="margin-top:16px">
+        <div><h3>VALORES AGREGADOS EN LA TARIFA COMERCIAL:</h3><div class="pol">${esc(T("valores"))}</div></div>
+        <div><h3>NUESTROS SERVICIOS:</h3><div class="pol">${esc(T("servicios"))}</div></div>
+      </div>
+
+      <h2>Condiciones</h2>
+      <div class="pol">${esc(T("condiciones"))}</div>
+
+      <h2>Reservaciones</h2>
+      <div class="pol">${esc(T("reservaciones"))}</div>
+      ${h.telReservaciones || h.emailReservaciones ? `<div class="doc-res">
+        ${h.telReservaciones ? `<div><i>Teléfono</i> ${esc(h.telReservaciones)}</div>` : ""}
+        ${h.emailReservaciones ? `<div><i>Correo</i> ${esc(h.emailReservaciones)}</div>` : ""}
+      </div>` : ""}
+
+      <h2>Políticas</h2>
+      <div class="pol">${esc(T("politicas"))}</div>
+
+      <p style="white-space:pre-wrap;margin-top:14px">${esc(T("cierre"))}</p>
+
+      <div class="firmas">
+        ${bloqueFirma(v.firmaHotel, "De conformidad · Hotel", (c && c.ejecutivo) || "", "Ejecutivo de ventas", "")}
+        ${bloqueFirma(v.firmaEmpresa, "De conformidad · Empresa", (c && c.contacto) || "", "", (c && c.telefono) || "")}
+      </div>`;
+}
+
+function verConvenio(id, alCerrar, pedirFirma){
+  const v = state.convenios.find(x => x.id === id);
+  if (!v) return;
+  const c = cliente(v.clienteId);
+  const h = state.ajustes.hotel;
+  const ec = ESTADOS_CONV[v.estado];
+  const agua = h.marcaAgua === "ninguna" ? ""
+             : (h.marcaAgua === "logo" && h.logo) ? `<img src="${esc(h.logo)}" alt="">`
+             : monogramaQ(MORADO_QUARTZ);
+
   const ov = modal(`
     <div class="modal doc">
       <div class="modal-head">
@@ -3076,69 +3277,12 @@ function verConvenio(id, alCerrar, pedirFirma){
       </div>
       <div class="doc-body">
         ${agua ? `<div class="doc-agua">${agua}</div>` : ""}
-        <div class="doc-contenido">
-        <div class="doc-hotel">
-          ${h.logo
-            ? `<img class="doc-logo" src="${esc(h.logo)}" alt="${esc(h.nombre)}">`
-            : esQuartz(h.nombre)
-              ? `<div class="doc-wordmark">${logoQuartz(MORADO_QUARTZ)}</div>`
-              : `<div class="doc-mono">${monogramaQ(MORADO_QUARTZ)}</div><b>${esc(h.nombre)}</b>`}
-          <div>${esc(h.direccion)}</div>
-          <div>Tel. ${esc(h.telefono)}</div>
-        </div>
-        <div class="doc-regla"></div>
-
-        <div class="doc-fecha">${esc(h.ciudad)} a ${esc(fechaTexto(v.fecha))}</div>
-
-        <div class="doc-dest">
-          <b>${esc((c && c.empresa) || "—")}</b><br>
-          ${c && c.ubicacion ? esc(c.ubicacion) + "<br>" : ""}
-          ${c && c.telefono ? "Tel: " + esc(c.telefono) + "<br>" : ""}
-          ${c && c.email ? "Email: " + esc(c.email) : ""}
-        </div>
-
-        <p style="white-space:pre-wrap">${esc(T("saludo"))}</p>
-
-        ${tablaGrupo("deluxe")}
-        ${v.incluyeRecovery ? tablaGrupo("recovery") : ""}
-
-        ${v.incluyeRecovery && (t.recoveryCol1 || t.recoveryCol2) ? `
-          <div class="doc-cols" style="margin-top:14px">
-            <div><h3>${esc(t.recoveryCol1Titulo)}</h3><div class="pol">${esc(T("recoveryCol1"))}</div></div>
-            <div><h3>${esc(t.recoveryCol2Titulo)}</h3><div class="pol">${esc(T("recoveryCol2"))}</div></div>
-          </div>` : ""}
-
-        <h2>Especificaciones de tarifas</h2>
-        <div class="pol">${esc(T("especificaciones"))}</div>
-
-        <div class="doc-cols" style="margin-top:16px">
-          <div><h3>VALORES AGREGADOS EN LA TARIFA COMERCIAL:</h3><div class="pol">${esc(T("valores"))}</div></div>
-          <div><h3>NUESTROS SERVICIOS:</h3><div class="pol">${esc(T("servicios"))}</div></div>
-        </div>
-
-        <h2>Condiciones</h2>
-        <div class="pol">${esc(T("condiciones"))}</div>
-
-        <h2>Reservaciones</h2>
-        <div class="pol">${esc(T("reservaciones"))}</div>
-        ${h.telReservaciones || h.emailReservaciones ? `<div class="doc-res">
-          ${h.telReservaciones ? `<div><i>Teléfono</i> ${esc(h.telReservaciones)}</div>` : ""}
-          ${h.emailReservaciones ? `<div><i>Correo</i> ${esc(h.emailReservaciones)}</div>` : ""}
-        </div>` : ""}
-
-        <h2>Políticas</h2>
-        <div class="pol">${esc(T("politicas"))}</div>
-
-        <p style="white-space:pre-wrap;margin-top:14px">${esc(T("cierre"))}</p>
-
-        <div class="firmas">
-          ${bloqueFirma(v.firmaHotel, "De conformidad · Hotel", (c && c.ejecutivo) || "", "Ejecutivo de ventas", "")}
-          ${bloqueFirma(v.firmaEmpresa, "De conformidad · Empresa", (c && c.contacto) || "", "", (c && c.telefono) || "")}
-        </div>
+        <div class="doc-contenido">${cuerpoConvenio(v, c)}</div>
         </div>
       </div>
       <div class="modal-foot">
-        <button class="btn" id="bPrint">Imprimir / Guardar PDF</button>
+        <button class="btn" id="bPrint">Imprimir</button>
+        <button class="btn" id="bPdfC">Descargar PDF</button>
         ${v.estado === "borrador" ? `<button class="btn" id="bEdit">Editar</button>` : ""}
         <div class="spacer"></div>
         ${!v.firmaHotel ? `<button class="btn ok" id="bF1">Firmar como ejecutivo</button>` : ""}
@@ -3156,6 +3300,18 @@ function verConvenio(id, alCerrar, pedirFirma){
     window.print();
     setTimeout(quitar, 1500);   // respaldo si el navegador no dispara afterprint
   };
+  const bp = ov.querySelector("#bPdfC");
+  bp.onclick = async () => {
+    const antes = bp.textContent;
+    bp.disabled = true; bp.textContent = "Generando…";
+    try{
+      const bytes = await pdfDeConvenio(v, c);
+      descargarBlob(new Blob([bytes], { type:"application/pdf" }), nombrePdfConvenio(v, c));
+    }catch(err){
+      alert("No se pudo generar el PDF aquí: " + err.message + "\n\nUsa Imprimir y elige \"Guardar como PDF\".");
+    }finally{ bp.disabled = false; bp.textContent = antes; }
+  };
+
   const bEdit = ov.querySelector("#bEdit");
   if (bEdit) bEdit.onclick = () => { ov.remove(); editarConvenio(v.id, null, alCerrar); };
 
@@ -3205,48 +3361,88 @@ function firmar(v, quien, d){
 }
 
 function enviarConvenio(v, c){
-  const asunto = `Carta-convenio ${v.folio} · ${state.ajustes.hotel.nombre}`;
+  const h = state.ajustes.hotel;
+  const asunto = `Carta-convenio ${v.folio} · ${h.nombre}`;
   const cuerpo = `Estimado(a) ${(c && c.contacto) || ""}:\n\n` +
-    `Adjunto la carta-convenio ${v.folio} de ${state.ajustes.hotel.nombre}, vigente ` +
+    `Adjunto la carta-convenio ${v.folio} de ${h.nombre}, vigente ` +
     `${textoVigencia(v)}, ya firmada por nuestra parte.\n\n` +
     `Le suplicamos hacerla llegar debidamente firmada de aceptación para proceder con la carga ` +
     `de tarifas en nuestro sistema de reservaciones.\n\nSaludos cordiales,\n` +
-    `${(v.firmaHotel && v.firmaHotel.nombre) || (c && c.ejecutivo) || ""}\n${state.ajustes.hotel.nombre}`;
+    `${(v.firmaHotel && v.firmaHotel.nombre) || (c && c.ejecutivo) || ""}\n${h.nombre}`;
+  const archivo = nombrePdfConvenio(v, c);
 
   const ov = modal(`
     <div class="modal">
       <div class="modal-head"><h2>Enviar convenio al cliente</h2><button class="btn" data-close>✕</button></div>
-      <div class="modal-body">
-        <div class="note warn"><b>Ojo:</b> esta aplicación no tiene servidor, así que no puede enviar
-          el documento por sí sola ni recibir la firma del cliente a distancia. Lo que hace es prepararte
-          el envío y abrir tu correo o WhatsApp; el PDF lo generas con <i>Imprimir / Guardar PDF</i>
-          y lo adjuntas tú.</div>
-        <p><b>Paso 1.</b> Genera el PDF de la carta y guárdalo.</p>
-        <p><button class="btn" id="bPdf">Abrir la carta para guardarla en PDF</button></p>
-        <p><b>Paso 2.</b> Envíala con el mensaje ya redactado:</p>
-        <p style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn" id="bMail" ${(c && c.email) ? "" : "disabled"}>Enviar por correo</button>
-          <button class="btn wa" id="bWa2" ${(c && c.telefono) ? "" : "disabled"} title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button>
-        </p>
-        <p><b>Paso 3.</b> Cuando el cliente la devuelva firmada, regresa a la carta y usa
-          <i>Registrar firma del cliente</i>. El cliente pasará a <b>Ganado</b> automáticamente.</p>
+      <div class="modal-body" id="cuerpoEnvioC">
+        <p class="hint">Preparando el PDF del convenio…</p>
       </div>
       <div class="modal-foot"><div class="spacer"></div><button class="btn" data-close>Cerrar</button></div>
     </div>`);
 
-  ov.querySelector("#bPdf").onclick = () => { ov.remove(); verConvenio(v.id); };
-  const m = ov.querySelector("#bMail");
-  if (m) m.onclick = () => {
+  const paso3 = `<p class="hint" style="margin-top:16px">Cuando el cliente la devuelva firmada,
+      regresa a la carta y usa <i>Registrar firma del cliente</i>: pasará a <b>Ganado</b> solo.</p>`;
+
+  const anotar = via => {
+    registrarAuto(v.clienteId, `Convenio ${v.folio} enviado por ${via}`,
+      `Enviado a ${via === "correo" ? (c && c.email) : (c && c.telefono)}.`, (c && c.ejecutivo) || "");
+    guardar(); render();
+  };
+  const abrirCorreo = () => {
     window.location.href = `mailto:${encodeURIComponent(c.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
-    registrarAuto(v.clienteId, `Convenio ${v.folio} enviado por correo`, `Enviado a ${c.email}.`, c.ejecutivo || "");
-    guardar(); render();
+    anotar("correo");
   };
-  const w = ov.querySelector("#bWa2");
-  if (w) w.onclick = () => {
-    window.open(waLink(c.telefono, cuerpo), "_blank", "noopener");
-    registrarAuto(v.clienteId, `Convenio ${v.folio} enviado por WhatsApp`, `Enviado al ${c.telefono}.`, c.ejecutivo || "");
-    guardar(); render();
-  };
+  const abrirWa = () => { window.open(waLink(c.telefono, cuerpo), "_blank", "noopener"); anotar("WhatsApp"); };
+
+  pdfDeConvenio(v, c).then(bytes => {
+    const blob = new Blob([bytes], { type:"application/pdf" });
+    const file = new File([blob], archivo, { type:"application/pdf" });
+    const puedeCompartir = typeof navigator.canShare === "function" && navigator.canShare({ files:[file] });
+    const bajar = () => descargarBlob(blob, archivo);
+
+    ov.querySelector("#cuerpoEnvioC").innerHTML = (puedeCompartir
+      ? `<div class="note"><b>El convenio ya está listo.</b> Al compartir, el PDF firmado y el
+           mensaje van juntos: elige correo o WhatsApp en la lista que abra el sistema.</div>
+         <p><button class="btn ok" id="cCompartir" style="font-size:15px;padding:10px 16px">
+            Compartir convenio y mensaje</button></p>
+         <p class="hint">¿Prefieres hacerlo a mano?</p>`
+      : `<div class="note warn"><b>Este equipo no puede adjuntar archivos desde el navegador.</b>
+           Ni el correo ni WhatsApp aceptan adjuntos por enlace, así que se hace en dos pasos:
+           se descarga el PDF y lo adjuntas al abrir el correo o WhatsApp.
+           <br><br>En un celular sí sale todo junto de una vez.</div>`) +
+      `<p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+         <button class="btn" id="cBajar">Descargar el PDF</button>
+         <button class="btn" id="cMail" ${(c && c.email) ? "" : "disabled"}>Abrir correo con el mensaje</button>
+         <button class="btn wa" id="cWa" ${(c && c.telefono) ? "" : "disabled"}
+           title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button></p>
+       <p class="hint">Se guardará como <b>${esc(archivo)}</b></p>` + paso3;
+
+    const bc = ov.querySelector("#cCompartir");
+    if (bc) bc.onclick = async () => {
+      try{
+        await navigator.share({ files:[file], text: cuerpo, title: asunto });
+        anotar("correo o WhatsApp");
+        ov.remove();
+      }catch(err){ if (err && err.name !== "AbortError") alert("No se pudo compartir: " + err.message); }
+    };
+    ov.querySelector("#cBajar").onclick = bajar;
+    const m = ov.querySelector("#cMail");
+    if (m && !m.disabled) m.onclick = () => { if (!puedeCompartir) bajar(); setTimeout(abrirCorreo, puedeCompartir ? 0 : 600); };
+    const w = ov.querySelector("#cWa");
+    if (w && !w.disabled) w.onclick = () => { if (!puedeCompartir) bajar(); setTimeout(abrirWa, puedeCompartir ? 0 : 600); };
+  }).catch(err => {
+    ov.querySelector("#cuerpoEnvioC").innerHTML =
+      `<div class="note warn"><b>No se pudo generar el PDF aquí.</b> ${esc(err.message)}
+        <br><br>Usa <i>Imprimir / Guardar PDF</i> en la carta y adjúntalo a mano.</div>
+       <p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+         <button class="btn" id="cVer">Abrir la carta</button>
+         <button class="btn" id="cMail2" ${(c && c.email) ? "" : "disabled"}>Abrir correo con el mensaje</button>
+         <button class="btn wa" id="cWa2" ${(c && c.telefono) ? "" : "disabled"}
+           title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button></p>` + paso3;
+    ov.querySelector("#cVer").onclick = () => { ov.remove(); verConvenio(v.id); };
+    const m2 = ov.querySelector("#cMail2"); if (m2 && !m2.disabled) m2.onclick = abrirCorreo;
+    const w2 = ov.querySelector("#cWa2");   if (w2 && !w2.disabled) w2.onclick = abrirWa;
+  });
 }
 
 /** Lienzo de firma: ratón, dedo o lápiz. */

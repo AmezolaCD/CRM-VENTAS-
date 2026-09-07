@@ -116,18 +116,17 @@ enumera arriba del formulario y las filas incompletas se marcan en rojo:
 1. **Borrador** — se puede editar libremente.
 2. **Firma el ejecutivo** (nombre, puesto, celular y firma trazada con el ratón o el dedo).
    → El convenio queda bloqueado y **el cliente pasa automáticamente a "Cotización enviada"**.
-3. **Se envía al cliente** — el botón prepara el PDF y abre el correo o WhatsApp con el
-   mensaje ya redactado.
+3. **Se envía al cliente** — el botón genera el PDF de la carta y lo manda junto con el
+   mensaje ya redactado, por correo o WhatsApp.
 4. **Firma el cliente** → **el cliente pasa automáticamente a "Ganado"** y su tarifa se
    actualiza con la habitación más económica del convenio.
 
 Cada paso deja constancia en la bitácora del cliente.
 
-> **Límite que conviene tener claro:** al no haber servidor, la aplicación **no puede enviar
-> el documento por sí sola ni recibir la firma del cliente a distancia**. Lo que hace es
-> generar el PDF y abrir tu correo o WhatsApp para que lo adjuntes; cuando el cliente lo
-> devuelva firmado, capturas su firma con *Registrar firma del cliente*. Si necesitan firma
-> remota real (el cliente abre un enlace y firma desde su dispositivo), eso requiere backend.
+> **Límite que conviene tener claro:** la aplicación **no recibe la firma del cliente a
+> distancia**. Cuando el cliente devuelva la carta firmada, capturas su firma con *Registrar
+> firma del cliente*. Si necesitan firma remota real —el cliente abre un enlace y firma desde
+> su dispositivo— eso requiere backend.
 
 #### La carta
 
@@ -146,13 +145,18 @@ El logotipo **no se congela** en los convenios firmados, a diferencia de las tar
 textos: es identidad del hotel, no una condición pactada, así que si cambia, las cartas
 viejas se reimprimen con el logotipo vigente.
 
-*Imprimir / Guardar PDF* saca la carta sola, sin la interfaz, en **tamaño carta**
-(216 × 279 mm) con márgenes de 16 × 18 mm. El tamaño se fija con una regla `@page`: sin ella
-lo decidía la impresora de cada quien y el mismo documento podía salir en A4. Para cambiarlo,
-es una palabra en el CSS (`size: letter` → `size: A4`).
+*Imprimir* saca la carta sola, sin la interfaz, en **tamaño carta** (216 × 279 mm) con
+márgenes de 16 × 18 mm. El tamaño se fija con una regla `@page`: sin ella lo decidía la
+impresora de cada quien y el mismo documento podía salir en A4. Para cambiarlo, es una
+palabra en el CSS (`size: letter` → `size: A4`).
 
-La carta-convenio ocupa tres hojas, con los dos bloques de firma juntos en la última. Cada
-confirmación de hospedaje cabe en una.
+*Descargar PDF* arma el archivo aquí mismo, sin pasar por el diálogo de impresión, y es el
+mismo que sale adjunto al enviarlo. La carta-convenio ocupa tres hojas y el navegador sólo
+sabe partirla al imprimir —no al dibujarla—, así que la paginación se hace a mano: se mide
+dónde termina cada bloque, se elige en cuál cortar sin partirlo a la mitad (y sin dejar un
+título solo al pie de una hoja), se dibuja el documento entero de una vez y esa tira se
+reparte en hojas. Los dos bloques de firma quedan juntos en la última. Cada confirmación de
+hospedaje cabe en una hoja y no necesita nada de esto.
 
 ### El encabezado y el pie del navegador
 
@@ -233,8 +237,9 @@ Con el archivo en mano hay dos caminos, y el botón de envío elige el que corre
   (`Confirmacion-R-1201-Ana-Lopez-Ramirez.pdf`) y se abre la app con el mensaje listo, para
   adjuntarlo a mano.
 
-La carta-convenio no tiene todavía esta ruta porque ocupa tres páginas: ahí se sigue usando
-*Imprimir / Guardar PDF*.
+**La carta-convenio usa exactamente la misma ruta**, con la paginación descrita arriba: el
+archivo sale como `Convenio-CV-2026-001-SAMAHA-CLINIK.pdf` y el envío queda anotado en la
+bitácora del cliente.
 
 También se puede capturar un huésped a mano.
 
