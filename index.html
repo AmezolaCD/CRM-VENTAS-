@@ -121,6 +121,8 @@
   nav button:hover{color:var(--text)}
   nav button[aria-current="true"]{background:var(--panel); color:var(--text); box-shadow:var(--shadow)}
   .spacer{flex:1 1 auto}
+  #estadoNube{display:inline-flex; align-items:center; gap:6px; cursor:default}
+  .punto-nube{width:8px; height:8px; border-radius:50%; flex:0 0 auto}
   .tools{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
 
   .field{background:var(--panel-2); border:1px solid var(--line); color:var(--text);
@@ -419,6 +421,7 @@
     <button class="btn primary" id="bNuevo">+ Cliente</button>
     <button class="btn" id="bImport">Importar</button>
     <button class="btn" id="bExport">Exportar</button>
+    <span id="estadoNube" class="pill" style="display:none"></span>
     <button class="btn" id="bTema" title="Cambiar tema">◐</button>
   </div>
 </header>
@@ -502,6 +505,15 @@ const monogramaQ = (color) => `<svg viewBox="0 0 100 100" aria-hidden="true">
   <path d="M56 77.3 H82" fill="none" stroke="${color}" stroke-width="3.1"/>
 </svg>`;
 const MORADO_QUARTZ = "#43305e";
+
+/** El mismo hexágono del encabezado, para la pantalla de entrada. */
+const logoCore = () => `<svg viewBox="0 0 120 120" style="width:100%;height:auto" aria-hidden="true">
+  <polygon points="60,14 20.16,37 20.16,83 60,106 99.84,83 99.84,37"
+    fill="none" stroke="var(--logo-morado)" stroke-width="6"/>
+  <g fill="none" stroke="var(--oro)" stroke-width="6">${
+    [0,60,120,180,240,300].map(a => `<g transform="rotate(${a} 60 60)">
+      <path d="M60 10 V 41"/><path d="M52 32 L60 41 L68 32"/></g>`).join("")}
+  </g><circle cx="60" cy="60" r="14" fill="var(--logo-morado)"/></svg>`;
 
 /* Glifo de WhatsApp: identifica el destino del mensaje mejor que la palabra,
    y ocupa la mitad. Los botones que lo usan llevan title y aria-label. */
@@ -861,6 +873,359 @@ function guardar(){
     alert("No se pudo guardar en este navegador (almacenamiento lleno o bloqueado).\n\n" +
           "Exporta un respaldo JSON antes de seguir trabajando.");
   }
+  programarSubida();   // si hay nube, empuja lo que cambió
+}
+
+/* ==========================================================================
+   NUBE: la misma cartera desde cualquier equipo
+
+   El navegador sigue siendo la copia de trabajo —la aplicación abre al
+   instante y funciona sin señal— y encima va una sincronización contra
+   Supabase. Se sincroniza por entidad: cada cliente, actividad, convenio o
+   huésped es una fila, así que dos personas pueden trabajar a la vez mientras
+   no toquen el mismo registro.
+
+   Se consulta por sondeo en lugar de websockets: para un equipo de este
+   tamaño la diferencia no se nota y evita mantener una conexión viva y su
+   protocolo. El sondeo se detiene mientras haya un formulario abierto, para
+   no cambiarle los datos a alguien que está capturando.
+   ========================================================================== */
+
+const NUBE_CFG    = "crm-hotel-nube";
+const NUBE_SESION = "crm-hotel-sesion";
+const SONDEO_MS   = 15000;
+
+let nube = { url:"", anon:"", sesion:null, estado:"local", ultimo:"", timer:null, pendiente:null };
+let sincronizado = new Map();     // id de fila -> JSON ya confirmado en la nube
+
+const nubeActiva = () => !!(nube.url && nube.anon && nube.sesion);
+const correoSesion = () => (nube.sesion && nube.sesion.user && nube.sesion.user.email) || "";
+
+function cargarNube(){
+  try{
+    const c = JSON.parse(localStorage.getItem(NUBE_CFG) || "{}");
+    nube.url = (c.url || "").replace(/\/+$/, "");
+    nube.anon = c.anon || "";
+  }catch(e){}
+  try{ nube.sesion = JSON.parse(localStorage.getItem(NUBE_SESION) || "null"); }catch(e){}
+}
+
+function guardarNubeCfg(){
+  try{ localStorage.setItem(NUBE_CFG, JSON.stringify({ url:nube.url, anon:nube.anon })); }catch(e){}
+}
+function guardarSesion(){
+  try{
+    if (nube.sesion) localStorage.setItem(NUBE_SESION, JSON.stringify(nube.sesion));
+    else localStorage.removeItem(NUBE_SESION);
+  }catch(e){}
+}
+
+/** Llamada a la API con la llave y el token; renueva el token si caducó. */
+async function api(ruta, opciones = {}, reintento = true){
+  const h = Object.assign({
+    "apikey": nube.anon,
+    "Content-Type": "application/json"
+  }, opciones.headers || {});
+  if (nube.sesion && nube.sesion.access_token) h["Authorization"] = "Bearer " + nube.sesion.access_token;
+
+  const r = await fetch(nube.url + ruta, Object.assign({}, opciones, { headers: h }));
+  if (r.status === 401 && reintento && nube.sesion && nube.sesion.refresh_token){
+    if (await renovarSesion()) return api(ruta, opciones, false);
+  }
+  if (!r.ok){
+    let detalle = "";
+    try{ const j = await r.json(); detalle = j.message || j.error_description || j.error || JSON.stringify(j); }
+    catch(e){ detalle = await r.text().catch(() => ""); }
+    throw new Error(`${r.status} · ${detalle || "sin detalle"}`);
+  }
+  // Al insertar con "return=minimal" el cuerpo viene vacío —a veces con 201,
+  // a veces con 204—, así que no se puede pedir JSON a ciegas.
+  const txt = await r.text();
+  return txt ? JSON.parse(txt) : null;
+}
+
+async function renovarSesion(){
+  try{
+    const r = await fetch(nube.url + "/auth/v1/token?grant_type=refresh_token", {
+      method:"POST", headers:{ apikey:nube.anon, "Content-Type":"application/json" },
+      body: JSON.stringify({ refresh_token: nube.sesion.refresh_token })
+    });
+    if (!r.ok) return false;
+    nube.sesion = await r.json();
+    guardarSesion();
+    return true;
+  }catch(e){ return false; }
+}
+
+async function entrar(correo, contrasena){
+  const r = await fetch(nube.url + "/auth/v1/token?grant_type=password", {
+    method:"POST", headers:{ apikey:nube.anon, "Content-Type":"application/json" },
+    body: JSON.stringify({ email: correo, password: contrasena })
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error_description || j.msg || j.message || "Correo o contraseña incorrectos.");
+  nube.sesion = j;
+  guardarSesion();
+}
+
+function salir(){
+  nube.sesion = null;
+  guardarSesion();
+  detenerSondeo();
+  nube.estado = "local";
+  render();
+  pantallaEntrada();
+}
+
+/* ----- Traducción entre el estado y las filas de la tabla ----- */
+
+const COLECCIONES = ["clientes","actividades","convenios","huespedes","habitaciones"];
+
+function filasDeEstado(){
+  const filas = [];
+  for (const tipo of COLECCIONES)
+    for (const o of state[tipo]) filas.push({ id: tipo + ":" + o.id, tipo, datos: o });
+  filas.push({ id:"ajustes:global", tipo:"ajustes", datos: state.ajustes });
+  return filas;
+}
+
+function estadoDesdeFilas(filas){
+  const bruto = { clientes:[], actividades:[], convenios:[], huespedes:[], habitaciones:[], ajustes:null };
+  for (const f of filas){
+    if (f.tipo === "ajustes") bruto.ajustes = f.datos;
+    else if (bruto[f.tipo]) bruto[f.tipo].push(f.datos);
+  }
+  if (!bruto.ajustes) delete bruto.ajustes;
+  return sanear(bruto);
+}
+
+function marcarSincronizado(filas){
+  sincronizado = new Map(filas.map(f => [f.id, JSON.stringify(f.datos)]));
+}
+
+/* ----- Bajada y subida ----- */
+
+async function bajar(desde){
+  const filtro = desde ? `&actualizado=gt.${encodeURIComponent(desde)}` : "";
+  const filas = await api(`/rest/v1/crm_datos?select=id,tipo,datos,actualizado,borrado${filtro}`);
+  return filas || [];
+}
+
+async function subir(cambios, borrados){
+  if (cambios.length){
+    await api("/rest/v1/crm_datos?on_conflict=id", {
+      method:"POST",
+      headers:{ "Prefer":"resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify(cambios.map(f => ({
+        id:f.id, tipo:f.tipo, datos:f.datos, borrado:false,
+        actualizado:new Date().toISOString(), actualizado_por: correoSesion()
+      })))
+    });
+  }
+  // Un borrado se marca en vez de eliminar la fila: si no, los demás equipos
+  // nunca se enterarían de que desapareció.
+  if (borrados.length){
+    await api("/rest/v1/crm_datos?on_conflict=id", {
+      method:"POST",
+      headers:{ "Prefer":"resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify(borrados.map(id => ({
+        id, tipo:String(id).split(":")[0], datos:{}, borrado:true,
+        actualizado:new Date().toISOString(), actualizado_por: correoSesion()
+      })))
+    });
+  }
+}
+
+function programarSubida(){
+  if (!nubeActiva()) return;
+  clearTimeout(nube.pendiente);
+  nube.pendiente = setTimeout(() => sincronizar().catch(() => {}), 400);
+}
+
+let sincronizando = false;
+async function sincronizar(){
+  if (!nubeActiva() || sincronizando) return;
+  sincronizando = true;
+  try{
+    nube.estado = "sincronizando"; pintarNube();
+
+    // Primero lo de los demás, luego lo propio: así una edición local reciente
+    // gana sobre una copia remota vieja del mismo registro.
+    const remotas = await bajar(nube.ultimo);
+    if (remotas.length){
+      const porId = new Map(filasDeEstado().map(f => [f.id, f]));
+      const aplicadas = [];
+      for (const r of remotas){
+        nube.ultimo = !nube.ultimo || r.actualizado > nube.ultimo ? r.actualizado : nube.ultimo;
+        const local = porId.get(r.id);
+        const mismoQueSincronizado = local && sincronizado.get(r.id) === JSON.stringify(local.datos);
+        if (local && !mismoQueSincronizado) continue;   // hay edición local sin subir: no se pisa
+        if (r.borrado) porId.delete(r.id);
+        else porId.set(r.id, { id:r.id, tipo:r.tipo, datos:r.datos });
+        aplicadas.push(r);
+      }
+      if (aplicadas.length){
+        state = estadoDesdeFilas([...porId.values()]);
+        try{ localStorage.setItem(STORE, JSON.stringify(state)); }catch(e){}
+        // Se dan por sincronizadas SÓLO las filas que acaban de llegar. Marcar
+        // todas de golpe daba por subido lo que este equipo aún no manda, y el
+        // registro recién capturado se quedaba para siempre en esta máquina.
+        const llegaron = new Set(aplicadas.map(r => r.id));
+        for (const f of filasDeEstado())
+          if (llegaron.has(f.id)) sincronizado.set(f.id, JSON.stringify(f.datos));
+        for (const r of aplicadas)
+          if (r.borrado) sincronizado.delete(r.id);
+        render();
+      }
+    }
+
+    const actuales = filasDeEstado();
+    const cambios = actuales.filter(f => sincronizado.get(f.id) !== JSON.stringify(f.datos));
+    const vivos = new Set(actuales.map(f => f.id));
+    const borrados = [...sincronizado.keys()].filter(id => !vivos.has(id));
+    if (cambios.length || borrados.length){
+      await subir(cambios, borrados);
+      marcarSincronizado(actuales);
+    }
+
+    nube.estado = "listo";
+  }catch(e){
+    nube.estado = "error";
+    nube.error = e.message;
+    console.warn("Sincronización:", e.message);
+  }finally{
+    sincronizando = false;
+    pintarNube();
+  }
+}
+
+/* ----- Sondeo ----- */
+
+function arrancarSondeo(){
+  detenerSondeo();
+  nube.timer = setInterval(() => {
+    // Con un formulario abierto no se toca el estado: alguien está capturando.
+    if (document.querySelector(".overlay")) return;
+    sincronizar().catch(() => {});
+  }, SONDEO_MS);
+}
+function detenerSondeo(){ clearInterval(nube.timer); nube.timer = null; }
+
+/* ----- Primer enlace: el momento delicado ----- */
+
+async function primeraSincronizacion(){
+  const remotas = (await bajar()).filter(f => !f.borrado);
+  const hayLocal = state.clientes.length || state.convenios.length || state.huespedes.length;
+
+  if (!remotas.length){
+    if (!hayLocal){ marcarSincronizado([]); return; }
+    if (!confirm(`La nube está vacía y este equipo tiene ${state.clientes.length} cliente(s).\n\n` +
+                 "¿Subir los datos de este equipo para que sean los de todo el hotel?")){
+      throw new Error("Enlace cancelado: la nube quedó vacía.");
+    }
+    marcarSincronizado([]);          // todo se verá como cambio y subirá
+    await sincronizar();
+    return;
+  }
+
+  if (hayLocal){
+    if (!confirm(`La nube ya tiene ${remotas.filter(f => f.tipo === "clientes").length} cliente(s).\n\n` +
+                 "Este equipo adoptará esos datos y los suyos locales se reemplazarán.\n" +
+                 "Si tenías capturas sin subir, expórtalas antes.\n\n¿Continuar?")) {
+      throw new Error("Enlace cancelado.");
+    }
+  }
+  state = estadoDesdeFilas(remotas);
+  try{ localStorage.setItem(STORE, JSON.stringify(state)); }catch(e){}
+  marcarSincronizado(filasDeEstado());
+  for (const r of remotas)
+    nube.ultimo = !nube.ultimo || r.actualizado > nube.ultimo ? r.actualizado : nube.ultimo;
+  render();
+}
+
+/* ----- Interfaz ----- */
+
+function pintarNube(){
+  const el = document.getElementById("estadoNube");
+  if (!el) return;
+  if (!nube.url || !nube.anon){ el.style.display = "none"; return; }
+  el.style.display = "";
+  const mapa = {
+    local:          ["Sin conectar", "var(--muted)", "Configurada la nube, falta entrar"],
+    sincronizando:  ["Sincronizando…", "var(--accent)", "Enviando y trayendo cambios"],
+    listo:          ["En línea", "var(--ok)", "Al día · " + correoSesion()],
+    error:          ["Sin conexión", "var(--bad)", nube.error || "No se pudo sincronizar"]
+  };
+  const [txt, color, ayuda] = mapa[nube.estado] || mapa.local;
+  el.innerHTML = `<span class="punto-nube" style="background:${color}"></span>${esc(txt)}`;
+  el.title = ayuda;
+}
+
+function pantallaEntrada(){
+  if (document.getElementById("entrada")) return;
+  const ov = document.createElement("div");
+  ov.id = "entrada";
+  ov.className = "overlay";
+  ov.style.alignItems = "center";
+  ov.innerHTML = `
+    <div class="modal" style="max-width:410px">
+      <div class="modal-body" style="text-align:center;padding:30px 26px">
+        <div style="width:64px;margin:0 auto 14px">${logoCore()}</div>
+        <h2 style="margin:0 0 4px;font-size:19px;letter-spacing:.06em">CORE</h2>
+        <p class="hint" style="margin:0 0 20px">CRM de ${esc(state.ajustes.hotel.nombre)}</p>
+        <form id="fEntrar" style="text-align:left">
+          <label class="lbl">Correo</label>
+          <input class="field" type="email" name="correo" autocomplete="username"
+            style="width:100%;margin-bottom:12px" required>
+          <label class="lbl">Contraseña</label>
+          <input class="field" type="password" name="pass" autocomplete="current-password"
+            style="width:100%" required>
+          <div id="errEntrar" style="margin-top:12px"></div>
+          <button class="btn primary" type="submit" id="bEntrar"
+            style="width:100%;margin-top:16px;padding:10px">Entrar</button>
+        </form>
+        <p class="hint" style="margin:16px 0 0">
+          <button class="btn sm" id="bLocalSolo" type="button">Trabajar sólo en este equipo</button></p>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+
+  const form = ov.querySelector("#fEntrar");
+  form.querySelector('[name="correo"]').focus();
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const b = ov.querySelector("#bEntrar"), err = ov.querySelector("#errEntrar");
+    b.disabled = true; b.textContent = "Entrando…"; err.innerHTML = "";
+    try{
+      const fd = new FormData(form);
+      await entrar(fd.get("correo").trim(), fd.get("pass"));
+      await primeraSincronizacion();
+      nube.estado = "listo"; pintarNube();
+      arrancarSondeo();
+      ov.remove();
+      render();
+    }catch(ex){
+      err.innerHTML = `<div class="errbox">${esc(ex.message)}</div>`;
+      b.disabled = false; b.textContent = "Entrar";
+    }
+  };
+  ov.querySelector("#bLocalSolo").onclick = () => {
+    if (!confirm("Trabajarás sólo con los datos de este equipo; no se comparten con nadie.\n\n¿Continuar?")) return;
+    nube.estado = "local"; pintarNube(); ov.remove();
+  };
+}
+
+function arrancarNube(){
+  cargarNube();
+  pintarNube();
+  if (!nube.url || !nube.anon) return;          // sin configurar: modo local de siempre
+  if (!nube.sesion){ pantallaEntrada(); return; }
+  primeraSincronizacion()
+    .then(() => { nube.estado = "listo"; pintarNube(); arrancarSondeo(); })
+    .catch(e => {
+      nube.estado = "error"; nube.error = e.message; pintarNube();
+      if (/401|JWT|token/i.test(e.message)) pantallaEntrada();
+    });
 }
 
 function clientesDemo(){
@@ -2005,6 +2370,28 @@ function renderAjustes(){
         <div><textarea class="field mono" data-t="recoveryCol2" style="width:100%;min-height:170px">${esc(t.recoveryCol2)}</textarea></div>
       </div>
 
+      <h3 class="sec">Nube y equipo</h3>
+      <p class="hint" style="margin-top:0">Con esto la cartera vive en un servidor y todos los
+        ejecutivos ven lo mismo desde cualquier computadora o teléfono. Sin esto, la aplicación
+        sigue funcionando pero cada equipo guarda sus propios datos.
+        Las instrucciones para crear el servidor están en <code>NUBE.md</code>.</p>
+      <div class="grid">
+        <div class="full"><label class="lbl">Dirección del proyecto (URL de Supabase)</label>
+          <input class="field" id="nbUrl" value="${esc(nube.url)}" placeholder="https://abcdefgh.supabase.co"
+            style="width:100%" autocomplete="off" spellcheck="false"></div>
+        <div class="full"><label class="lbl">Llave pública (anon key)</label>
+          <textarea class="field mono" id="nbAnon" style="width:100%;min-height:64px"
+            placeholder="eyJhbGciOi..." spellcheck="false">${esc(nube.anon)}</textarea>
+          <div class="hint">Es una llave <b>pública</b>: va dentro de la página y no da acceso por
+            sí sola. Quien entra a los datos son las cuentas de correo del equipo.</div></div>
+        <div class="full" id="nbEstado"></div>
+      </div>
+      <p style="margin:6px 0 0">
+        <button class="btn primary" id="bNbGuardar">Guardar y conectar</button>
+        <button class="btn" id="bNbEntrar">Entrar con otra cuenta</button>
+        <button class="btn danger" id="bNbSalir">Cerrar sesión</button>
+        <button class="btn danger" id="bNbQuitar">Desconectar este equipo</button></p>
+
       <p style="margin:18px 0 40px">
         <button class="btn primary" id="bGuardarAj">Guardar ajustes</button>
         <button class="btn" id="bResetTextos">Restaurar textos originales</button>
@@ -2087,6 +2474,48 @@ function renderAjustes(){
     a.grupos = saneaGrupos(null);
     guardar(); renderAjustes();
   };
+  (function nubeAjustes(){
+    const est = p.querySelector("#nbEstado");
+    const linea = !nube.url || !nube.anon
+      ? ["Este equipo trabaja solo: los datos no salen de este navegador.", "var(--muted)"]
+      : !nube.sesion
+        ? ["Servidor configurado, pero nadie ha entrado en este equipo.", "var(--bad)"]
+        : [`Conectado como ${correoSesion()}.` + (nube.estado === "error" ? ` Último error: ${nube.error || ""}` : ""),
+           nube.estado === "error" ? "var(--bad)" : "var(--ok)"];
+    est.innerHTML = `<div class="note" style="border-left:3px solid ${linea[1]}">${esc(linea[0])}</div>`;
+    p.querySelector("#bNbEntrar").style.display = (nube.url && nube.anon) ? "" : "none";
+    p.querySelector("#bNbSalir").style.display  = nube.sesion ? "" : "none";
+    p.querySelector("#bNbQuitar").style.display = (nube.url || nube.anon) ? "" : "none";
+
+    p.querySelector("#bNbGuardar").onclick = () => {
+      const url  = p.querySelector("#nbUrl").value.trim().replace(/\/+$/, "");
+      const anon = p.querySelector("#nbAnon").value.trim();
+      if (!url || !anon){ alert("Hacen falta la dirección del proyecto y la llave pública."); return; }
+      if (!/^https:\/\//.test(url)){ alert("La dirección debe empezar con https://"); return; }
+      recogerAjustes(); guardar();
+      const cambio = url !== nube.url || anon !== nube.anon;
+      nube.url = url; nube.anon = anon;
+      guardarNubeCfg();
+      if (cambio){ nube.sesion = null; guardarSesion(); nube.ultimo = ""; detenerSondeo(); }
+      renderAjustes();
+      arrancarNube();
+    };
+    p.querySelector("#bNbEntrar").onclick = () => { detenerSondeo(); pantallaEntrada(); };
+    p.querySelector("#bNbSalir").onclick = () => {
+      if (!confirm("Se cerrará la sesión en este equipo. Los datos ya sincronizados se quedan en la nube.")) return;
+      salir();
+    };
+    p.querySelector("#bNbQuitar").onclick = () => {
+      if (!confirm("Este equipo dejará de sincronizar y volverá a guardar sólo aquí.\n\n" +
+                   "Los datos que ya están en la nube no se borran. ¿Continuar?")) return;
+      detenerSondeo();
+      nube.url = ""; nube.anon = ""; nube.sesion = null; nube.ultimo = ""; nube.estado = "local";
+      sincronizado = new Map();
+      guardarNubeCfg(); guardarSesion();
+      pintarNube(); renderAjustes();
+    };
+  })();
+
   p.querySelector("#bGuardarAj").onclick = () => {
     recogerAjustes();
     guardar(); renderAjustes();
@@ -3282,6 +3711,7 @@ try{
 
 guardar();
 render();
+arrancarNube();
 </script>
 </body>
 </html>

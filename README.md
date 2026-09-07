@@ -51,6 +51,10 @@ equipo donde lo abres. Trae clientes de ejemplo para que se entienda el funciona
 para empezar limpio usa *Exportar → Borrar todos los datos*, o marca **"Reemplazar la
 cartera actual"** al importar tu archivo.
 
+Para que **todo el equipo vea la misma cartera desde cualquier computadora o teléfono**,
+sigue **[NUBE.md](NUBE.md)**: son unos 20 minutos, una sola vez, y no cuesta nada para
+este tamaño de equipo.
+
 ## Estructura
 
 Son tres cosas encadenadas: **un cliente** tiene **muchas actividades** y **muchos convenios**.
@@ -249,10 +253,41 @@ Google Sheets, guárdalos como CSV (*Archivo → Descargar → CSV*).
 
 En `plantilla.csv` está el formato exacto.
 
+## La misma cartera en todos los equipos
+
+Sin configurar nada, cada computadora guarda lo suyo. En **Ajustes → Nube y equipo** se pega
+la dirección y la llave pública de un proyecto de [Supabase](https://supabase.com) y a partir
+de ahí todos trabajan sobre los mismos datos, cada quien con su correo y contraseña. El paso
+a paso —crear el proyecto, correr `nube.sql`, dar de alta al equipo y dejar la aplicación en
+una dirección de internet— está en **[NUBE.md](NUBE.md)**.
+
+Cómo se comporta, en corto:
+
+- El navegador **sigue siendo la copia de trabajo**: la aplicación abre al instante y deja
+  trabajar aunque se caiga el internet. Cuando vuelve la señal, sube lo que hiciste.
+- Se sincroniza **registro por registro**, no el archivo completo: cada cliente, actividad,
+  convenio y huésped es una fila. Dos personas pueden capturar a la vez sin pisarse mientras
+  no sea el mismo registro; si lo es, queda el último que guardó.
+- Se revisa si hay novedades **cada 15 segundos** —no hay conexión viva que mantener— y lo
+  que guardas sube de inmediato.
+- **Con un formulario abierto no se baja nada**, para no moverle los datos a quien está
+  capturando.
+- Una baja **se marca**, no se borra: si la fila desapareciera sin más, los demás equipos
+  nunca se enterarían.
+- El semáforo del encabezado dice si está *En línea*, *Sincronizando…* o *Sin conexión*, y al
+  pasarle el cursor dice con qué cuenta y cuál fue el último error.
+
+La llave que se pega en Ajustes es la **anon**, pública por diseño: viaja dentro de la página
+y por sí sola no abre nada, porque la tabla exige haber entrado con una cuenta del equipo
+(*row level security*). La llave `service_role` **no se usa aquí y no debe pegarse en ningún
+lado**. `nube.sql` deja además una bitácora (`crm_bitacora`) con quién cambió qué y cuándo.
+
 ## Respaldos
 
-Los datos viven en el navegador: **se pierden si borras el historial y la caché del sitio**,
-y no se comparten entre computadoras. Usa *Exportar* seguido:
+Sin nube, los datos viven en el navegador: **se pierden si borras el historial y la caché del
+sitio**, y no se comparten entre computadoras. Con nube configurada siguen viviendo también
+ahí, pero el respaldo local sigue siendo la única copia que te llevas contigo. Usa
+*Exportar* seguido:
 
 - **Respaldo completo (JSON)** — lo único que guarda las firmas y los textos de cada convenio.
   Se restaura desde la misma ventana de Exportar.
@@ -279,3 +314,7 @@ y no se comparten entre computadoras. Usa *Exportar* seguido:
   para *Samaha Clinik* (agosto 2026). Revisa en Ajustes que sigan vigentes.
 - **Suite King aparece con la misma tarifa pública que las Standard (5,300).** Viene así del
   catálogo que nos pasaron; conviene confirmarlo antes de emitir convenios con ese tipo.
+- **Permisos por persona.** Con la nube, hoy todos pueden todo. Si se quiere que sólo la
+  gerencia edite tarifas o cierre convenios, se hace con una tabla de roles y ajustando las
+  políticas de `nube.sql`.
+- **Aviso instantáneo** en lugar del sondeo de 15 segundos: Supabase lo permite (Realtime).
