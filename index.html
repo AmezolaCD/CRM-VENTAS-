@@ -446,6 +446,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
+const VERSION = "2026.09.07-4";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2417,6 +2418,28 @@ function renderAjustes(){
 
   document.getElementById("panelAjustes").innerHTML = `
     <div style="max-width:900px">
+      <h3 class="sec">Nube y equipo</h3>
+      <p class="hint" style="margin-top:0">Con esto la cartera vive en un servidor y todos los
+        ejecutivos ven lo mismo desde cualquier computadora o teléfono. Sin esto, la aplicación
+        sigue funcionando pero cada equipo guarda sus propios datos.
+        Las instrucciones para crear el servidor están en <code>NUBE.md</code>.</p>
+      <div class="grid">
+        <div class="full"><label class="lbl">Dirección del proyecto (URL de Supabase)</label>
+          <input class="field" id="nbUrl" value="${esc(nube.url)}" placeholder="https://abcdefgh.supabase.co"
+            style="width:100%" autocomplete="off" spellcheck="false"></div>
+        <div class="full"><label class="lbl">Llave pública (anon key)</label>
+          <textarea class="field mono" id="nbAnon" style="width:100%;min-height:64px"
+            placeholder="eyJhbGciOi..." spellcheck="false">${esc(nube.anon)}</textarea>
+          <div class="hint">Es una llave <b>pública</b>: va dentro de la página y no da acceso por
+            sí sola. Quien entra a los datos son las cuentas de correo del equipo.</div></div>
+        <div class="full" id="nbEstado"></div>
+      </div>
+      <p style="margin:6px 0 0">
+        <button class="btn primary" id="bNbGuardar">Guardar y conectar</button>
+        <button class="btn" id="bNbEntrar">Entrar con otra cuenta</button>
+        <button class="btn danger" id="bNbSalir">Cerrar sesión</button>
+        <button class="btn danger" id="bNbQuitar">Desconectar este equipo</button></p>
+
       <h3 class="sec">Datos del hotel</h3>
       <div class="grid">
         <div class="full"><label class="lbl">Nombre</label><input class="field" id="hNombre" value="${esc(h.nombre)}"></div>
@@ -2519,32 +2542,14 @@ function renderAjustes(){
         <div><textarea class="field mono" data-t="recoveryCol2" style="width:100%;min-height:170px">${esc(t.recoveryCol2)}</textarea></div>
       </div>
 
-      <h3 class="sec">Nube y equipo</h3>
-      <p class="hint" style="margin-top:0">Con esto la cartera vive en un servidor y todos los
-        ejecutivos ven lo mismo desde cualquier computadora o teléfono. Sin esto, la aplicación
-        sigue funcionando pero cada equipo guarda sus propios datos.
-        Las instrucciones para crear el servidor están en <code>NUBE.md</code>.</p>
-      <div class="grid">
-        <div class="full"><label class="lbl">Dirección del proyecto (URL de Supabase)</label>
-          <input class="field" id="nbUrl" value="${esc(nube.url)}" placeholder="https://abcdefgh.supabase.co"
-            style="width:100%" autocomplete="off" spellcheck="false"></div>
-        <div class="full"><label class="lbl">Llave pública (anon key)</label>
-          <textarea class="field mono" id="nbAnon" style="width:100%;min-height:64px"
-            placeholder="eyJhbGciOi..." spellcheck="false">${esc(nube.anon)}</textarea>
-          <div class="hint">Es una llave <b>pública</b>: va dentro de la página y no da acceso por
-            sí sola. Quien entra a los datos son las cuentas de correo del equipo.</div></div>
-        <div class="full" id="nbEstado"></div>
-      </div>
-      <p style="margin:6px 0 0">
-        <button class="btn primary" id="bNbGuardar">Guardar y conectar</button>
-        <button class="btn" id="bNbEntrar">Entrar con otra cuenta</button>
-        <button class="btn danger" id="bNbSalir">Cerrar sesión</button>
-        <button class="btn danger" id="bNbQuitar">Desconectar este equipo</button></p>
-
       <p style="margin:18px 0 40px">
         <button class="btn primary" id="bGuardarAj">Guardar ajustes</button>
         <button class="btn" id="bResetTextos">Restaurar textos originales</button>
         <span class="hint" id="ajOk" style="margin-left:10px"></span></p>
+
+      <p class="hint" style="margin:0 0 40px">Versión <b>${esc(VERSION)}</b>.
+        Si alguien del equipo ve algo distinto, compara este número: quiere decir que
+        su navegador tiene guardada una copia vieja y hay que recargar con Ctrl+F5.</p>
     </div>`;
 
   const p = document.getElementById("panelAjustes");

@@ -78,6 +78,10 @@ lugar con dirección propia.
 4. Esa dirección se comparte con el equipo y se guarda en favoritos.
 
 Para actualizar el CRM más adelante: vuelves a arrastrar la carpeta al mismo sitio.
+Si Netlify dice *"All files already uploaded by a previous deploy"*, no recibió nada nuevo:
+arrastraste la misma carpeta de antes. Y si el sitio se publicó bien pero sigues viendo lo
+viejo, es el navegador: recarga con **Ctrl + F5**. Hasta abajo de Ajustes está el número de
+versión, para comparar entre equipos.
 
 ### Otras opciones
 
@@ -100,7 +104,7 @@ Queda con su ícono, como cualquier otra aplicación.
 ## Parte 3 · Conectar la aplicación
 
 1. Abre el CRM en la dirección nueva.
-2. Ve a **Ajustes** → **Nube y equipo**.
+2. Ve a **Ajustes**: **Nube y equipo** es lo primero de la página.
 3. Pega la **dirección del proyecto** y la **llave pública**.
 4. **Guardar y conectar**.
 5. Entra con tu correo y contraseña.
