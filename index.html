@@ -448,7 +448,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.08-10";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.08-11";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1277,6 +1277,7 @@ async function sincronizar(){
     }
 
     nube.estado = "listo";
+    nube.sincronizadoEn = new Date().toISOString();
   }catch(e){
     nube.estado = "error";
     nube.error = e.message;
@@ -2940,7 +2941,25 @@ function renderAjustes(){
         ? ["Servidor configurado, pero nadie ha entrado en este equipo.", "var(--bad)"]
         : [`Conectado como ${correoSesion()}.` + (nube.estado === "error" ? ` Último error: ${nube.error || ""}` : ""),
            nube.estado === "error" ? "var(--bad)" : "var(--ok)"];
-    est.innerHTML = `<div class="note" style="border-left:3px solid ${linea[1]}">${esc(linea[0])}</div>`;
+    // Qué tiene este equipo y qué falta por mandar. Sin esto, "no aparece en
+    // los demás" obliga a ir a Supabase a contar filas para saber de qué lado
+    // está el problema.
+    let detalle = "";
+    if (nube.sesion){
+      const filas = filasDeEstado();
+      const cuenta = t => filas.filter(f => f.tipo === t).length;
+      const faltan = filas.filter(f => sincronizado.get(f.id) !== JSON.stringify(f.datos)).length;
+      detalle = `<div style="margin-top:6px">En este equipo:
+        <b>${cuenta("clientes")}</b> cliente(s),
+        <b>${cuenta("actividades")}</b> actividad(es),
+        <b>${cuenta("convenios")}</b> convenio(s),
+        <b>${cuenta("huespedes")}</b> huésped(es).` +
+        (faltan ? ` <b style="color:var(--bad)">Faltan ${faltan} por subir.</b>`
+                : ` <b>Todo subido</b>${nube.sincronizadoEn
+                     ? " · última vez " + esc(fechaHora(nube.sincronizadoEn)) : ""}.`) +
+        `</div>`;
+    }
+    est.innerHTML = `<div class="note" style="border-left:3px solid ${linea[1]}">${esc(linea[0])}${detalle}</div>`;
     p.querySelector("#bNbEntrar").style.display = (nube.url && nube.anon) ? "" : "none";
     p.querySelector("#bNbSalir").style.display  = nube.sesion ? "" : "none";
     p.querySelector("#bNbTodo").style.display   = nube.sesion ? "" : "none";
