@@ -262,7 +262,7 @@ Con el archivo en mano hay dos caminos, y el botón de envío elige el que corre
   adjuntarlo a mano.
 
 **La carta-convenio usa exactamente la misma ruta**, con la paginación descrita arriba: el
-archivo sale como `Convenio-CV-2026-001-SAMAHA-CLINIK.pdf` y el envío queda anotado en la
+archivo sale como `Convenio-CV-2026-001-CLINICA-DEL-VALLE.pdf` y el envío queda anotado en la
 bitácora del cliente.
 
 También se puede capturar un huésped a mano.
@@ -337,10 +337,22 @@ ahí, pero el respaldo local sigue siendo la única copia que te llevas contigo.
 | PSDT | Presidencial | Deluxe | 14,601 |
 | CARE | Care | Recovery | N/A |
 
+## Sobre los datos de ejemplo
+
+**Todas las empresas, personas, teléfonos y correos que trae el código son inventados**, y los
+dominios usan `.example`, que está reservado justo para esto y nunca va a existir. El
+repositorio es público: ningún cliente real puede aparecer aquí. La cartera de verdad vive en
+Supabase, y ni la dirección del proyecto ni las llaves están en el código — se capturan una
+vez por equipo en *Ajustes → Nube y equipo*.
+
+Las tarifas rack del catálogo sí son las del hotel, pero son públicas por definición: es lo
+que paga quien llega sin convenio. Las tarifas convenio, que sí son confidenciales, se pactan
+por cliente y viven en Supabase.
+
 ## Pendientes
 
-- Las tarifas y los textos por omisión salen de la carta-convenio de **Quartz Hotel & Spa**
-  para *Samaha Clinik* (agosto 2026). Revisa en Ajustes que sigan vigentes.
+- Las tarifas y los textos por omisión salen de una carta-convenio real de **Quartz Hotel &
+  Spa** de agosto de 2026. Revisa en Ajustes que sigan vigentes.
 - **Suite King aparece con la misma tarifa pública que las Standard (5,300).** Viene así del
   catálogo que nos pasaron; conviene confirmarlo antes de emitir convenios con ese tipo.
 - **Permisos por persona.** Con la nube, hoy todos pueden todo. Si se quiere que sólo la

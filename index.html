@@ -448,7 +448,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.08-9";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.08-10";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1418,9 +1418,10 @@ function arrancarNube(){
 
 function clientesDemo(){
   return [
-    { id:"c1", empresa:"SAMAHA CLINIK", contacto:"Dirección General", telefono:"6643751986",
-      email:"contact@samahaclinik.mx",
-      ubicacion:"La Esquina Business Point, Calle Rufino Tamayo y Dr. Atl 9990, Oficina #702, Tijuana B.C.",
+    // Todos los clientes de ejemplo son inventados: este archivo se publica.
+    { id:"c1", empresa:"Clínica del Valle", contacto:"Dirección General", telefono:"6640000000",
+      email:"direccion@clinicadelvalle.example",
+      ubicacion:"Zona Urbana Río, Tijuana B.C.",
       tarifa:2800, ejecutivo:"Carmen Sotelo", estatus:"ganado",
       notas:"Convenio 2026 firmado. Incluye tarifas Recovery." },
     { id:"c2", empresa:"Grupo Marín", contacto:"Laura Marín", telefono:"5512345678",

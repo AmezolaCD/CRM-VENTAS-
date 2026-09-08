@@ -1,8 +1,8 @@
 # Entrar al CRM desde cualquier equipo
 
-> **La dirección del CRM es <https://corequartz.netlify.app>.**
-> Los datos viven en el proyecto de Supabase `coorawopepdwswblantb`.
-> Cada quien entra con su propio correo y contraseña.
+> **La dirección del CRM y los datos del proyecto de Supabase los tiene sistemas**; no se
+> escriben aquí porque este repositorio es público. Cada quien entra con su propio correo y
+> contraseña.
 
 Hasta ahora el CRM guardaba todo dentro del navegador de cada computadora. Eso
 lo hace instantáneo y funciona sin señal, pero cada quien veía su propia copia.
