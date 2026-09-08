@@ -170,6 +170,16 @@ Pasa el cursor por el semáforo: dice el error.
 
 ### Si no te deja entrar
 
+Lo primero, siempre: **Ajustes → Nube y equipo → Probar conexión**. Revisa por separado la
+llave, la dirección, el servicio de cuentas y la tabla, y dice cuál de los cuatro falla. Eso
+evita andar reescribiendo una contraseña que estaba bien.
+
+El error que más cuesta ver a ojo es **mezclar dos proyectos**: la dirección de uno con la
+llave del otro. Ambos datos se ven correctos por separado y nunca van a funcionar juntos; la
+prueba lo detecta al instante porque la llave lleva escrito adentro a qué proyecto pertenece.
+Por eso conviene copiar los dos datos de la **misma** pantalla.
+
+
 El mensaje de la pantalla de entrada dice qué hacer en cada caso. Los dos más comunes:
 
 - **«La cuenta existe pero está sin confirmar»** — se creó el usuario sin marcar *Auto Confirm

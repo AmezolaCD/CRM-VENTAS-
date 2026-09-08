@@ -448,7 +448,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.07-6";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.08-7";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -960,6 +960,12 @@ function guardarSesion(){
 
 /** Llamada a la API con la llave y el token; renueva el token si caducó. */
 async function api(ruta, opciones = {}, reintento = true){
+  // Una sesión sin token se renueva antes de preguntar. Si no, la petición
+  // sale como anónima y el servidor contesta una lista vacía —no un error—,
+  // así que la aplicación creería que la nube se quedó sin datos.
+  if (reintento && nube.sesion && !nube.sesion.access_token && nube.sesion.refresh_token)
+    await renovarSesion();
+
   const h = Object.assign({
     "apikey": nube.anon,
     "Content-Type": "application/json"
@@ -1026,6 +1032,108 @@ function errorDeEntrada(estado, j, crudo){
   // Nada conocido: mejor enseñar lo que llegó que inventar un diagnóstico.
   const detalle = (j.msg || j.message || j.error_description || crudo || "").slice(0, 300);
   return `El servidor contestó ${estado}${detalle ? ": " + detalle : " sin explicación"}.`;
+}
+
+/* ----- Diagnóstico ----- */
+
+/** Lee lo que la llave lleva escrito dentro. No la valida: sólo la traduce. */
+function leerLlave(anon){
+  try{
+    const p = anon.split(".")[1];
+    const j = JSON.parse(atob(p.replace(/-/g,"+").replace(/_/g,"/").padEnd(Math.ceil(p.length/4)*4, "=")));
+    return { ref:j.ref || "", rol:j.role || "", vence:j.exp ? new Date(j.exp*1000) : null };
+  }catch(e){ return null; }
+}
+
+const refDeUrl = url => (String(url).match(/^https:\/\/([^.]+)\.supabase\./i) || [])[1] || "";
+
+/**
+ * Revisa la conexión paso por paso y dice en cuál se rompe.
+ *
+ * Cuando algo falla al entrar, el usuario no tiene modo de saber si el
+ * problema es su contraseña, la llave, la dirección o una tabla que nunca se
+ * creó: todo se ve igual desde la pantalla de entrada. Peor todavía si hay
+ * dos proyectos en la misma cuenta, porque la dirección de uno con la llave
+ * del otro parece bien escrita y nunca va a funcionar. Aquí se comprueba cada
+ * cosa por separado.
+ */
+async function probarNube(url, anon){
+  const pasos = [];
+  const anota = (ok, titulo, detalle) => pasos.push({ ok, titulo, detalle });
+
+  const llave = leerLlave(anon);
+  if (!llave){
+    anota(false, "La llave no se entiende",
+      "No parece una llave de Supabase. Cópiala completa de Project Settings → API, " +
+      "renglón «anon public», sin cortarla.");
+    return pasos;
+  }
+  anota(true, "La llave se lee bien", `Es del proyecto <b>${esc(llave.ref)}</b>, permiso <b>${esc(llave.rol)}</b>.`);
+
+  if (llave.rol !== "anon")
+    anota(false, `Esa llave no es la pública, es «${esc(llave.rol)}»`,
+      llave.rol === "service_role"
+        ? "<b>La service_role salta todos los permisos y no debe ir dentro de una página.</b> " +
+          "Bórrala de aquí y, por seguridad, revócala en Supabase. Usa la que dice «anon public»."
+        : "Usa la que dice «anon public».");
+
+  if (llave.vence && llave.vence < new Date())
+    anota(false, "La llave caducó", `Venció el ${esc(fechaCorta(llave.vence.toISOString()))}. Genera una nueva en Supabase.`);
+
+  // Sólo se pueden comparar cuando la dirección es la que reparte Supabase.
+  // Quien lo tenga en servidor propio usa su dominio, y eso es legítimo: ahí
+  // la comparación no aplica y son las pruebas de abajo las que hablan.
+  const refUrl = refDeUrl(url);
+  if (!refUrl)
+    anota(true, "Dirección propia",
+      `No es una de <code>supabase.co</code>, así que no se puede comparar con la llave ` +
+      `(que es del proyecto <b>${esc(llave.ref)}</b>).`);
+  else if (refUrl !== llave.ref)
+    anota(false, "La dirección y la llave son de proyectos distintos",
+      `La dirección apunta a <b>${esc(refUrl)}</b> y la llave es de <b>${esc(llave.ref)}</b>. ` +
+      "Con dos proyectos en la misma cuenta es fácil mezclarlos. Toma los dos datos de la " +
+      "misma pantalla: Project Settings → API del proyecto que quieras usar.");
+  else
+    anota(true, "La dirección y la llave son del mismo proyecto", esc(refUrl));
+
+  // Servicio de cuentas
+  try{
+    const r = await fetch(url + "/auth/v1/settings", { headers:{ apikey:anon } });
+    if (r.ok){
+      const j = await r.json().catch(() => ({}));
+      const correoOn = !j.external || j.external.email !== false;
+      anota(true, "El servicio de cuentas responde",
+        correoOn ? "Acepta entrar con correo y contraseña."
+                 : "<b>Pero tiene apagado el acceso por correo.</b> Enciéndelo en " +
+                   "Authentication → Sign In / Providers → Email.");
+      if (!correoOn) pasos[pasos.length-1].ok = false;
+    } else {
+      anota(false, `El servicio de cuentas contestó ${r.status}`,
+        r.status === 401 ? "La llave no vale para este proyecto."
+                         : "Revisa que la dirección sea la del proyecto.");
+    }
+  }catch(e){
+    anota(false, "No se pudo contactar al servicio de cuentas",
+      "Sin internet, o la dirección está mal escrita.");
+  }
+
+  // La tabla
+  try{
+    const r = await fetch(url + "/rest/v1/crm_datos?select=id&limit=1", { headers:{ apikey:anon } });
+    if (r.ok) anota(true, "La tabla crm_datos existe", "El nube.sql ya se corrió en este proyecto.");
+    else {
+      const t = await r.text();
+      anota(false, `La tabla no responde (${r.status})`,
+        /does not exist|not find the table|schema cache/i.test(t)
+          ? "<b>Falta correr el <code>nube.sql</code> en este proyecto.</b> " +
+            "Ábrelo en el SQL Editor, pégalo completo y dale Run."
+          : esc(t.slice(0, 200)));
+    }
+  }catch(e){
+    anota(false, "No se pudo consultar la tabla", esc(e.message));
+  }
+
+  return pasos;
 }
 
 async function entrar(correo, contrasena){
@@ -2558,6 +2666,7 @@ function renderAjustes(){
       </div>
       <p style="margin:6px 0 0">
         <button class="btn primary" id="bNbGuardar">Guardar y conectar</button>
+        <button class="btn" id="bNbProbar">Probar conexión</button>
         <button class="btn" id="bNbEntrar">Entrar con otra cuenta</button>
         <button class="btn danger" id="bNbSalir">Cerrar sesión</button>
         <button class="btn danger" id="bNbQuitar">Desconectar este equipo</button></p>
@@ -2776,6 +2885,28 @@ function renderAjustes(){
       renderAjustes();
       arrancarNube();
     };
+    p.querySelector("#bNbProbar").onclick = async e => {
+      const url  = normalizaUrlNube(p.querySelector("#nbUrl").value);
+      const anon = p.querySelector("#nbAnon").value.trim();
+      if (!url || !anon){ alert("Escribe primero la dirección y la llave."); return; }
+      const b = e.currentTarget, antes = b.textContent;
+      b.disabled = true; b.textContent = "Revisando…";
+      est.innerHTML = `<div class="note">Revisando la conexión…</div>`;
+      try{
+        const pasos = await probarNube(url, anon);
+        const fallan = pasos.filter(x => !x.ok);
+        est.innerHTML = `<div class="note" style="border-left:3px solid ${
+            fallan.length ? "var(--bad)" : "var(--ok)"}">
+          <b>${fallan.length ? "Encontré " + fallan.length + " problema(s):"
+                             : "Todo en orden. Ya puedes entrar."}</b>
+          <ul style="margin:8px 0 0;padding-left:18px">${pasos.map(x =>
+            `<li style="margin-top:5px"><b>${x.ok ? "✓" : "✗"} ${x.titulo}</b>${
+              x.detalle ? "<br>" + x.detalle : ""}</li>`).join("")}</ul></div>`;
+      }catch(ex){
+        est.innerHTML = `<div class="errbox">No se pudo completar la revisión: ${esc(ex.message)}</div>`;
+      }finally{ b.disabled = false; b.textContent = antes; }
+    };
+
     p.querySelector("#bNbEntrar").onclick = () => { detenerSondeo(); pantallaEntrada(); };
     p.querySelector("#bNbSalir").onclick = () => {
       if (!confirm("Se cerrará la sesión en este equipo. Los datos ya sincronizados se quedan en la nube.")) return;
