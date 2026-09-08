@@ -1,0 +1,24 @@
+# Cómo se publica el CRM.
+#
+# No hay nada que compilar: la aplicación es un solo archivo HTML que se sirve
+# tal cual desde la raíz del repositorio.
+[build]
+  publish = "."
+  command = ""
+
+# El navegador tiene que preguntar cada vez si hay versión nueva.
+#
+# Sin esto, alguien del equipo puede seguir abriendo durante días la copia que
+# guardó su navegador y jurar que la función nueva "no existe" —ya nos pasó—.
+# Con must-revalidate el archivo se sigue guardando, pero antes de usarlo el
+# navegador comprueba contra el servidor; si no cambió, la respuesta es un 304
+# de unos cuantos bytes, así que no se pierde velocidad.
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
