@@ -72,6 +72,15 @@ solo: **Authentication** → **Sign In / Providers** → Email → apaga
 El archivo `index.html` es la aplicación entera. Sólo hay que dejarlo en un
 lugar con dirección propia.
 
+> **Cómo está montado hoy:** el repositorio de GitHub enlazado a Vercel. Cada cambio que se
+> empuja se publica solo. En el repositorio van `vercel.json` y `netlify.toml`, que no hacen
+> más que dos cosas: declarar que no hay nada que compilar y pedirle al navegador que
+> revalide el HTML en cada visita, para que nadie se quede con una copia vieja.
+>
+> Netlify también sirve, pero **en su plan gratuito y con repositorio privado sólo construye
+> commits de miembros verificados de la cuenta**, y eso bloquea las publicaciones. Se puede
+> usar arrastrando la carpeta a mano (abajo), que no tiene esa restricción.
+
 ### Opción recomendada · Netlify Drop (dos minutos, gratis)
 
 1. Entra a <https://app.netlify.com/drop>.
