@@ -4,6 +4,13 @@ CRM para el equipo de ventas del hotel: cartera de clientes, bitácora de activi
 generación de cartas-convenio con firma digital. Es **un solo archivo HTML**: no hay que
 instalar nada ni levantar un servidor — se abre con doble clic en cualquier navegador.
 
+> **El código es público; los datos no.** Este repositorio se abrió para poder publicar la
+> aplicación automáticamente. La cartera —clientes, actividades, convenios firmados, huéspedes
+> y tarifas pactadas— vive en Supabase, detrás de cuentas con contraseña, y nunca toca este
+> repositorio. Aquí no hay llaves ni contraseñas, y todos los datos de ejemplo son inventados.
+> Está hecho a la medida de **Quartz Hotel & Spa**, así que a otro hotel le servirá de punto de
+> partida, no de producto terminado.
+
 ## Identidad
 
 Morado `#39104e`, oro `#b2aa6d` y blanco. El logotipo —hexágono con seis flechas que
