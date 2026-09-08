@@ -146,6 +146,8 @@
   .card-acts button.wa .ico-wa{width:15px; height:15px}
   button.btn.wa:hover{background:rgba(37,211,102,.12)}
   button.btn:disabled{opacity:.45; cursor:not-allowed}
+  button.btn.wa:disabled{color:var(--muted); filter:grayscale(1)}
+  button.btn.wa:disabled:hover{background:transparent}
   button.btn.sm{padding:3px 8px; font-size:12px}
 
   main{flex:1 1 auto; min-height:0; display:flex}
@@ -446,7 +448,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.07-4";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.07-5";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -833,11 +835,34 @@ function saneaConv(c){
 
 function saneaHuesped(g){
   const o = Object.assign({ id:"", nombre:"", apellidos:"", reservacion:"", llegada:"", salida:"",
-    noches:"", email:"", telefono:"", empresa:"", notas:"", createdAt:"" }, g || {});
+    noches:"", email:"", telefono:"", empresa:"", notas:"", createdAt:"", enviado:null }, g || {});
   o.id = o.id || nuevoId("g");
   delete o.habitacion;   // versiones anteriores la guardaban
   o.noches = o.noches === "" || o.noches == null ? "" : Math.max(0, Math.round(Number(o.noches) || 0));
+  o.enviado = saneaEnvio(o.enviado);
   return o;
+}
+
+/**
+ * Constancia de que la carta salió: cuándo, por dónde y desde qué cuenta.
+ *
+ * Ojo con lo que esto significa de verdad: la aplicación abre el correo o
+ * WhatsApp, pero no puede asomarse a ver si el mensaje se mandó o si la
+ * persona se arrepintió a media captura. Así que la marca dice "de aquí salió
+ * la carta", no "el huésped ya la tiene", y por eso se puede desmarcar a mano.
+ */
+function saneaEnvio(e){
+  if (!e || !e.fecha) return null;
+  return { fecha: e.fecha, via: e.via === "whatsapp" ? "whatsapp" : "correo", quien: e.quien || "" };
+}
+
+const VIAS = { correo:"correo", whatsapp:"WhatsApp" };
+
+function marcarEnviada(id, via){
+  const g = state.huespedes.find(x => x.id === id);
+  if (!g) return;
+  g.enviado = { fecha: new Date().toISOString(), via, quien: correoSesion() };
+  guardar(); render();
 }
 
 /** El archivo trae nombre y apellidos por separado; la carta los une. */
@@ -1920,30 +1945,51 @@ function renderConvenios(){
    CONFIRMACIONES DE HOSPEDAJE
    ========================================================================== */
 
+/** Sello de "ya se mandó" para la tabla y para la carta abierta. */
+function selloEnvio(g){
+  if (!g.enviado)
+    return `<span class="pill" title="Todavía no se manda desde aquí">Sin enviar</span>`;
+  const e = g.enviado;
+  return `<span class="pill good" title="Enviada por ${esc(VIAS[e.via])} el ${esc(fechaHora(e.fecha))}` +
+    `${e.quien ? " por " + esc(e.quien) : ""}">✓ ${esc(VIAS[e.via])} · ${esc(fechaCorta(e.fecha))}</span>`;
+}
+
+let soloPendientes = false;
+
 function renderConfirmaciones(){
   const cont = document.getElementById("tblConfirm");
-  const gs = [...state.huespedes].sort((a,b) =>
+  const todos = [...state.huespedes].sort((a,b) =>
     String(a.llegada).localeCompare(String(b.llegada)) ||
     nombreCompleto(a).localeCompare(nombreCompleto(b), "es"));
+  const enviadas = todos.filter(g => g.enviado).length;
+  const gs = soloPendientes ? todos.filter(g => !g.enviado) : todos;
 
   const cab = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
       <b style="font-size:15px">Cartas de confirmación</b>
-      <span class="hint">${gs.length} huésped(es) · una carta por huésped</span>
+      <span class="hint">${todos.length} huésped(es) · una carta por huésped${
+        todos.length ? ` · <b>${enviadas} de ${todos.length} enviadas</b>` : ""}</span>
+      ${todos.length && enviadas < todos.length
+        ? `<button class="btn sm${soloPendientes ? " primary" : ""}" id="bPend">${
+             soloPendientes ? "Ver todas" : `Sólo pendientes (${todos.length - enviadas})`}</button>` : ""}
       <span style="flex:1"></span>
       <button class="btn primary" id="bImpHuesp">Importar huéspedes</button>
       <button class="btn" id="bAddHuesp">+ Capturar uno</button>
-      ${gs.length ? `<button class="btn" id="bImprimirTodas">Imprimir todas</button>
+      ${todos.length ? `<button class="btn" id="bImprimirTodas">Imprimir ${
+          soloPendientes ? "las pendientes" : "todas"}</button>
         <button class="btn danger" id="bLimpiarHuesp">Vaciar lista</button>` : ""}
     </div>`;
 
-  if (!gs.length){
+  if (!todos.length){
     cont.innerHTML = cab + `<div class="vacio">Todavía no hay huéspedes cargados.<br>
       Importa un <b>.xlsx</b> o un CSV: se genera una carta por cada renglón,
       aunque dos huéspedes compartan habitación.</div>`;
+  } else if (!gs.length){
+    cont.innerHTML = cab + `<div class="vacio">No queda ninguna pendiente:
+      las ${todos.length} cartas ya se enviaron.</div>`;
   } else {
     cont.innerHTML = cab + `<table class="data">
       <thead><tr><th>Huésped</th><th>Reservación</th><th>Llegada</th><th>Salida</th>
-        <th class="num">Noches</th><th>Empresa</th><th></th></tr></thead>
+        <th class="num">Noches</th><th>Empresa</th><th>Envío</th><th></th></tr></thead>
       <tbody>${gs.map(g => `<tr class="row-link" data-g="${g.id}">
         <td><b>${esc(nombreCompleto(g))}</b></td>
         <td>${esc(g.reservacion || "—")}</td>
@@ -1951,6 +1997,7 @@ function renderConfirmaciones(){
         <td class="nowrap">${esc(fechaCorta(g.salida))}</td>
         <td class="num">${esc(nochesDe(g) === "" ? "—" : nochesDe(g))}</td>
         <td>${esc(g.empresa || "—")}</td>
+        <td class="nowrap">${selloEnvio(g)}</td>
         <td class="nowrap">
           <button class="btn sm" data-vercarta="${g.id}">Ver carta</button>
           <button class="btn sm" data-mail="${g.id}" ${g.email ? "" : "disabled"}>Correo</button>
@@ -1958,14 +2005,17 @@ function renderConfirmaciones(){
         </td></tr>`).join("")}</tbody></table>`;
   }
 
+  const bP = cont.querySelector("#bPend");
+  if (bP) bP.onclick = () => { soloPendientes = !soloPendientes; render(); };
+
   cont.querySelector("#bImpHuesp").onclick = importarHuespedes;
   cont.querySelector("#bAddHuesp").onclick = () => editarHuesped(null);
   const bT = cont.querySelector("#bImprimirTodas");
   if (bT) bT.onclick = () => verConfirmacion(null, gs.map(g => g.id));
   const bL = cont.querySelector("#bLimpiarHuesp");
   if (bL) bL.onclick = () => {
-    if (!confirm(`¿Vaciar la lista de ${gs.length} huésped(es)? Las cartas ya impresas no se tocan.`)) return;
-    state.huespedes = []; guardar(); render();
+    if (!confirm(`¿Vaciar la lista de ${todos.length} huésped(es)? Las cartas ya impresas no se tocan.`)) return;
+    state.huespedes = []; soloPendientes = false; guardar(); render();
   };
   cont.querySelectorAll("tr[data-g]").forEach(tr => tr.addEventListener("click", e => {
     const v = e.target.closest("[data-vercarta]"), m = e.target.closest("[data-mail]"), w = e.target.closest("[data-wa2]");
@@ -2059,6 +2109,7 @@ function verConfirmacion(id, lote){
       <div class="modal-foot">
         <button class="btn" id="bPrintC">${varias ? "Imprimir las " + gs.length : "Imprimir"}</button>
         <button class="btn" id="bPdfC">${varias ? `Descargar las ${gs.length} en un PDF` : "Descargar PDF"}</button>
+        ${!varias ? selloEnvio(gs[0]) : ""}
         <div class="spacer"></div>
         ${!varias ? `<button class="btn" id="bMailC" ${gs[0].email ? "" : "disabled"}>Enviar por correo</button>
           <button class="btn wa" id="bWaC" ${gs[0].telefono ? "" : "disabled"} title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button>` : ""}
@@ -2318,14 +2369,19 @@ function enviarConfirmacion(id, via){
       if (via === "correo")
         window.location.href = `mailto:${encodeURIComponent(g.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
       else window.open(waLink(g.telefono, cuerpo), "_blank", "noopener");
+      marcarEnviada(g.id, via);
     };
 
     const bc = ov.querySelector("#bCompartir");
     if (bc) bc.onclick = async () => {
-      try{ await navigator.share({ files:[file], text: cuerpo, title: asunto }); ov.remove(); }
+      try{
+        await navigator.share({ files:[file], text: cuerpo, title: asunto });
+        marcarEnviada(g.id, via);
+        ov.remove();
+      }
       catch(err){ if (err && err.name !== "AbortError") alert("No se pudo compartir: " + err.message); }
     };
-    const bb = ov.querySelector("#bBajar"); if (bb) bb.onclick = bajar;
+    const bb = ov.querySelector("#bBajar"); if (bb) bb.onclick = bajar;   // bajar no es enviar
     const ba = ov.querySelector("#bAbrir"); if (ba) ba.onclick = abrir;
     const bba = ov.querySelector("#bBajarAbrir");
     if (bba) bba.onclick = () => { bajar(); setTimeout(abrir, 600); ov.remove(); };
@@ -2338,6 +2394,7 @@ function enviarConfirmacion(id, via){
       if (via === "correo")
         window.location.href = `mailto:${encodeURIComponent(g.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
       else window.open(waLink(g.telefono, cuerpo), "_blank", "noopener");
+      marcarEnviada(g.id, via);
     };
   });
 }
@@ -2367,7 +2424,17 @@ function editarHuesped(id){
       <div class="modal-head"><h2>${existente ? "Editar huésped" : "Nuevo huésped"}</h2>
         <button class="btn" data-close>✕</button></div>
       <div class="modal-body"><form id="fG"><div class="grid">${campos}</div>
-        <p class="hint">Si dejas <b>Noches</b> en blanco se calcula con las fechas.</p></form></div>
+        <p class="hint">Si dejas <b>Noches</b> en blanco se calcula con las fechas.</p></form>
+        ${existente ? `<div class="note" style="margin:14px 0 0;display:flex;gap:10px;
+            align-items:center;flex-wrap:wrap">
+          <span>Carta de confirmación:</span> ${selloEnvio(g)}
+          <span style="flex:1"></span>
+          <button class="btn sm" id="bMarcaEnv" type="button">${
+            g.enviado ? "Marcar como no enviada" : "Marcar como enviada"}</button>
+        </div>
+        <p class="hint" style="margin:6px 0 0">La marca se pone sola al mandarla desde aquí.
+          Se puede corregir a mano: la aplicación abre tu correo o WhatsApp, pero no alcanza a
+          ver si de verdad le diste enviar.</p>` : ""}</div>
       <div class="modal-foot">
         ${existente ? `<button class="btn danger" id="bDelG">Eliminar</button>` : ""}
         <div class="spacer"></div>
@@ -2375,6 +2442,19 @@ function editarHuesped(id){
         <button class="btn primary" id="bOkG">Guardar</button>
       </div>
     </div>`);
+
+  const bME = ov.querySelector("#bMarcaEnv");
+  if (bME) bME.onclick = () => {
+    if (g.enviado){
+      if (!confirm(`¿Quitar la marca de enviada de "${nombreCompleto(g)}"?`)) return;
+      g.enviado = null; guardar(); render(); ov.remove(); editarHuesped(g.id);
+      return;
+    }
+    const via = confirm(`¿Por dónde se envió la carta de "${nombreCompleto(g)}"?\n\n` +
+      "Aceptar = correo\nCancelar = WhatsApp") ? "correo" : "whatsapp";
+    marcarEnviada(g.id, via);
+    ov.remove(); editarHuesped(g.id);
+  };
 
   const form = ov.querySelector("#fG");
   form.querySelector('[name="nombre"]').focus();

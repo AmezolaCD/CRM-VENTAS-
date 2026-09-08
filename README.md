@@ -219,6 +219,25 @@ terceros (visas, empresas, aseguradoras).
 - **Descargar PDF** genera el archivo directamente, una hoja por huésped, sin pasar por el
   diálogo de impresión.
 
+#### Qué carta ya salió
+
+Cada renglón trae una columna **Envío**: *Sin enviar*, o un sello verde con **por dónde salió
+y cuándo** (`✓ correo · 08 sep 2026`). Al pasar el cursor dice la hora exacta y desde qué
+cuenta se mandó. Arriba va la cuenta —*2 de 4 enviadas*— y un botón **Sólo pendientes**, que
+es lo que se usa cuando llegan cuarenta huéspedes de golpe: filtra la lista y *Imprimir todas*
+pasa a imprimir nada más las que faltan.
+
+La marca se pone sola al mandar la carta desde la aplicación. **Descargar el PDF no cuenta
+como enviar**, a propósito: bajar el archivo para revisarlo no es lo mismo que mandárselo al
+huésped.
+
+Conviene tener claro qué significa el sello. La aplicación abre tu correo o WhatsApp, pero
+**no alcanza a ver si de verdad le diste enviar** — nada en el navegador se lo permite. Así
+que el sello dice *"de aquí salió la carta"*, no *"el huésped ya la tiene"*. Por eso se puede
+corregir a mano: abre la ficha del huésped y ahí está el botón para marcarla o desmarcarla.
+Con la nube conectada, la marca la ven todos, así que dos ejecutivos no le mandan la misma
+carta al mismo huésped.
+
 #### Cómo se adjunta el PDF
 
 Ni `mailto:` ni el enlace de WhatsApp admiten adjuntos: esos protocolos sólo transportan
