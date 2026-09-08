@@ -448,7 +448,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.07-5";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.07-6";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -995,13 +995,55 @@ async function renovarSesion(){
   }catch(e){ return false; }
 }
 
+/**
+ * Traduce lo que contesta el servidor de cuentas.
+ *
+ * Antes, cualquier fallo se anunciaba como "correo o contraseña incorrectos",
+ * y eso mandaba a la gente a reescribir una contraseña que estaba bien cuando
+ * lo que faltaba era confirmar la cuenta o corregir la dirección del proyecto.
+ * Cada caso tiene que decir qué hacer.
+ */
+function errorDeEntrada(estado, j, crudo){
+  const codigo = String(j.error_code || j.code || j.error || "").toLowerCase();
+  const texto  = String(j.msg || j.message || j.error_description || "").toLowerCase();
+
+  if (codigo.includes("email_not_confirmed") || texto.includes("not confirmed"))
+    return "La cuenta existe pero está sin confirmar. En Supabase, Authentication → Users, " +
+           "bórrala y vuelve a crearla marcando «Auto Confirm User».";
+  if (codigo.includes("invalid_credentials") || codigo.includes("invalid_grant") ||
+      texto.includes("invalid login"))
+    return "Correo o contraseña incorrectos. Si estás seguro de la contraseña, cámbiala en " +
+           "Supabase: Authentication → Users → los tres puntos del usuario → Reset password.";
+  if (codigo.includes("user_banned")) return "Esa cuenta está bloqueada en Supabase.";
+  if (estado === 429)
+    return "Demasiados intentos seguidos. Espera un minuto y vuelve a probar.";
+  if (estado === 401 || codigo.includes("no api key") || texto.includes("api key"))
+    return "La llave pública no corresponde a este proyecto. Revísala en Ajustes → Nube y equipo.";
+  if (estado === 404)
+    return `La dirección del proyecto no responde a las cuentas (${esc(nube.url)}/auth/v1). ` +
+           "Revisa que sea la de tu proyecto, sin nada pegado al final.";
+
+  // Nada conocido: mejor enseñar lo que llegó que inventar un diagnóstico.
+  const detalle = (j.msg || j.message || j.error_description || crudo || "").slice(0, 300);
+  return `El servidor contestó ${estado}${detalle ? ": " + detalle : " sin explicación"}.`;
+}
+
 async function entrar(correo, contrasena){
-  const r = await fetch(nube.url + "/auth/v1/token?grant_type=password", {
-    method:"POST", headers:{ apikey:nube.anon, "Content-Type":"application/json" },
-    body: JSON.stringify({ email: correo, password: contrasena })
-  });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error_description || j.msg || j.message || "Correo o contraseña incorrectos.");
+  let r;
+  try{
+    r = await fetch(nube.url + "/auth/v1/token?grant_type=password", {
+      method:"POST", headers:{ apikey:nube.anon, "Content-Type":"application/json" },
+      body: JSON.stringify({ email: String(correo).trim(), password: contrasena })
+    });
+  }catch(e){
+    throw new Error("No se pudo contactar al servidor. Revisa tu internet y que la dirección " +
+                    `del proyecto esté bien escrita (${esc(nube.url)}).`);
+  }
+  const crudo = await r.text();
+  let j = {};
+  try{ j = JSON.parse(crudo); }catch(e){}
+  if (!r.ok) throw new Error(errorDeEntrada(r.status, j, crudo));
+  if (!j.access_token) throw new Error("El servidor respondió sin sesión. Vuelve a intentar.");
   nube.sesion = j;
   guardarSesion();
 }

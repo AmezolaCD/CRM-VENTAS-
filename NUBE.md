@@ -168,6 +168,19 @@ Pasa el cursor por el semáforo: dice el error.
 | `permission denied` o `row-level security` | El `nube.sql` se corrió a medias. Vuelve a correrlo completo. |
 | `Failed to fetch` | No hay internet, o la dirección del proyecto está mal escrita. |
 
+### Si no te deja entrar
+
+El mensaje de la pantalla de entrada dice qué hacer en cada caso. Los dos más comunes:
+
+- **«La cuenta existe pero está sin confirmar»** — se creó el usuario sin marcar *Auto Confirm
+  User*. En **Authentication → Users**, bórralo y vuelve a crearlo con la casilla marcada.
+- **«Correo o contraseña incorrectos»** — si estás seguro de la contraseña, cámbiala:
+  **Authentication → Users** → los tres puntos del usuario → **Reset password**. Es más rápido
+  que averiguar dónde se coló el error.
+
+Ojo con dos cosas que engañan: el correo **no distingue mayúsculas**, pero la contraseña
+**sí**; y si la copiaste y pegaste, revisa que no se haya colado un espacio al final.
+
 ---
 
 ## Lo que queda pendiente
