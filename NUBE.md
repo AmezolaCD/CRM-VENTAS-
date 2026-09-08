@@ -1,5 +1,9 @@
 # Entrar al CRM desde cualquier equipo
 
+> **La dirección del CRM es <https://corequartz.netlify.app>.**
+> Los datos viven en el proyecto de Supabase `coorawopepdwswblantb`.
+> Cada quien entra con su propio correo y contraseña.
+
 Hasta ahora el CRM guardaba todo dentro del navegador de cada computadora. Eso
 lo hace instantáneo y funciona sin señal, pero cada quien veía su propia copia.
 Para que todo el equipo vea la misma cartera hacen falta dos cosas:
@@ -93,6 +97,16 @@ versión, para comparar entre equipos.
 - **Sin internet**, dentro del hotel: el archivo puede vivir en una carpeta
   compartida de la red. Funciona, pero cada quien tendría que abrirlo desde ahí
   y no serviría desde el celular ni desde fuera.
+
+### Si algún día cambia la dirección
+
+El navegador guarda la configuración **por dirección**, así que al cambiarla el CRM arranca
+en blanco en todos lados: sin los datos de Supabase, sin sesión y con los clientes de
+ejemplo. **No se pierde nada** —todo está en la nube—, pero hay que reconectar una vez por
+equipo, con los pasos de la Parte 3. Al entrar, avisa que ese equipo *adoptará* los datos de
+la nube: es justo lo que se busca.
+
+Por eso conviene dejar el nombre definitivo **antes** de repartir la liga al equipo.
 
 ### En el celular
 
