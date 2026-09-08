@@ -448,7 +448,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.08-7";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.08-8";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2105,6 +2105,42 @@ function selloEnvio(g){
 }
 
 let soloPendientes = false;
+let seleccion = new Set();
+
+/**
+ * Marca varias cartas de una vez.
+ *
+ * Al estrenar el indicador, todo lo mandado antes aparece como pendiente y
+ * corregirlo huésped por huésped es media tarde. Se pide la fecha porque el
+ * envío fue otro día: poner la de hoy sería una constancia falsa.
+ */
+function marcarVarias(ids, via){
+  const gs = ids.map(id => state.huespedes.find(x => x.id === id)).filter(Boolean);
+  if (!gs.length) return;
+  const dia = prompt(`¿Qué día se enviaron estas ${gs.length} cartas por ${VIAS[via]}?\n\n` +
+                     "Formato AAAA-MM-DD. Déjalo como está si fue hoy.", hoyISO());
+  if (dia === null) return;
+  const d = String(dia).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || isNaN(Date.parse(d + "T12:00:00"))){
+    alert(`"${d}" no es una fecha válida. Se esperaba algo como ${hoyISO()}.`);
+    return;
+  }
+  // Mediodía para que el cambio de huso no la corra al día anterior.
+  const fecha = new Date(d + "T12:00:00").toISOString();
+  for (const g of gs) g.enviado = { fecha, via, quien: correoSesion() };
+  seleccion.clear();
+  guardar(); render();
+}
+
+function desmarcarVarias(ids){
+  const gs = ids.map(id => state.huespedes.find(x => x.id === id)).filter(Boolean);
+  if (!gs.filter(g => g.enviado).length){ alert("Ninguna de las seleccionadas está marcada."); return; }
+  if (!confirm(`¿Quitar la marca de enviada a ${gs.length} carta(s)?`)) return;
+  for (const g of gs) g.enviado = null;
+  seleccion.clear();
+  guardar(); render();
+}
+
 
 function renderConfirmaciones(){
   const cont = document.getElementById("tblConfirm");
@@ -2113,6 +2149,9 @@ function renderConfirmaciones(){
     nombreCompleto(a).localeCompare(nombreCompleto(b), "es"));
   const enviadas = todos.filter(g => g.enviado).length;
   const gs = soloPendientes ? todos.filter(g => !g.enviado) : todos;
+  const visibles = new Set(gs.map(g => g.id));
+  for (const id of [...seleccion]) if (!visibles.has(id)) seleccion.delete(id);
+  const sel = [...seleccion];
 
   const cab = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
       <b style="font-size:15px">Cartas de confirmación</b>
@@ -2127,7 +2166,16 @@ function renderConfirmaciones(){
       ${todos.length ? `<button class="btn" id="bImprimirTodas">Imprimir ${
           soloPendientes ? "las pendientes" : "todas"}</button>
         <button class="btn danger" id="bLimpiarHuesp">Vaciar lista</button>` : ""}
-    </div>`;
+    </div>` + (sel.length ? `
+    <div class="note" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <b>${sel.length} seleccionada(s)</b>
+      <span class="hint">Marcarlas como enviadas por:</span>
+      <button class="btn sm" id="bMarcaCorreo">Correo</button>
+      <button class="btn sm wa" id="bMarcaWa" title="WhatsApp" aria-label="WhatsApp">${ICONO_WA}</button>
+      <span style="flex:1"></span>
+      <button class="btn sm" id="bDesmarca">Quitar la marca</button>
+      <button class="btn sm" id="bNada">Deseleccionar</button>
+    </div>` : "");
 
   if (!todos.length){
     cont.innerHTML = cab + `<div class="vacio">Todavía no hay huéspedes cargados.<br>
@@ -2138,9 +2186,13 @@ function renderConfirmaciones(){
       las ${todos.length} cartas ya se enviaron.</div>`;
   } else {
     cont.innerHTML = cab + `<table class="data">
-      <thead><tr><th>Huésped</th><th>Reservación</th><th>Llegada</th><th>Salida</th>
+      <thead><tr><th style="width:30px"><input type="checkbox" id="selTodas"
+          title="Seleccionar todas las de la lista"${sel.length === gs.length ? " checked" : ""}></th>
+        <th>Huésped</th><th>Reservación</th><th>Llegada</th><th>Salida</th>
         <th class="num">Noches</th><th>Empresa</th><th>Envío</th><th></th></tr></thead>
       <tbody>${gs.map(g => `<tr class="row-link" data-g="${g.id}">
+        <td><input type="checkbox" data-sel="${g.id}"${seleccion.has(g.id) ? " checked" : ""}
+             aria-label="Seleccionar a ${esc(nombreCompleto(g))}"></td>
         <td><b>${esc(nombreCompleto(g))}</b></td>
         <td>${esc(g.reservacion || "—")}</td>
         <td class="nowrap">${esc(fechaCorta(g.llegada))}</td>
@@ -2156,7 +2208,26 @@ function renderConfirmaciones(){
   }
 
   const bP = cont.querySelector("#bPend");
-  if (bP) bP.onclick = () => { soloPendientes = !soloPendientes; render(); };
+  if (bP) bP.onclick = () => { soloPendientes = !soloPendientes; seleccion.clear(); render(); };
+
+  cont.querySelectorAll("[data-sel]").forEach(ch => ch.addEventListener("click", e => {
+    e.stopPropagation();            // la casilla no abre la ficha del huésped
+    if (ch.checked) seleccion.add(ch.dataset.sel); else seleccion.delete(ch.dataset.sel);
+    render();
+  }));
+  const st = cont.querySelector("#selTodas");
+  if (st) st.onclick = e => {
+    e.stopPropagation();
+    seleccion = st.checked ? new Set(gs.map(g => g.id)) : new Set();
+    render();
+  };
+  const bmc = cont.querySelector("#bMarcaCorreo");
+  if (bmc){
+    bmc.onclick = () => marcarVarias(sel, "correo");
+    cont.querySelector("#bMarcaWa").onclick = () => marcarVarias(sel, "whatsapp");
+    cont.querySelector("#bDesmarca").onclick = () => desmarcarVarias(sel);
+    cont.querySelector("#bNada").onclick = () => { seleccion.clear(); render(); };
+  }
 
   cont.querySelector("#bImpHuesp").onclick = importarHuespedes;
   cont.querySelector("#bAddHuesp").onclick = () => editarHuesped(null);
@@ -2165,7 +2236,7 @@ function renderConfirmaciones(){
   const bL = cont.querySelector("#bLimpiarHuesp");
   if (bL) bL.onclick = () => {
     if (!confirm(`¿Vaciar la lista de ${todos.length} huésped(es)? Las cartas ya impresas no se tocan.`)) return;
-    state.huespedes = []; soloPendientes = false; guardar(); render();
+    state.huespedes = []; soloPendientes = false; seleccion.clear(); guardar(); render();
   };
   cont.querySelectorAll("tr[data-g]").forEach(tr => tr.addEventListener("click", e => {
     const v = e.target.closest("[data-vercarta]"), m = e.target.closest("[data-mail]"), w = e.target.closest("[data-wa2]");

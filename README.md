@@ -227,6 +227,11 @@ cuenta se mandó. Arriba va la cuenta —*2 de 4 enviadas*— y un botón **Sól
 es lo que se usa cuando llegan cuarenta huéspedes de golpe: filtra la lista y *Imprimir todas*
 pasa a imprimir nada más las que faltan.
 
+Con las casillas de la izquierda se marcan **varias de un jalón**: útil al estrenar el
+indicador, cuando todo lo mandado antes aparece como pendiente y corregirlo uno por uno es
+media tarde. Pregunta **qué día se enviaron** en vez de poner la de hoy: el envío fue otro
+día y una constancia con fecha falsa no sirve de nada.
+
 La marca se pone sola al mandar la carta desde la aplicación. **Descargar el PDF no cuenta
 como enviar**, a propósito: bajar el archivo para revisarlo no es lo mismo que mandárselo al
 huésped.
