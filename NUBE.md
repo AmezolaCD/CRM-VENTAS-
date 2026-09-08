@@ -166,6 +166,15 @@ está en la nube. Los dos datos de conexión se pegan **una vez por equipo**.
 **Authentication** → **Users** → los tres puntos → *Delete user*. Deja de poder
 entrar; lo que ya había capturado se queda.
 
+### Si algo capturado aquí no aparece en los demás equipos
+
+**Ajustes → Nube y equipo → Volver a subir todo.** Vuelve a mandar los registros de este
+equipo sin dar de baja nada de la nube. Sirve cuando algo se capturó mientras el equipo
+estaba desconectado —o en otra dirección— y se quedó nada más aquí.
+
+Antes de eso, revisa el semáforo del encabezado: si no dice **En línea**, lo que captures no
+está saliendo de esa computadora.
+
 ### Si dice "Sin conexión"
 
 Pasa el cursor por el semáforo: dice el error.

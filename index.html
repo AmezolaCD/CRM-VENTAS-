@@ -448,7 +448,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.08-8";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.08-9";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2738,6 +2738,7 @@ function renderAjustes(){
       <p style="margin:6px 0 0">
         <button class="btn primary" id="bNbGuardar">Guardar y conectar</button>
         <button class="btn" id="bNbProbar">Probar conexión</button>
+        <button class="btn" id="bNbTodo">Volver a subir todo</button>
         <button class="btn" id="bNbEntrar">Entrar con otra cuenta</button>
         <button class="btn danger" id="bNbSalir">Cerrar sesión</button>
         <button class="btn danger" id="bNbQuitar">Desconectar este equipo</button></p>
@@ -2941,6 +2942,7 @@ function renderAjustes(){
     est.innerHTML = `<div class="note" style="border-left:3px solid ${linea[1]}">${esc(linea[0])}</div>`;
     p.querySelector("#bNbEntrar").style.display = (nube.url && nube.anon) ? "" : "none";
     p.querySelector("#bNbSalir").style.display  = nube.sesion ? "" : "none";
+    p.querySelector("#bNbTodo").style.display   = nube.sesion ? "" : "none";
     p.querySelector("#bNbQuitar").style.display = (nube.url || nube.anon) ? "" : "none";
 
     p.querySelector("#bNbGuardar").onclick = () => {
@@ -2976,6 +2978,31 @@ function renderAjustes(){
       }catch(ex){
         est.innerHTML = `<div class="errbox">No se pudo completar la revisión: ${esc(ex.message)}</div>`;
       }finally{ b.disabled = false; b.textContent = antes; }
+    };
+
+    p.querySelector("#bNbTodo").onclick = async e => {
+      if (!nubeActiva()){ alert("Primero hay que entrar a la nube."); return; }
+      const filas = filasDeEstado();
+      const cuenta = t => filas.filter(f => f.tipo === t).length;
+      if (!confirm(`Se volverán a mandar a la nube los ${filas.length} registros de este equipo:\n\n` +
+                   `· ${cuenta("clientes")} cliente(s)\n· ${cuenta("actividades")} actividad(es)\n` +
+                   `· ${cuenta("convenios")} convenio(s)\n· ${cuenta("huespedes")} huésped(es)\n\n` +
+                   "Sirve cuando algo capturado aquí no aparece en los demás equipos.\n" +
+                   "No borra nada de la nube: lo que otros hayan subido se queda.\n\n¿Continuar?")) return;
+      const b = e.currentTarget, antes = b.textContent;
+      b.disabled = true; b.textContent = "Subiendo…";
+      try{
+        // Con el registro de lo ya sincronizado en blanco, todo lo de este
+        // equipo se ve como cambio y vuelve a salir. Los borrados se calculan
+        // contra ese mismo registro, así que vaciarlo no da de baja nada.
+        sincronizado = new Map();
+        await sincronizar();
+        if (nube.estado === "error") throw new Error(nube.error || "sin detalle");
+        alert(`Listo: se mandaron ${filas.length} registros.\n\n` +
+              "En los demás equipos aparecen en menos de un minuto, o al recargar.");
+      }catch(ex){
+        alert("No se pudo subir: " + ex.message);
+      }finally{ b.disabled = false; b.textContent = antes; renderAjustes(); }
     };
 
     p.querySelector("#bNbEntrar").onclick = () => { detenerSondeo(); pantallaEntrada(); };
