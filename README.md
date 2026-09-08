@@ -312,6 +312,10 @@ Cómo se comporta, en corto:
   nunca se enterarían.
 - El semáforo del encabezado dice si está *En línea*, *Sincronizando…* o *Sin conexión*, y al
   pasarle el cursor dice con qué cuenta y cuál fue el último error.
+- Un equipo nuevo se da de alta con **Copiar liga para otro equipo**: la liga lleva dentro la
+  dirección y la llave, así que quien la abre sólo pone su correo y contraseña. La
+  configuración viaja después del `#` —esa parte no llega al servidor— y se borra de la barra
+  de direcciones al abrirla.
 
 La llave que se pega en Ajustes es la **anon**, pública por diseño: viaja dentro de la página
 y por sí sola no abre nada, porque la tabla exige haber entrado con una cuenta del equipo

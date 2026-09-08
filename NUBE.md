@@ -140,8 +140,25 @@ Queda con su ícono, como cualquier otra aplicación.
   nube y que lo local se reemplaza. Si tenías capturas sin subir, expórtalas
   antes con el botón **Exportar** de la barra de arriba (*Respaldo completo (JSON)*).
 
-En las demás computadoras se repite el paso 3, se entra, y adoptan lo que ya
-está en la nube. Los dos datos de conexión se pegan **una vez por equipo**.
+### Dar de alta los demás equipos sin dictar nada
+
+Desde un equipo ya conectado: **Ajustes → Nube y equipo → Copiar liga para otro equipo**.
+
+Esa liga ya lleva dentro la dirección y la llave. Se manda por WhatsApp o correo, y quien la
+abre queda configurado de una vez: sólo le pide su correo y su contraseña. Es una liga por
+equipo nuevo, no algo que haya que repetir cada día.
+
+Dos detalles pensados a propósito:
+
+- La configuración viaja **después del `#`**. Esa parte de una dirección no se manda al
+  servidor, así que la llave no queda escrita en los registros de quien hospeda la página.
+- Al abrirla, **se borra sola de la barra de direcciones**, antes de que alcance a colarse en
+  el historial o en un favorito.
+
+Aun así, quien reciba la liga puede conectarse al servidor, así que se manda **sólo a la gente
+del equipo** — igual que la dirección del CRM.
+
+También se puede hacer a mano, repitiendo el paso 3 en cada equipo.
 
 ---
 

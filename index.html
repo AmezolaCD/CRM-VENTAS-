@@ -448,7 +448,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.08-11";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.08-12";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1034,6 +1034,69 @@ function errorDeEntrada(estado, j, crudo){
   return `El servidor contestó ${estado}${detalle ? ": " + detalle : " sin explicación"}.`;
 }
 
+/* ----- Alta de un equipo nuevo sin dictar nada ----- */
+
+const b64url = t => btoa(t).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const deB64url = t => atob(t.replace(/-/g, "+").replace(/_/g, "/")
+  .padEnd(Math.ceil(t.length / 4) * 4, "="));
+
+/**
+ * Una liga que ya trae dentro la dirección y la llave.
+ *
+ * Va en el fragmento —después del #— a propósito: esa parte no se manda al
+ * servidor, así que la llave no queda escrita en los registros de quien
+ * hospeda la página. Y al abrirla se borra de la barra de direcciones antes de
+ * que alcance a colarse en el historial o en un favorito.
+ */
+const ligaInvitacion = () =>
+  location.origin + location.pathname + "#nube=" +
+  b64url(JSON.stringify({ u: nube.url, k: nube.anon }));
+
+function aplicarInvitacion(){
+  const m = String(location.hash || "").match(/[#&]nube=([A-Za-z0-9_-]+)/);
+  if (!m) return;
+  try{ history.replaceState(null, "", location.pathname + location.search); }catch(e){}
+
+  let cfg = null;
+  try{ cfg = JSON.parse(deB64url(m[1])); }catch(e){}
+  const url  = normalizaUrlNube(cfg && cfg.u);
+  const anon = String((cfg && cfg.k) || "").trim();
+  if (!url || !anon){
+    alert("La liga de configuración llegó incompleta.\n\n" +
+          "Suele pasar cuando se corta al copiarla o al mandarla por mensaje. " +
+          "Pide que te la manden otra vez.");
+    return;
+  }
+  if (nube.url && (nube.url !== url || nube.anon !== anon)){
+    if (!confirm("Este equipo ya estaba conectado a otro servidor.\n\n" +
+                 "¿Cambiarlo por el de esta liga? Tendrás que volver a entrar.")) return;
+    nube.sesion = null;
+    guardarSesion();
+  }
+  nube.url = url;
+  nube.anon = anon;
+  nube.ultimo = "";
+  guardarNubeCfg();
+}
+
+/** Deja la liga en el portapapeles, o a la vista si el navegador no deja. */
+async function copiarInvitacion(){
+  if (!/^https?:$/.test(location.protocol)){
+    alert("Esta liga sólo sirve desde la dirección publicada del CRM.\n\n" +
+          "Ábrelo desde su dirección de internet, no desde el archivo guardado en el equipo.");
+    return;
+  }
+  const liga = ligaInvitacion();
+  try{
+    await navigator.clipboard.writeText(liga);
+    alert("Liga copiada.\n\nMándala por WhatsApp o correo a quien vaya a usar el CRM. " +
+          "Al abrirla, su equipo queda configurado y sólo le pedirá su correo y contraseña.\n\n" +
+          "Ojo: quien la reciba puede conectarse al servidor, así que mándala nada más a los del equipo.");
+  }catch(e){
+    prompt("Copia esta liga y mándala a quien vaya a usar el CRM:", liga);
+  }
+}
+
 /* ----- Diagnóstico ----- */
 
 /** Lee lo que la llave lleva escrito dentro. No la valida: sólo la traduce. */
@@ -1406,6 +1469,7 @@ function pantallaEntrada(){
 
 function arrancarNube(){
   cargarNube();
+  aplicarInvitacion();     // una liga de alta manda sobre lo que hubiera
   pintarNube();
   if (!nube.url || !nube.anon) return;          // sin configurar: modo local de siempre
   if (!nube.sesion){ pantallaEntrada(); return; }
@@ -2740,6 +2804,7 @@ function renderAjustes(){
       <p style="margin:6px 0 0">
         <button class="btn primary" id="bNbGuardar">Guardar y conectar</button>
         <button class="btn" id="bNbProbar">Probar conexión</button>
+        <button class="btn" id="bNbLiga">Copiar liga para otro equipo</button>
         <button class="btn" id="bNbTodo">Volver a subir todo</button>
         <button class="btn" id="bNbEntrar">Entrar con otra cuenta</button>
         <button class="btn danger" id="bNbSalir">Cerrar sesión</button>
@@ -2963,6 +3028,7 @@ function renderAjustes(){
     p.querySelector("#bNbEntrar").style.display = (nube.url && nube.anon) ? "" : "none";
     p.querySelector("#bNbSalir").style.display  = nube.sesion ? "" : "none";
     p.querySelector("#bNbTodo").style.display   = nube.sesion ? "" : "none";
+    p.querySelector("#bNbLiga").style.display   = (nube.url && nube.anon) ? "" : "none";
     p.querySelector("#bNbQuitar").style.display = (nube.url || nube.anon) ? "" : "none";
 
     p.querySelector("#bNbGuardar").onclick = () => {
@@ -2999,6 +3065,8 @@ function renderAjustes(){
         est.innerHTML = `<div class="errbox">No se pudo completar la revisión: ${esc(ex.message)}</div>`;
       }finally{ b.disabled = false; b.textContent = antes; }
     };
+
+    p.querySelector("#bNbLiga").onclick = copiarInvitacion;
 
     p.querySelector("#bNbTodo").onclick = async e => {
       if (!nubeActiva()){ alert("Primero hay que entrar a la nube."); return; }
