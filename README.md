@@ -97,6 +97,29 @@ registros por cliente.** Cada uno lleva:
 La tarjeta del tablero muestra el conteo y la última actividad. Los hitos del convenio se
 registran solos en esta bitácora.
 
+### Actividad de los ejecutivos
+
+Las actividades viven en la ficha de cada cliente, pero para saber qué hizo alguien en la
+semana había que abrir cliente por cliente. La pestaña **Actividades** las junta todas y las
+mira desde el otro lado: por **quien las hizo**.
+
+Arriba, un resumen con una fila por ejecutivo: cuántas llamadas, reuniones, correos y
+WhatsApp lleva en el periodo, el total, y cuándo fue la última. Debajo, el detalle renglón por
+renglón, de lo más reciente a lo más viejo.
+
+Se filtra por **periodo** (hoy, 7 días, 30 días, este mes, todo, o entre dos fechas),
+por **ejecutivo** y por **tipo**; los filtros se acumulan. El buscador de arriba también
+alcanza aquí, y busca dentro del asunto y de las notas.
+
+Un detalle a propósito: el filtro de ejecutivo de la barra superior **se esconde** en esta
+vista. Ese filtra por el ejecutivo **asignado al cliente**, y aquí lo que importa es **quién
+hizo** la actividad — que no siempre son la misma persona. Mezclarlos daría números que
+parecen correctos y no lo son.
+
+Al hacer clic en un renglón se abre la actividad para editarla. **+ Registrar actividad** deja
+capturar sin entrar a la ficha del cliente: primero pregunta con cuál es. Y **Exportar CSV**
+saca exactamente lo que esté filtrado a la vista, no toda la bitácora.
+
 ### Convenios
 
 Un convenio se arma eligiendo el cliente y marcando las habitaciones que entran:

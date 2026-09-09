@@ -412,6 +412,7 @@
   <nav>
     <button data-view="tablero" aria-current="true">Tablero</button>
     <button data-view="clientes">Clientes</button>
+    <button data-view="actividades">Actividades</button>
     <button data-view="convenios">Convenios</button>
     <button data-view="confirmaciones">Confirmaciones</button>
     <button data-view="ajustes">Ajustes</button>
@@ -434,6 +435,7 @@
     <div class="board-wrap"><div id="board"></div></div>
   </section>
   <section class="view" id="v-clientes"><div class="table-wrap" id="tblClientes"></div></section>
+  <section class="view" id="v-actividades"><div class="table-wrap" id="tblAct"></div></section>
   <section class="view" id="v-convenios"><div class="table-wrap" id="tblConvenios"></div></section>
   <section class="view" id="v-confirmaciones"><div class="table-wrap" id="tblConfirm"></div></section>
   <section class="view" id="v-ajustes"><div class="table-wrap" id="panelAjustes"></div></section>
@@ -448,7 +450,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.08-12";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.09-13";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1952,15 +1954,17 @@ function render(){
   document.querySelectorAll(".view").forEach(v =>
     v.id === "v-" + vista ? v.setAttribute("data-on","") : v.removeAttribute("data-on"));
 
-  const buscando = vista === "tablero" || vista === "clientes";
+  const buscando = ["tablero","clientes","actividades"].includes(vista);
+  const porEjecutivo = vista === "tablero" || vista === "clientes";
   document.getElementById("q").style.display      = buscando ? "" : "none";
-  document.getElementById("fEje").style.display   = buscando ? "" : "none";
+  document.getElementById("fEje").style.display   = porEjecutivo ? "" : "none";
   document.getElementById("bNuevo").style.display =
-    ["convenios","confirmaciones","ajustes"].includes(vista) ? "none" : "";
+    ["convenios","confirmaciones","ajustes","actividades"].includes(vista) ? "none" : "";
 
   renderEjecutivos();
   if (vista === "tablero")   { renderKpis(); renderTablero(); }
   if (vista === "clientes")  renderClientes();
+  if (vista === "actividades") renderActividades();
   if (vista === "convenios") renderConvenios();
   if (vista === "confirmaciones") renderConfirmaciones();
   if (vista === "ajustes")   renderAjustes();
@@ -3371,6 +3375,190 @@ function registrarAuto(clienteId, asunto, notas, responsable){
     id: nuevoId("a"), clienteId, tipo:"correo", asunto, fecha: ahoraLocal(),
     responsable: responsable || "", notas: notas || "", createdAt: new Date().toISOString()
   }));
+}
+
+/* ----- Bitácora de los ejecutivos ----- */
+
+/**
+ * Las actividades siempre estuvieron ahí, pero encerradas en la ficha de cada
+ * cliente: para saber qué hizo alguien en la semana había que abrir cliente
+ * por cliente. Esta vista las junta todas y las mira desde el otro lado, por
+ * quien las hizo.
+ */
+let filtroAct = { periodo:"30", ejecutivo:"", tipo:"", desde:"", hasta:"" };
+
+const PERIODOS = [
+  { id:"hoy",  name:"Hoy" },
+  { id:"7",    name:"Últimos 7 días" },
+  { id:"30",   name:"Últimos 30 días" },
+  { id:"mes",  name:"Este mes" },
+  { id:"todo", name:"Todo" },
+  { id:"rango",name:"Entre dos fechas" }
+];
+
+/** Los dos extremos del periodo elegido, como AAAA-MM-DD. */
+function rangoActivo(){
+  const hoy = hoyISO();
+  const menos = n => {
+    const d = new Date(hoy + "T12:00:00");
+    d.setDate(d.getDate() - n);
+    return d.toISOString().slice(0,10);
+  };
+  switch (filtroAct.periodo){
+    case "hoy":  return [hoy, hoy];
+    case "7":    return [menos(6), hoy];
+    case "30":   return [menos(29), hoy];
+    case "mes":  return [hoy.slice(0,7) + "-01", hoy];
+    case "rango":return [filtroAct.desde || "0000-01-01", filtroAct.hasta || "9999-12-31"];
+    default:     return ["0000-01-01", "9999-12-31"];
+  }
+}
+
+function actividadesVisibles(){
+  const [desde, hasta] = rangoActivo();
+  const q = filtros.q.trim().toLowerCase();
+  return state.actividades.filter(a => {
+    const dia = String(a.fecha || "").slice(0,10);
+    if (dia < desde || dia > hasta) return false;
+    if (filtroAct.ejecutivo && (a.responsable || "") !== filtroAct.ejecutivo) return false;
+    if (filtroAct.tipo && a.tipo !== filtroAct.tipo) return false;
+    if (!q) return true;
+    return [a.asunto, a.notas, a.responsable, nombreCli(a.clienteId), tipoAct(a.tipo).name]
+      .join(" ").toLowerCase().includes(q);
+  }).sort((x,y) => String(y.fecha).localeCompare(String(x.fecha)));
+}
+
+/** Todo el que aparezca como responsable, más los ejecutivos de la cartera. */
+const ejecutivosConocidos = () => [...new Set([
+  ...state.actividades.map(a => a.responsable),
+  ...state.clientes.map(c => c.ejecutivo)
+].map(x => String(x || "").trim()).filter(Boolean))].sort((a,b) => a.localeCompare(b,"es"));
+
+function renderActividades(){
+  const cont = document.getElementById("tblAct");
+  const as = actividadesVisibles();
+  const [desde, hasta] = rangoActivo();
+
+  const opciones = (lista, val, todos) =>
+    `<option value="">${esc(todos)}</option>` + lista.map(([v,n]) =>
+      `<option value="${esc(v)}"${v===val?" selected":""}>${esc(n)}</option>`).join("");
+
+  const filtrosHtml = `
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <b style="font-size:15px">Actividad de los ejecutivos</b>
+      <select class="field" id="fPeriodo" title="Periodo">${PERIODOS.map(x =>
+        `<option value="${x.id}"${x.id===filtroAct.periodo?" selected":""}>${esc(x.name)}</option>`).join("")}</select>
+      ${filtroAct.periodo === "rango" ? `
+        <input class="field" type="date" id="fDesde" value="${esc(filtroAct.desde)}" title="Desde">
+        <span class="hint">a</span>
+        <input class="field" type="date" id="fHasta" value="${esc(filtroAct.hasta)}" title="Hasta">` : ""}
+      <select class="field" id="fEjeAct" title="Ejecutivo">${
+        opciones(ejecutivosConocidos().map(x => [x,x]), filtroAct.ejecutivo, "Todos los ejecutivos")}</select>
+      <select class="field" id="fTipoAct" title="Tipo">${
+        opciones(TIPOS_ACT.map(t => [t.id, t.icon + " " + t.name]), filtroAct.tipo, "Todos los tipos")}</select>
+      <span style="flex:1"></span>
+      <button class="btn primary" id="bNuevaAct">+ Registrar actividad</button>
+      <button class="btn" id="bExpAct">Exportar CSV</button>
+    </div>`;
+
+  // El resumen es lo que se mira primero: cuánto hizo cada quien y de qué tipo.
+  const porEje = new Map();
+  for (const a of as){
+    const k = (a.responsable || "").trim() || "(sin responsable)";
+    if (!porEje.has(k)) porEje.set(k, { total:0, tipos:{}, ultima:"" });
+    const r = porEje.get(k);
+    r.total++;
+    r.tipos[a.tipo] = (r.tipos[a.tipo] || 0) + 1;
+    if (String(a.fecha) > r.ultima) r.ultima = String(a.fecha);
+  }
+  const filas = [...porEje.entries()].sort((x,y) => y[1].total - x[1].total);
+
+  const resumen = !as.length ? "" : `
+    <table class="data" style="margin-bottom:16px">
+      <thead><tr><th>Ejecutivo</th>${TIPOS_ACT.map(t =>
+        `<th class="num">${t.icon} ${esc(t.name)}</th>`).join("")}
+        <th class="num">Total</th><th>Última</th></tr></thead>
+      <tbody>${filas.map(([nombre, r]) => `<tr>
+        <td><b>${esc(nombre)}</b></td>
+        ${TIPOS_ACT.map(t => `<td class="num">${r.tipos[t.id] || "—"}</td>`).join("")}
+        <td class="num"><b>${r.total}</b></td>
+        <td class="nowrap hint">${esc(fechaHora(r.ultima))}</td></tr>`).join("")}
+        ${filas.length > 1 ? `<tr><td><b>Todos</b></td>
+          ${TIPOS_ACT.map(t => `<td class="num"><b>${as.filter(a => a.tipo === t.id).length || "—"}</b></td>`).join("")}
+          <td class="num"><b>${as.length}</b></td><td></td></tr>` : ""}
+      </tbody></table>`;
+
+  const rotulo = filtroAct.periodo === "todo" ? "en toda la bitácora"
+    : `del ${fechaCorta(desde)} al ${fechaCorta(hasta)}`;
+
+  if (!as.length){
+    cont.innerHTML = filtrosHtml + `<div class="vacio">Sin actividades registradas ${esc(rotulo)}.<br>
+      Cambia el periodo o registra una nueva.</div>`;
+  } else {
+    cont.innerHTML = filtrosHtml + resumen + `
+      <p class="hint" style="margin:0 0 8px">${as.length} actividad(es) ${esc(rotulo)}.
+        Haz clic en un renglón para abrirla.</p>
+      <table class="data">
+        <thead><tr><th>Fecha y hora</th><th>Ejecutivo</th><th>Tipo</th><th>Cliente</th>
+          <th>Asunto</th><th>Notas</th></tr></thead>
+        <tbody>${as.map(a => `<tr class="row-link" data-a="${a.id}">
+          <td class="nowrap">${esc(fechaHora(a.fecha))}</td>
+          <td class="nowrap">${esc(a.responsable || "—")}</td>
+          <td class="nowrap">${tipoAct(a.tipo).icon} ${esc(tipoAct(a.tipo).name)}</td>
+          <td>${esc(nombreCli(a.clienteId))}</td>
+          <td><b>${esc(a.asunto || "—")}</b></td>
+          <td class="hint" style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="${esc(a.notas)}">${esc(a.notas || "")}</td></tr>`).join("")}
+        </tbody></table>`;
+  }
+
+  cont.querySelector("#fPeriodo").onchange = e => { filtroAct.periodo = e.target.value; render(); };
+  const fd = cont.querySelector("#fDesde"), fh = cont.querySelector("#fHasta");
+  if (fd) fd.onchange = e => { filtroAct.desde = e.target.value; render(); };
+  if (fh) fh.onchange = e => { filtroAct.hasta = e.target.value; render(); };
+  cont.querySelector("#fEjeAct").onchange  = e => { filtroAct.ejecutivo = e.target.value; render(); };
+  cont.querySelector("#fTipoAct").onchange = e => { filtroAct.tipo = e.target.value; render(); };
+  cont.querySelector("#bNuevaAct").onclick = nuevaActividadSuelta;
+  cont.querySelector("#bExpAct").onclick = () => exportarActividades(as);
+  cont.querySelectorAll("tr[data-a]").forEach(tr => tr.onclick = () => {
+    const a = state.actividades.find(x => x.id === tr.dataset.a);
+    if (a) modalActividad(a.clienteId, a.id);
+  });
+}
+
+/** Registrar sin venir de la ficha de un cliente: primero hay que elegirlo. */
+function nuevaActividadSuelta(){
+  if (!state.clientes.length){
+    alert("Primero da de alta un cliente: toda actividad va ligada a uno.");
+    return;
+  }
+  const lista = [...state.clientes].sort((a,b) => a.empresa.localeCompare(b.empresa,"es"));
+  const ov = modal(`
+    <div class="modal" style="max-width:460px">
+      <div class="modal-head"><h2>¿Con qué cliente?</h2><button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <label class="lbl">Cliente</label>
+        <select class="field" id="selCli" style="width:100%">${lista.map(c =>
+          `<option value="${esc(c.id)}">${esc(c.empresa)}${c.ejecutivo ? " · " + esc(c.ejecutivo) : ""}</option>`).join("")}</select>
+        <p class="hint" style="margin:10px 0 0">La actividad queda también en la ficha de ese cliente.</p>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="bSigue">Continuar</button></div>
+    </div>`);
+  ov.querySelector("#bSigue").onclick = () => {
+    const id = ov.querySelector("#selCli").value;
+    ov.remove();
+    modalActividad(id, null);
+  };
+}
+
+function exportarActividades(as){
+  if (!as.length){ alert("No hay actividades que exportar con estos filtros."); return; }
+  descargar(`actividades-${hoyISO()}.csv`, toCSV(
+    [["Fecha y hora","Ejecutivo","Tipo","Cliente","Asunto","Notas"]].concat(
+      as.map(a => [fechaHora(a.fecha), a.responsable, tipoAct(a.tipo).name,
+                   nombreCli(a.clienteId), a.asunto, a.notas]))), "text/csv");
 }
 
 /* ----- Editor de convenio ----- */
