@@ -450,7 +450,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.09-13";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.09-14";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -721,6 +721,77 @@ const CAMPOS_CLIENTE = [
 ];
 
 /* ==========================================================================
+   QUIÉN VE QUÉ
+
+   Tres papeles. El administrador ve y configura todo; la gerencia ve el
+   trabajo de todo el equipo pero no toca los ajustes; cada ejecutivo ve su
+   propia cartera.
+
+   Lo que amarra a una persona con su cartera es el NOMBRE: el mismo que va
+   escrito en el campo "Ejecutivo" de cada cliente. Por eso el alta de un
+   usuario pide correo y nombre por separado —el correo es con el que entra,
+   el nombre es con el que aparece en la cartera— y hay que escribirlos igual.
+
+   Ojo con el alcance de esto: acomoda lo que cada quien ve en pantalla. Los
+   datos siguen viajando completos a cada equipo, así que alguien con
+   conocimientos podría leerlos de todas formas. Para que el servidor mismo se
+   los niegue hace falta el paso de ROLES.md, que se hace aparte.
+   ========================================================================== */
+
+const ROLES = [
+  { id:"admin",     name:"Administrador",     ayuda:"Todo, incluidos los Ajustes." },
+  { id:"gerente",   name:"Gerencia de ventas", ayuda:"Ve la cartera y la actividad de todo el equipo. Sin Ajustes." },
+  { id:"ejecutivo", name:"Ejecutivo de ventas", ayuda:"Sólo sus propios clientes, convenios y actividades." }
+];
+const infoRol = id => ROLES.find(r => r.id === id) || ROLES[2];
+
+const USUARIOS_DEF = [
+  { id:"u1", correo:"sistemas@quartzhotel.mx",   nombre:"Marco Ramírez",  rol:"admin" },
+  { id:"u2", correo:"gte.ventas@quartzhotel.mx", nombre:"Alicia Rocha",   rol:"gerente" },
+  { id:"u3", correo:"ventas3@quartzhotel.mx",    nombre:"Carmen Sotelo",  rol:"ejecutivo" },
+  { id:"u4", correo:"ventas2@quartzhotel.mx",    nombre:"Eduardo Islas",  rol:"ejecutivo" }
+];
+
+function saneaUsuario(u){
+  const o = Object.assign({ id:"", correo:"", nombre:"", rol:"ejecutivo" }, u || {});
+  o.id = o.id || nuevoId("u");
+  o.correo = String(o.correo).trim().toLowerCase();
+  o.nombre = String(o.nombre).trim();
+  if (!ROLES.some(r => r.id === o.rol)) o.rol = "ejecutivo";
+  return o;
+}
+
+/** El usuario de la sesión, buscado por el correo con el que entró. */
+function usuarioActual(){
+  const c = correoSesion().trim().toLowerCase();
+  if (!c) return null;
+  return state.usuarios.find(u => u.correo === c) || null;
+}
+
+/**
+ * Sin nube no hay sesión, y entonces no hay a quién limitarle nada: quien
+ * abre la aplicación en su equipo es dueño de sus propios datos. Con nube,
+ * un correo que no está dado de alta entra como ejecutivo sin cartera, que
+ * es lo prudente: mejor que no vea nada a que lo vea todo por descuido.
+ */
+function rolActual(){
+  if (!nubeActiva()) return "admin";
+  const u = usuarioActual();
+  return u ? u.rol : "ejecutivo";
+}
+
+const miNombre    = () => { const u = usuarioActual(); return u ? u.nombre : ""; };
+const esAdmin     = () => rolActual() === "admin";
+const puedeVerTodo = () => ["admin","gerente"].includes(rolActual());
+
+/** ¿Este cliente es de quien está viendo la pantalla? */
+function esMio(c){
+  if (puedeVerTodo()) return true;
+  const yo = miNombre().trim().toLowerCase();
+  return !!yo && String(c.ejecutivo || "").trim().toLowerCase() === yo;
+}
+
+/* ==========================================================================
    ESTADO
    ========================================================================== */
 
@@ -766,6 +837,7 @@ function sanear(s){
     actividades:  Array.isArray(s.actividades) ? s.actividades.map(saneaAct) : [],
     convenios:    Array.isArray(s.convenios) ? s.convenios.map(saneaConv) : [],
     huespedes:    Array.isArray(s.huespedes) ? s.huespedes.map(saneaHuesped) : [],
+    usuarios:     Array.isArray(s.usuarios) ? s.usuarios.map(saneaUsuario) : USUARIOS_DEF.map(saneaUsuario),
     habitaciones: catalogo(s.habitaciones),
     ajustes: {
       hotel:  Object.assign({}, HOTEL_DEF, (s.ajustes && s.ajustes.hotel) || {}),
@@ -1232,7 +1304,7 @@ function salir(){
 
 /* ----- Traducción entre el estado y las filas de la tabla ----- */
 
-const COLECCIONES = ["clientes","actividades","convenios","huespedes","habitaciones"];
+const COLECCIONES = ["clientes","actividades","convenios","huespedes","habitaciones","usuarios"];
 
 function filasDeEstado(){
   const filas = [];
@@ -1243,12 +1315,13 @@ function filasDeEstado(){
 }
 
 function estadoDesdeFilas(filas){
-  const bruto = { clientes:[], actividades:[], convenios:[], huespedes:[], habitaciones:[], ajustes:null };
+  const bruto = { clientes:[], actividades:[], convenios:[], huespedes:[], habitaciones:[], usuarios:[], ajustes:null };
   for (const f of filas){
     if (f.tipo === "ajustes") bruto.ajustes = f.datos;
     else if (bruto[f.tipo]) bruto[f.tipo].push(f.datos);
   }
   if (!bruto.ajustes) delete bruto.ajustes;
+  if (!bruto.usuarios.length) delete bruto.usuarios;
   return sanear(bruto);
 }
 
@@ -1264,13 +1337,32 @@ async function bajar(desde){
   return filas || [];
 }
 
+/**
+ * De quién es una fila, para que el servidor pueda repartirlas.
+ *
+ * Todo cuelga del cliente: sus actividades y sus convenios son de quien lo
+ * atiende. El catálogo, los textos, los usuarios y los huéspedes no son de
+ * nadie —los necesita todo el equipo— y se quedan sin dueño a propósito.
+ */
+function duenioDe(fila){
+  const deCliente = id => {
+    const c = state.clientes.find(x => x.id === id);
+    return (c && String(c.ejecutivo || "").trim()) || null;
+  };
+  if (fila.tipo === "clientes")    return String(fila.datos.ejecutivo || "").trim() || null;
+  if (fila.tipo === "actividades") return deCliente(fila.datos.clienteId) ||
+                                          String(fila.datos.responsable || "").trim() || null;
+  if (fila.tipo === "convenios")   return deCliente(fila.datos.clienteId);
+  return null;
+}
+
 async function subir(cambios, borrados){
   if (cambios.length){
     await api("/rest/v1/crm_datos?on_conflict=id", {
       method:"POST",
       headers:{ "Prefer":"resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify(cambios.map(f => ({
-        id:f.id, tipo:f.tipo, datos:f.datos, borrado:false,
+        id:f.id, tipo:f.tipo, datos:f.datos, borrado:false, duenio: duenioDe(f),
         actualizado:new Date().toISOString(), actualizado_por: correoSesion()
       })))
     });
@@ -1407,7 +1499,10 @@ function pintarNube(){
   const mapa = {
     local:          ["Sin conectar", "var(--muted)", "Configurada la nube, falta entrar"],
     sincronizando:  ["Sincronizando…", "var(--accent)", "Enviando y trayendo cambios"],
-    listo:          ["En línea", "var(--ok)", "Al día · " + correoSesion()],
+    listo:          ["En línea", "var(--ok)", (() => {
+                      const u = usuarioActual();
+                      return "Al día · " + (u ? `${u.nombre} · ${infoRol(u.rol).name}` : correoSesion());
+                    })()],
     error:          ["Sin conexión", "var(--bad)", nube.error || "No se pudo sincronizar"]
   };
   const [txt, color, ayuda] = mapa[nube.estado] || mapa.local;
@@ -1937,6 +2032,7 @@ const nombreCli   = id => (cliente(id) || {}).empresa || "(cliente eliminado)";
 function clientesVisibles(){
   const q = filtros.q.trim().toLowerCase();
   return state.clientes.filter(c => {
+    if (!esMio(c)) return false;
     if (filtros.ejecutivo && c.ejecutivo !== filtros.ejecutivo) return false;
     if (!q) return true;
     return [c.empresa,c.contacto,c.telefono,c.email,c.ubicacion,c.ejecutivo,c.notas]
@@ -1949,6 +2045,13 @@ function clientesVisibles(){
    ========================================================================== */
 
 function render(){
+  // Los Ajustes tocan las tarifas públicas, los textos de los convenios y la
+  // conexión de todo el equipo: son del administrador. Se esconde la pestaña
+  // y, por si alguien llegó ahí de otra manera, se desvía la vista.
+  const btnAjustes = document.querySelector('nav button[data-view="ajustes"]');
+  if (btnAjustes) btnAjustes.style.display = esAdmin() ? "" : "none";
+  if (vista === "ajustes" && !esAdmin()) vista = "tablero";
+
   document.querySelectorAll("nav button").forEach(b =>
     b.setAttribute("aria-current", String(b.dataset.view === vista)));
   document.querySelectorAll(".view").forEach(v =>
@@ -2124,7 +2227,9 @@ function renderClientes(){
 
 function renderConvenios(){
   const cont = document.getElementById("tblConvenios");
-  const vs = [...state.convenios].sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  const mios = new Set(state.clientes.filter(esMio).map(c => c.id));
+  const vs = state.convenios.filter(v => mios.has(v.clienteId))
+    .sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const cab = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
       <b style="font-size:15px">Convenios</b><span class="hint">${vs.length} en total</span>
       <span style="flex:1"></span>
@@ -2814,6 +2919,24 @@ function renderAjustes(){
         <button class="btn danger" id="bNbSalir">Cerrar sesión</button>
         <button class="btn danger" id="bNbQuitar">Desconectar este equipo</button></p>
 
+      <h3 class="sec">Usuarios y permisos</h3>
+      <div class="note"><b>El nombre tiene que estar escrito igual que en la cartera.</b>
+        Lo que amarra a una persona con sus clientes es el campo <i>Ejecutivo</i> de cada
+        cliente, no el correo. Si aquí dice “Carmen Sotelo” y en los clientes dice
+        “C. Sotelo”, esa ejecutiva no verá su propia cartera.</div>
+      <div class="note warn"><b>Esto acomoda lo que cada quien ve en pantalla.</b>
+        Los datos siguen viajando completos a cada equipo, así que alguien con conocimientos
+        podría leerlos de todas formas. Para que el servidor mismo se los niegue falta un paso
+        aparte, explicado en <code>ROLES.md</code>.</div>
+      <div style="overflow:auto"><table class="data" id="tUsr">
+        <thead><tr><th>Correo con el que entra</th><th>Nombre en la cartera</th>
+          <th>Papel</th><th></th></tr></thead>
+        <tbody></tbody></table></div>
+      <p style="margin:10px 0 0">
+        <button class="btn" id="bAddUsr">+ Agregar persona</button>
+        <span class="hint">Dar de alta aquí no crea la cuenta: eso se hace en Supabase,
+          en <i>Authentication → Users</i>, con el mismo correo.</span></p>
+
       <h3 class="sec">Datos del hotel</h3>
       <div class="grid">
         <div class="full"><label class="lbl">Nombre</label><input class="field" id="hNombre" value="${esc(h.nombre)}"></div>
@@ -2928,6 +3051,21 @@ function renderAjustes(){
 
   const p = document.getElementById("panelAjustes");
 
+  // Las filas de usuarios se pintan aquí, como el catálogo de habitaciones.
+  const nombresCartera = [...new Set(state.clientes.map(c => c.ejecutivo).filter(Boolean))].sort();
+  const cuerpoUsr = p.querySelector("#tUsr tbody");
+  if (cuerpoUsr) cuerpoUsr.innerHTML = state.usuarios.map(u => `<tr data-u="${u.id}">
+      <td><input class="field" data-uk="correo" value="${esc(u.correo)}" type="email"
+            style="width:100%" autocomplete="off" spellcheck="false"></td>
+      <td><input class="field" data-uk="nombre" value="${esc(u.nombre)}" list="listaEje"
+            style="width:100%" placeholder="Como aparece en la cartera"></td>
+      <td><select class="field" data-uk="rol" style="width:100%">${ROLES.map(r =>
+            `<option value="${r.id}"${r.id === u.rol ? " selected" : ""}>${esc(r.name)}</option>`).join("")}</select>
+        <div class="hint">${esc(infoRol(u.rol).ayuda)}</div></td>
+      <td><button class="btn sm danger" data-delu="${u.id}">Quitar</button></td></tr>`).join("") +
+    `<datalist id="listaEje">${nombresCartera.map(n => `<option value="${esc(n)}">`).join("")}</datalist>`;
+
+
   /** Vuelca el formulario al estado. Se llama también antes de agregar o
       eliminar una fila: si no, al repintar se perdía lo que estuviera escrito. */
   function recogerAjustes(){
@@ -2951,6 +3089,15 @@ function renderAjustes(){
       if (!a.grupos[el.dataset.g]) return;
       a.grupos[el.dataset.g][el.dataset.gk] = el.dataset.gk === "nombre" ? el.value.trim() : el.value;
     });
+    p.querySelectorAll("#tUsr tr[data-u]").forEach(tr => {
+      const u = state.usuarios.find(x => x.id === tr.dataset.u);
+      if (!u) return;
+      u.correo = tr.querySelector('[data-uk="correo"]').value.trim().toLowerCase();
+      u.nombre = tr.querySelector('[data-uk="nombre"]').value.trim();
+      u.rol    = tr.querySelector('[data-uk="rol"]').value;
+    });
+    state.usuarios = state.usuarios.filter(u => u.correo || u.nombre).map(saneaUsuario);
+
     p.querySelectorAll("#tHab tr[data-id]").forEach(tr => {
       const x = state.habitaciones.find(y => y.id === tr.dataset.id);
       if (!x) return;
@@ -2982,6 +3129,27 @@ function renderAjustes(){
     if (!confirm("¿Quitar el logotipo? La carta volverá a usar el monograma Q.")) return;
     recogerAjustes(); h.logo = ""; guardar(); renderAjustes();
   };
+
+  p.querySelector("#bAddUsr").onclick = () => {
+    recogerAjustes();
+    state.usuarios.push(saneaUsuario({ correo:"", nombre:"", rol:"ejecutivo" }));
+    guardar(); renderAjustes();
+  };
+  p.querySelectorAll("[data-delu]").forEach(b => b.onclick = () => {
+    const u = state.usuarios.find(x => x.id === b.dataset.delu);
+    if (!u) return;
+    // Quedarse sin administrador dejaría a todos fuera de los Ajustes, y ya
+    // nadie podría volver a entrar a arreglarlo.
+    if (u.rol === "admin" && state.usuarios.filter(x => x.rol === "admin").length === 1){
+      alert("Es el único administrador. Nombra otro antes de quitarlo, o nadie podría volver a entrar a los Ajustes.");
+      return;
+    }
+    if (!confirm(`¿Quitar a ${u.nombre || u.correo}?\n\nDeja de poder entrar al CRM. Su cuenta en ` +
+                 "Supabase no se toca: bórrala también si no quieres que pueda conectarse.")) return;
+    recogerAjustes();
+    state.usuarios = state.usuarios.filter(x => x.id !== u.id);
+    guardar(); renderAjustes();
+  });
 
   p.querySelector("#bAddHab").onclick = () => {
     recogerAjustes();
@@ -3417,7 +3585,13 @@ function rangoActivo(){
 function actividadesVisibles(){
   const [desde, hasta] = rangoActivo();
   const q = filtros.q.trim().toLowerCase();
+  const mios = new Set(state.clientes.filter(esMio).map(c => c.id));
+  const yo = miNombre().trim().toLowerCase();
   return state.actividades.filter(a => {
+    // Un ejecutivo ve lo de su cartera y, además, lo que él mismo hizo:
+    // a veces cubre a un compañero y esa llamada es suya de todos modos.
+    if (!puedeVerTodo() && !mios.has(a.clienteId) &&
+        String(a.responsable || "").trim().toLowerCase() !== yo) return false;
     const dia = String(a.fecha || "").slice(0,10);
     if (dia < desde || dia > hasta) return false;
     if (filtroAct.ejecutivo && (a.responsable || "") !== filtroAct.ejecutivo) return false;

@@ -312,6 +312,21 @@ Google Sheets, guárdalos como CSV (*Archivo → Descargar → CSV*).
 
 En `plantilla.csv` está el formato exacto.
 
+## Quién ve qué
+
+Tres papeles: **administrador** (todo, y el único con Ajustes), **gerencia de ventas** (la
+cartera y la actividad de todo el equipo, sin Ajustes) y **ejecutivo** (sólo lo suyo, más las
+actividades que él mismo hizo). Se administran en *Ajustes → Usuarios y permisos*.
+
+Lo que amarra a una persona con su cartera es el **nombre**, no el correo: se compara contra
+el campo *Ejecutivo* de cada cliente. Escribirlos distinto es el error más fácil de cometer y
+el más difícil de ver.
+
+Los permisos van en dos niveles y conviene no confundirlos: lo configurado en Ajustes acomoda
+**lo que cada quien ve en pantalla**, pero los datos siguen bajando completos a cada equipo.
+Para que el servidor mismo niegue la cartera ajena hay que correr `roles.sql`. Todo el
+detalle, los pasos y cómo deshacerlo están en **[ROLES.md](ROLES.md)**.
+
 ## La misma cartera en todos los equipos
 
 Sin configurar nada, cada computadora guarda lo suyo. En **Ajustes → Nube y equipo** se pega
