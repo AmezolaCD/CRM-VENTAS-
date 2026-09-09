@@ -73,6 +73,11 @@ de otro ni sabiendo dónde buscar.
 
 Si algo sale mal, al final de `roles.sql` están las cuatro líneas para volver a como estaba.
 
+No hay prisa por correrlo, y tampoco pasa nada por no hacerlo: la aplicación funciona igual
+con la columna del dueño y sin ella. Si el servidor le dice que esa columna no existe, vuelve
+a mandar los datos sin ella y sigue trabajando; lo intenta de nuevo en la siguiente sesión,
+así que el día que se corra `roles.sql` empieza a usarla sola.
+
 ---
 
 ## Lo que no hace

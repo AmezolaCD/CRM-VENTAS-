@@ -450,7 +450,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.09-14";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.09-15";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1358,14 +1358,30 @@ function duenioDe(fila){
 
 async function subir(cambios, borrados){
   if (cambios.length){
-    await api("/rest/v1/crm_datos?on_conflict=id", {
+    const cuerpo = conDuenio => JSON.stringify(cambios.map(f => {
+      const fila = { id:f.id, tipo:f.tipo, datos:f.datos, borrado:false,
+        actualizado:new Date().toISOString(), actualizado_por: correoSesion() };
+      if (conDuenio) fila.duenio = duenioDe(f);
+      return fila;
+    }));
+    const mandar = c => api("/rest/v1/crm_datos?on_conflict=id", {
       method:"POST",
       headers:{ "Prefer":"resolution=merge-duplicates,return=minimal" },
-      body: JSON.stringify(cambios.map(f => ({
-        id:f.id, tipo:f.tipo, datos:f.datos, borrado:false, duenio: duenioDe(f),
-        actualizado:new Date().toISOString(), actualizado_por: correoSesion()
-      })))
+      body: cuerpo(c)
     });
+
+    try{
+      await mandar(!nube.sinDuenio);
+    }catch(e){
+      // La columna "duenio" sólo existe si se corrió roles.sql. Sin ella el
+      // servidor rechaza la subida entera, así que se vuelve a mandar sin esa
+      // columna y se recuerda por lo que dure la sesión: al día siguiente se
+      // intenta otra vez, y si para entonces ya corrieron roles.sql, se usa.
+      if (!nube.sinDuenio && /duenio/i.test(e.message)){
+        nube.sinDuenio = true;
+        await mandar(false);
+      } else throw e;
+    }
   }
   // Un borrado se marca en vez de eliminar la fila: si no, los demás equipos
   // nunca se enterarían de que desapareció.
