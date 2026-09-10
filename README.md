@@ -425,6 +425,14 @@ Cómo se comporta, en corto:
   nunca se enterarían.
 - El semáforo del encabezado dice si está *En línea*, *Sincronizando…* o *Sin conexión*, y al
   pasarle el cursor dice con qué cuenta y cuál fue el último error.
+- En el encabezado, un botón con el **nombre de quien está usando el CRM**. Al apretarlo dice
+  su papel y su correo, y ofrece **cerrar sesión** — a la mano para cualquiera, porque en la
+  oficina se comparte la computadora y esconderlo en unos Ajustes que sólo ve el administrador
+  no serviría de nada.
+- **Al cerrar sesión se borra la copia de este equipo.** No basta con olvidar la contraseña:
+  la cartera de quien se va seguiría en el navegador y la vería el siguiente, aunque el
+  servidor no le entregara ni una fila. Antes de borrar se sube lo que quede pendiente, y si
+  no se logra, se pregunta: perder capturas por cerrar sesión sería el peor final posible.
 - Un equipo nuevo se da de alta con **Copiar liga para otro equipo**: la liga lleva dentro la
   dirección y la llave, así que quien la abre sólo pone su correo y contraseña. La
   configuración viaja después del `#` —esa parte no llega al servidor— y se borra de la barra
