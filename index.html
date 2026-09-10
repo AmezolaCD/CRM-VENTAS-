@@ -475,7 +475,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.10-18";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.10-19";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -4389,7 +4389,23 @@ const enlaceDeFirma = () => {
 };
 
 function pantallaFirmaCliente(datos){
+  // Se suelta la página a mano, además de por clase.
+  //
+  // El CRM fija el alto a la pantalla y esconde lo que sobra, porque son sus
+  // columnas las que se desplazan. Un convenio de tres páginas necesita lo
+  // contrario. Va en el propio elemento y no sólo en la hoja de estilos porque
+  // esta pantalla la abre gente de fuera, en el teléfono que sea, y si una
+  // regla se cuela por encima el cliente se queda sin poder llegar a firmar.
   document.documentElement.classList.add("modo-firma");
+  document.documentElement.classList.remove("intro-activa");
+  for (const el of [document.documentElement, document.body]){
+    el.style.setProperty("height", "auto", "important");
+    el.style.setProperty("min-height", "100%", "important");
+    el.style.setProperty("max-height", "none", "important");
+    el.style.setProperty("overflow", "visible", "important");
+    el.style.setProperty("display", "block", "important");
+    el.style.setProperty("position", "static", "important");
+  }
   document.body.innerHTML = `<div id="firmaCliente"></div>`;
   const caja = document.getElementById("firmaCliente");
   const aviso = (clase, html) => { caja.innerHTML = `<div class="note ${clase}">${html}</div>`; };
