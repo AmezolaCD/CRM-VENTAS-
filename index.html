@@ -479,7 +479,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.10-21";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.10-22";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3918,6 +3918,33 @@ function exportarActividades(as){
 
 /* ----- Editor de convenio ----- */
 
+/**
+ * El folio que sigue para un año: CV-2027-004.
+ *
+ * El consecutivo se cuenta por año y sale del folio más alto que ya exista
+ * para ese año, no de cuántos convenios haya en total. Contar el total daba
+ * folios repetidos en cuanto se borraba uno, y arrancaba el año nuevo con el
+ * número donde se hubiera quedado el anterior.
+ *
+ * Se saltan los borradores sin firmar de otros años porque el folio se
+ * recalcula solo mientras nadie lo haya escrito a mano.
+ */
+function folioAuto(anio){
+  const a = String(anio || new Date().getFullYear()).slice(0, 4);
+  const re = new RegExp("^CV-" + a + "-(\\d+)$", "i");
+  const usados = state.convenios
+    .map(v => (re.exec(String(v.folio || "").trim()) || [])[1])
+    .filter(Boolean)
+    .map(Number);
+  const n = usados.length ? Math.max(...usados) + 1 : 1;
+  return `CV-${a}-${String(n).padStart(3, "0")}`;
+}
+
+/** El año que manda en el folio es el de la vigencia, no el de hoy. */
+const anioConvenio = v =>
+  String(v.vigenciaDesde || v.fecha || hoyISO()).slice(0, 4) || String(new Date().getFullYear());
+
+
 function editarConvenio(id, clientePre, alCerrar){
   const existente = id ? state.convenios.find(v => v.id === id) : null;
 
@@ -3930,7 +3957,7 @@ function editarConvenio(id, clientePre, alCerrar){
   const finAnio = new Date().getFullYear() + "-12-31";
   const v = existente || saneaConv({
     clienteId: clientePre || "",
-    folio: "CV-" + new Date().getFullYear() + "-" + String(state.convenios.length + 1).padStart(3,"0"),
+    folio: folioAuto(new Date().getFullYear()),
     fecha: hoyISO(),
     vigenciaDesde: hoyISO(),
     vigenciaHasta: finAnio,
@@ -4057,6 +4084,20 @@ function editarConvenio(id, clientePre, alCerrar){
     guardar(); render(); ov.remove();
     if (alCerrar) alCerrar();
   };
+
+  // Si se cambia la vigencia a otro año, el folio se acomoda solo. Se deja de
+  // hacer en cuanto alguien lo escribe a mano: ahí manda lo que escribió.
+  {
+    const fFolio = ov.querySelector("#cFolio"), fDesde = ov.querySelector("#cDesde");
+    let ultimoAuto = existente ? null : fFolio.value;
+    fFolio.addEventListener("input", () => { if (fFolio.value !== ultimoAuto) ultimoAuto = null; });
+    fDesde.addEventListener("change", () => {
+      if (ultimoAuto === null || fFolio.value !== ultimoAuto) return;
+      const anio = String(fDesde.value || "").slice(0, 4);
+      if (anio.length !== 4) return;
+      fFolio.value = ultimoAuto = folioAuto(anio);
+    });
+  }
 
   ov.querySelector("#bOk").onclick = () => { if (recoger()){ ov.remove(); if (alCerrar) alCerrar(); } };
   ov.querySelector("#bFirmar").onclick = () => {

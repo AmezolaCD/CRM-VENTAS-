@@ -186,6 +186,16 @@ alterar el suyo. La clave deja de servir en cuanto se firma.
 Todo esto lo habilita `firmas.sql`. **Sin correrlo, el CRM funciona igual**: el enlace no se
 ofrece y quedan los otros dos caminos.
 
+##### El folio
+
+Se arma solo: `CV-2027-003`. El año sale de la **vigencia**, no de la fecha de hoy —un convenio
+que se captura en diciembre para el año que entra lleva el año que entra—, así que al cambiar
+*Vigencia desde* a otro año el folio se acomoda mientras nadie lo haya escrito a mano.
+
+El consecutivo se cuenta **por año**, y sale del folio más alto que ya exista para ese año, no
+de cuántos convenios haya en total: contar el total repetía folios en cuanto se borraba uno, y
+hacía que enero arrancara donde se quedó diciembre. Un año sin convenios empieza en `001`.
+
 ##### Lo que se ve en la tabla
 
 La columna **Habitaciones** enseña las claves del convenio —`STKN`, `GDDO`, `CARE`— y no
