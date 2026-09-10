@@ -489,7 +489,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.10-23";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.10-25";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -830,6 +830,20 @@ function esMio(c){
   return !!yo && String(c.ejecutivo || "").trim().toLowerCase() === yo;
 }
 
+/**
+ * Avisa cuando la animación de entrada ya terminó.
+ *
+ * Un confirm() o un alert() del navegador congelan la página entera, animación
+ * incluida: si la nube pregunta algo mientras la entrada corre, el logo se
+ * queda tieso a medio dibujar detrás del aviso. Así que lo que tenga que
+ * preguntar espera a que la entrada acabe.
+ *
+ * El plazo de respaldo es por si la entrada no llega a avisar —no se muestra,
+ * falla, la quitan—: más vale preguntar tarde que no preguntar nunca.
+ */
+let terminarEntrada;
+const entradaLista = new Promise(r => { terminarEntrada = r; setTimeout(r, 3500); });
+
 /* ==========================================================================
    ESTADO
    ========================================================================== */
@@ -1072,12 +1086,14 @@ function cargarNube(){
     const c = JSON.parse(localStorage.getItem(NUBE_CFG) || "{}");
     nube.url = normalizaUrlNube(c.url);
     nube.anon = c.anon || "";
+    nube.enlazado = !!c.enlazado;
   }catch(e){}
   try{ nube.sesion = JSON.parse(localStorage.getItem(NUBE_SESION) || "null"); }catch(e){}
 }
 
 function guardarNubeCfg(){
-  try{ localStorage.setItem(NUBE_CFG, JSON.stringify({ url:nube.url, anon:nube.anon })); }catch(e){}
+  try{ localStorage.setItem(NUBE_CFG,
+    JSON.stringify({ url:nube.url, anon:nube.anon, enlazado:!!nube.enlazado })); }catch(e){}
 }
 function guardarSesion(){
   try{
@@ -1180,13 +1196,22 @@ const ligaInvitacion = () =>
   location.origin + location.pathname + "#nube=" +
   b64url(JSON.stringify({ u: nube.url, k: nube.anon }));
 
-function aplicarInvitacion(){
+/**
+ * Saca la configuración del enlace y la borra de la barra de direcciones.
+ *
+ * Se hace de inmediato, antes que ninguna otra cosa: mientras esté a la vista
+ * puede acabar en un favorito o en el historial, y ahí va la llave. Aplicarla
+ * —que puede preguntar algo— es aparte y sí puede esperar.
+ */
+function leerInvitacion(){
   const m = String(location.hash || "").match(/[#&]nube=([A-Za-z0-9_-]+)/);
-  if (!m) return;
+  if (!m) return null;
   try{ history.replaceState(null, "", location.pathname + location.search); }catch(e){}
+  try{ return JSON.parse(deB64url(m[1])); }catch(e){ return {}; }
+}
 
-  let cfg = null;
-  try{ cfg = JSON.parse(deB64url(m[1])); }catch(e){}
+function aplicarInvitacion(cfg){
+  if (!cfg) return;
   const url  = normalizaUrlNube(cfg && cfg.u);
   const anon = String((cfg && cfg.k) || "").trim();
   if (!url || !anon){
@@ -1201,9 +1226,11 @@ function aplicarInvitacion(){
     nube.sesion = null;
     guardarSesion();
   }
+  const otroServidor = nube.url !== url || nube.anon !== anon;
   nube.url = url;
   nube.anon = anon;
   nube.ultimo = "";
+  if (otroServidor) nube.enlazado = false;   // servidor distinto: enlace nuevo
   guardarNubeCfg();
 }
 
@@ -1632,12 +1659,14 @@ async function primeraSincronizacion(){
   const hayLocal = state.clientes.length || state.convenios.length || state.huespedes.length;
 
   if (!remotas.length){
-    if (!hayLocal){ marcarSincronizado([]); return; }
+    if (!hayLocal){ marcarSincronizado([]); nube.enlazado = true; guardarNubeCfg(); return; }
     if (!confirm(`La nube está vacía y este equipo tiene ${state.clientes.length} cliente(s).\n\n` +
                  "¿Subir los datos de este equipo para que sean los de todo el hotel?")){
       throw new Error("Enlace cancelado: la nube quedó vacía.");
     }
     marcarSincronizado([]);          // todo se verá como cambio y subirá
+    nube.enlazado = true;
+    guardarNubeCfg();
     await sincronizar();
     return;
   }
@@ -1654,6 +1683,8 @@ async function primeraSincronizacion(){
   marcarSincronizado(filasDeEstado());
   for (const r of remotas)
     nube.ultimo = !nube.ultimo || r.actualizado > nube.ultimo ? r.actualizado : nube.ultimo;
+  nube.enlazado = true;
+  guardarNubeCfg();
   render();
 }
 
@@ -1732,13 +1763,24 @@ function pantallaEntrada(){
   };
 }
 
-function arrancarNube(){
+async function arrancarNube(){
   cargarNube();
-  aplicarInvitacion();     // una liga de alta manda sobre lo que hubiera
+  const invitacion = leerInvitacion();   // se limpia la barra de direcciones ya
+  pintarNube();
+
+  // Nada de lo que sigue puede aparecer encima de la animación de entrada:
+  // el aviso la congelaría y el logo se quedaría a medio dibujar.
+  await entradaLista;
+
+  aplicarInvitacion(invitacion);   // una liga de alta manda sobre lo que hubiera
   pintarNube();
   if (!nube.url || !nube.anon) return;          // sin configurar: modo local de siempre
   if (!nube.sesion){ pantallaEntrada(); return; }
-  primeraSincronizacion()
+  // Preguntar "¿adopto los datos de la nube?" sólo tiene sentido la primera
+  // vez que este equipo se conecta: después ya son los mismos datos, y volver
+  // a preguntarlo en cada arranque es un estorbo diario que además no dice
+  // nada. De la segunda vez en adelante se sincroniza y ya.
+  (nube.enlazado ? sincronizar() : primeraSincronizacion())
     .then(() => { nube.estado = "listo"; pintarNube(); arrancarSondeo(); })
     .catch(e => {
       nube.estado = "error"; nube.error = e.message; pintarNube();
@@ -3402,7 +3444,10 @@ function renderAjustes(){
       const cambio = url !== nube.url || anon !== nube.anon;
       nube.url = url; nube.anon = anon;
       guardarNubeCfg();
-      if (cambio){ nube.sesion = null; guardarSesion(); nube.ultimo = ""; detenerSondeo(); }
+      if (cambio){
+        nube.sesion = null; guardarSesion(); nube.ultimo = ""; nube.enlazado = false;
+        guardarNubeCfg(); detenerSondeo();
+      }
       renderAjustes();
       arrancarNube();
     };
@@ -3465,7 +3510,8 @@ function renderAjustes(){
       if (!confirm("Este equipo dejará de sincronizar y volverá a guardar sólo aquí.\n\n" +
                    "Los datos que ya están en la nube no se borran. ¿Continuar?")) return;
       detenerSondeo();
-      nube.url = ""; nube.anon = ""; nube.sesion = null; nube.ultimo = ""; nube.estado = "local";
+      nube.url = ""; nube.anon = ""; nube.sesion = null; nube.ultimo = "";
+      nube.estado = "local"; nube.enlazado = false;
       sincronizado = new Map();
       guardarNubeCfg(); guardarSesion();
       pintarNube(); renderAjustes();
@@ -5284,7 +5330,7 @@ try{
  */
 (function entrada(){
   const el = document.getElementById("intro");
-  if (!el) return;
+  if (!el){ terminarEntrada(); return; }
 
   const quitar = () => {
     if (!el.parentNode) return;
@@ -5292,6 +5338,7 @@ try{
     document.documentElement.classList.remove("intro-activa");
     document.removeEventListener("pointerdown", quitar);
     document.removeEventListener("keydown", quitar);
+    terminarEntrada();
   };
 
   if (matchMedia("(prefers-reduced-motion: reduce)").matches){ quitar(); return; }
@@ -5321,7 +5368,7 @@ render();
 // Si el enlace es el de un cliente que viene a firmar, la aplicación se
 // convierte en su documento y no arranca nada del CRM.
 const _firma = enlaceDeFirma();
-if (_firma) pantallaFirmaCliente(_firma);
+if (_firma){ terminarEntrada(); pantallaFirmaCliente(_firma); }
 else arrancarNube();
 </script>
 </body>

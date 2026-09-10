@@ -395,6 +395,9 @@ una dirección de internet— está en **[NUBE.md](NUBE.md)**.
 
 Cómo se comporta, en corto:
 
+- **La base de datos es una sola y vive en la nube.** Lo que hay en cada navegador es una
+  copia de trabajo de esos mismos datos, no una segunda base: sirve para que la aplicación
+  abra al instante y aguante si se cae la señal un rato.
 - El navegador **sigue siendo la copia de trabajo**: la aplicación abre al instante y deja
   trabajar aunque se caiga el internet. Cuando vuelve la señal, sube lo que hiciste.
 - Se sincroniza **registro por registro**, no el archivo completo: cada cliente, actividad,

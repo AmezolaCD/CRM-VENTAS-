@@ -136,7 +136,9 @@ y lo vuelva a agregar.
 4. **Guardar y conectar**.
 5. Entra con tu correo y contraseña.
 
-**La primera vez** te va a preguntar qué hacer con lo que ya tenías capturado:
+**La primera vez —y sólo la primera—** te va a preguntar qué hacer con lo que ya tenías
+capturado. Después de eso, ese equipo ya no vuelve a preguntar nada al abrir: entra derecho.
+Las opciones son:
 
 - Si la nube está vacía, te ofrece **subir** los datos de ese equipo. Hazlo
   desde la computadora que tiene la información buena.
