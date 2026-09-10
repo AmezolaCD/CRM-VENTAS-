@@ -97,6 +97,19 @@ Se corre igual que los demás, en el SQL Editor, y se puede repetir. Al final de
 las líneas para deshacerlo; los convenios ya firmados se quedan como están, porque la firma
 vive dentro del convenio y no en el buzón.
 
+### Si el cliente firmó y no aparece en el CRM
+
+**Ajustes → Nube y equipo → Buscar firmas de clientes.** Revisa el buzón en ese momento y dice
+qué encontró: si está vacío, si aplicó firmas, o por qué no pudo. Los dos motivos que se ven
+en la práctica:
+
+- **«falta correr firmas.sql»** — el buzón no existe, así que la firma nunca se guardó.
+- **«llegó con una clave que ya no corresponde»** — al cliente se le mandó un enlace, luego se
+  rehizo, y firmó con el viejo. Se le vuelve a mandar el enlace y listo.
+
+Normalmente no hace falta apretar nada: el CRM revisa el buzón en cada sincronización, o sea
+cada 15 segundos.
+
 **Sin correrlo el CRM funciona igual**: simplemente no se ofrece el enlace, y quedan los otros
 dos caminos —mandar el PDF para que lo firmen en papel, o capturar la firma delante del
 cliente—.

@@ -475,7 +475,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.10-19";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.10-20";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1294,6 +1294,17 @@ async function probarNube(url, anon){
       "Sin internet, o la dirección está mal escrita.");
   }
 
+  // El buzón donde los clientes dejan su firma
+  try{
+    const r = await fetch(url + "/rest/v1/crm_firmas?select=id&limit=1", { headers:{ apikey:anon } });
+    if (r.status === 404 || r.status === 406)
+      anota(true, "El enlace de firma no está habilitado",
+        "Es opcional. Para que los clientes puedan firmar en su pantalla, corre " +
+        "<code>firmas.sql</code> en el SQL Editor de Supabase.");
+    else
+      anota(true, "El buzón de firmas existe", "Los clientes pueden firmar desde su enlace.");
+  }catch(e){ /* si falla la red ya se dijo arriba */ }
+
   // La tabla
   try{
     const r = await fetch(url + "/rest/v1/crm_datos?select=id&limit=1", { headers:{ apikey:anon } });
@@ -1442,41 +1453,82 @@ async function subir(cambios, borrados){
  *
  * El cliente no escribe sobre su convenio —no podría, y no debe—: deposita su
  * firma en crm_firmas y de ahí la levanta el CRM. Se hace en cada
- * sincronización, así que el ejecutivo se entera al minuto siguiente sin tener
- * que preguntar nada.
+ * sincronización, así que el ejecutivo se entera al minuto siguiente.
+ *
+ * Devuelve un parte de lo que encontró, no un sí o un no: cuando una firma no
+ * se aplica hay que poder decir por qué, o se vuelve un misterio.
  */
 async function recogerFirmas(){
-  if (!nubeActiva() || nube.sinBuzon) return false;
+  const parte = { hubo:false, buzon:true, pendientes:0, aplicadas:0, notas:[] };
+  if (!nubeActiva()){ parte.buzon = false; parte.notas.push("No hay sesión en la nube."); return parte; }
+
   let filas;
   try{
     filas = await api("/rest/v1/crm_firmas?select=id,convenio_id,token,nombre,puesto,celular,img,creado&aplicada=is.false");
   }catch(e){
     // Sin firmas.sql corrido no existe el buzón. No es un error que reportar:
     // simplemente todavía no se usa esa forma de firmar.
-    if (/crm_firmas|schema cache|does not exist|404/i.test(e.message)){ nube.sinBuzon = true; return false; }
-    throw e;
+    if (/crm_firmas|schema cache|does not exist|404|PGRST205/i.test(e.message)){
+      nube.sinBuzon = true;
+      parte.buzon = false;
+      parte.notas.push("El buzón de firmas no existe todavía: falta correr firmas.sql en Supabase.");
+      return parte;
+    }
+    parte.notas.push("No se pudo leer el buzón: " + e.message);
+    return parte;
   }
-  if (!filas || !filas.length) return false;
 
-  let cambio = false;
-  for (const f of filas){
+  parte.pendientes = (filas || []).length;
+  for (const f of filas || []){
     const v = state.convenios.find(x => x.id === f.convenio_id);
-    // Se comprueba la clave otra vez de este lado: el servidor ya la validó,
-    // pero una firma que no cuadra no debe cerrar un convenio.
-    if (v && v.tokenFirma && v.tokenFirma === f.token && !v.firmaEmpresa){
+    if (!v){
+      parte.notas.push(`Hay una firma de ${f.nombre || "un cliente"} para un convenio que este equipo no tiene bajado.`);
+      continue;                                  // no se marca: otro equipo la aplicará
+    }
+    if (v.firmaEmpresa){
+      parte.notas.push(`El convenio ${v.folio} ya estaba firmado; se descartó una firma repetida.`);
+    } else if (!v.tokenFirma || v.tokenFirma !== f.token){
+      // Suele pasar si se rehizo el enlace: el cliente firmó con el viejo.
+      parte.notas.push(`La firma de ${f.nombre || "el cliente"} para ${v.folio} llegó con una clave que ya no corresponde. ` +
+        "Vuelve a mandarle el enlace.");
+    } else {
       cerrarConvenio(v, { nombre:f.nombre, puesto:f.puesto, celular:f.celular,
                           fecha:f.creado || new Date().toISOString(), img:f.img },
         "Firmado por el cliente desde el enlace que se le envió.", "");
-      cambio = true;
+      parte.aplicadas++;
+      parte.hubo = true;
     }
     try{
       await api(`/rest/v1/crm_firmas?id=eq.${encodeURIComponent(f.id)}`, {
         method:"PATCH", headers:{ "Prefer":"return=minimal" },
         body: JSON.stringify({ aplicada:true })
       });
-    }catch(e){ /* si no se pudo marcar, se volverá a intentar en el siguiente sondeo */ }
+    }catch(e){
+      parte.notas.push("La firma se aplicó pero no se pudo marcar como recogida; " +
+        "puede volver a aparecer en el siguiente sondeo. " + e.message);
+    }
   }
-  return cambio;
+  return parte;
+}
+
+/** El botón: busca ahora y cuenta qué pasó. */
+async function buscarFirmasAhora(e){
+  const b = e.currentTarget, antes = b.textContent;
+  b.disabled = true; b.textContent = "Buscando…";
+  try{
+    const p = await recogerFirmas();
+    if (p.hubo) render();
+    const cuerpo = !p.buzon
+      ? p.notas.join("\n")
+      : p.aplicadas
+        ? `Se aplicaron ${p.aplicadas} firma(s). Los convenios ya quedaron cerrados.`
+        : p.pendientes
+          ? `Había ${p.pendientes} firma(s) en el buzón, pero ninguna se pudo aplicar.`
+          : "El buzón está vacío: ningún cliente ha firmado desde su enlace todavía.";
+    alert(cuerpo + (p.notas.length && p.buzon ? "\n\n" + p.notas.join("\n") : ""));
+  }catch(ex){
+    alert("No se pudo revisar el buzón: " + ex.message);
+  }finally{ b.disabled = false; b.textContent = antes; }
 }
 
 function programarSubida(){
@@ -1524,7 +1576,7 @@ async function sincronizar(){
 
     // Las firmas que dejaron los clientes se recogen antes de subir, para que
     // el convenio cerrado viaje a los demás equipos en esta misma tanda.
-    if (await recogerFirmas()) render();
+    if ((await recogerFirmas()).hubo) render();
 
     const actuales = filasDeEstado();
     const cambios = actuales.filter(f => sincronizado.get(f.id) !== JSON.stringify(f.datos));
@@ -3017,6 +3069,7 @@ function renderAjustes(){
       <p style="margin:6px 0 0">
         <button class="btn primary" id="bNbGuardar">Guardar y conectar</button>
         <button class="btn" id="bNbProbar">Probar conexión</button>
+        <button class="btn" id="bNbFirmas">Buscar firmas de clientes</button>
         <button class="btn" id="bNbLiga">Copiar liga para otro equipo</button>
         <button class="btn" id="bNbTodo">Volver a subir todo</button>
         <button class="btn" id="bNbEntrar">Entrar con otra cuenta</button>
@@ -3305,6 +3358,7 @@ function renderAjustes(){
     p.querySelector("#bNbSalir").style.display  = nube.sesion ? "" : "none";
     p.querySelector("#bNbTodo").style.display   = nube.sesion ? "" : "none";
     p.querySelector("#bNbLiga").style.display   = (nube.url && nube.anon) ? "" : "none";
+    p.querySelector("#bNbFirmas").style.display = nube.sesion ? "" : "none";
     p.querySelector("#bNbQuitar").style.display = (nube.url || nube.anon) ? "" : "none";
 
     p.querySelector("#bNbGuardar").onclick = () => {
@@ -3342,6 +3396,7 @@ function renderAjustes(){
       }finally{ b.disabled = false; b.textContent = antes; }
     };
 
+    p.querySelector("#bNbFirmas").onclick = buscarFirmasAhora;
     p.querySelector("#bNbLiga").onclick = copiarInvitacion;
 
     p.querySelector("#bNbTodo").onclick = async e => {
