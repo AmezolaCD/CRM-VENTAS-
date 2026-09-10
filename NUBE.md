@@ -119,8 +119,12 @@ Por eso conviene dejar el nombre definitivo **antes** de repartir la liga al equ
 
 ### En el celular
 
-Abre la dirección en Chrome o Safari y usa *Agregar a pantalla de inicio*.
-Queda con su ícono, como cualquier otra aplicación.
+Abre la dirección en Chrome o Safari y usa *Agregar a pantalla de inicio*. Queda con su
+ícono y su nombre, como cualquier otra aplicación, y abre sin la barra del navegador.
+
+Si a alguien le quedó un ícono raro —un pedazo de la animación de entrada, por ejemplo—, es
+que lo instaló antes de que existiera el ícono propio: que lo quite de la pantalla de inicio
+y lo vuelva a agregar.
 
 ---
 
