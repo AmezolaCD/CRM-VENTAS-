@@ -196,6 +196,20 @@ El consecutivo se cuenta **por año**, y sale del folio más alto que ya exista 
 de cuántos convenios haya en total: contar el total repetía folios en cuanto se borraba uno, y
 hacía que enero arrancara donde se quedó diciembre. Un año sin convenios empieza en `001`.
 
+Se decide **al guardar, no al abrir** el editor: entre que alguien lo abre y le da guardar
+pueden pasar minutos, y en ese rato otro pudo haber tomado el número.
+
+**Dos ejecutivos capturando a la vez, cada uno en su equipo, pueden tomar el mismo folio**:
+cada quien cuenta con lo que tiene bajado y ninguno ve todavía el convenio del otro. Se
+detecta al sincronizar, segundos después, y se resuelve solo: **el que se creó primero
+conserva su folio** y el otro toma el siguiente libre, con constancia en la bitácora del
+cliente.
+
+Con una excepción deliberada: **un convenio ya firmado o ya enviado no se renumera por
+detrás**. Su folio va impreso en un PDF que anda en el correo de un cliente, y cambiárselo a
+escondidas sería peor que el problema. Esos se marcan como *repetido* en la lista, con un
+aviso arriba, para que una persona decida qué folio lleva cada uno.
+
 ##### Lo que se ve en la tabla
 
 La columna **Habitaciones** enseña las claves del convenio —`STKN`, `GDDO`, `CARE`— y no

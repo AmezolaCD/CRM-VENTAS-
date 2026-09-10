@@ -489,7 +489,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.10-25";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.10-26";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -945,7 +945,8 @@ function saneaConv(c){
   const o = Object.assign({ id:"", folio:"", clienteId:"", fecha:"", vigenciaDesde:"", vigenciaHasta:"",
     habitaciones:[], incluyeRecovery:false, notas:"", textos:null, grupos:null,
     estado:"borrador", firmaHotel:null, firmaEmpresa:null, createdAt:"", updatedAt:"",
-    tokenFirma:"", enviado:null, firmaManual:null, avisado:false, destinatario:null }, c || {});
+    tokenFirma:"", enviado:null, firmaManual:null, avisado:false, destinatario:null,
+    folioRepetido:"" }, c || {});
   o.id = o.id || nuevoId("v");
   if (!ESTADOS_CONV[o.estado]) o.estado = "borrador";
   o.textos = Object.assign({}, TEXTOS_DEF, o.textos || {});
@@ -954,6 +955,7 @@ function saneaConv(c){
   o.enviado      = saneaEnvio(o.enviado);
   o.firmaManual  = saneaManual(o.firmaManual);
   o.avisado      = !!o.avisado;
+  o.folioRepetido = String(o.folioRepetido || "");
   o.destinatario = o.destinatario && o.destinatario.empresa
     ? { empresa:o.destinatario.empresa || "", contacto:o.destinatario.contacto || "",
         ubicacion:o.destinatario.ubicacion || "", telefono:o.destinatario.telefono || "",
@@ -1618,6 +1620,7 @@ async function sincronizar(){
     // Las firmas que dejaron los clientes se recogen antes de subir, para que
     // el convenio cerrado viaje a los demás equipos en esta misma tanda.
     if ((await recogerFirmas()).hubo) render();
+    if (resolverFoliosRepetidos()) render();
 
     const actuales = filasDeEstado();
     const cambios = actuales.filter(f => sincronizado.get(f.id) !== JSON.stringify(f.datos));
@@ -2459,7 +2462,14 @@ function renderConvenios(){
   const mios = new Set(state.clientes.filter(esMio).map(c => c.id));
   const vs = state.convenios.filter(v => mios.has(v.clienteId))
     .sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-  const cab = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+  const repetidos = vs.filter(v => v.folioRepetido);
+  const cab = `${repetidos.length ? `<div class="note warn">
+      <b>Hay ${repetidos.length} convenio(s) con el folio repetido.</b>
+      Dos equipos tomaron el mismo número al mismo tiempo y estos ya estaban
+      firmados o enviados, así que no se les cambió solo: el folio va impreso en
+      un PDF que ya anda con el cliente. Ábrelos y decide qué folio lleva cada uno.
+      <br>${repetidos.map(v => esc(v.folio + " · " + nombreCli(v.clienteId))).join("<br>")}</div>` : ""}
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
       <b style="font-size:15px">Convenios</b><span class="hint">${vs.length} en total</span>
       <span style="flex:1"></span>
       <button class="btn primary" id="bNuevoConv">+ Nuevo convenio</button></div>`;
@@ -2474,7 +2484,9 @@ function renderConvenios(){
       <tbody>${vs.map(v => {
         const ec = ESTADOS_CONV[v.estado];
         return `<tr class="row-link" data-id="${v.id}">
-          <td><b>${esc(v.folio || "—")}</b></td>
+          <td><b>${esc(v.folio || "—")}</b>${v.folioRepetido
+            ? ` <span class="pill" style="background:var(--bad-soft);color:var(--bad)"
+                 title="Otro convenio tiene este mismo folio">repetido</span>` : ""}</td>
           <td>${esc(nombreCli(v.clienteId))}</td>
           <td class="nowrap">${esc(fechaCorta(v.fecha))}</td>
           <td class="nowrap">${v.vigenciaHasta ? "hasta " + esc(fechaCorta(v.vigenciaHasta)) : "—"}</td>
@@ -4000,6 +4012,66 @@ function folioAuto(anio){
 const anioConvenio = v =>
   String(v.vigenciaDesde || v.fecha || hoyISO()).slice(0, 4) || String(new Date().getFullYear());
 
+/** El primer folio libre de un año, saltándose los que ya existan. */
+function folioLibre(anio, excluirId){
+  const usados = new Set(state.convenios
+    .filter(v => v.id !== excluirId)
+    .map(v => String(v.folio || "").trim().toUpperCase()));
+  const a = String(anio || new Date().getFullYear()).slice(0, 4);
+  const re = new RegExp("^CV-" + a + "-(\\d+)$", "i");
+  let n = Math.max(0, ...state.convenios
+    .filter(v => v.id !== excluirId)
+    .map(v => Number((re.exec(String(v.folio || "").trim()) || [])[1]) || 0)) + 1;
+  let f;
+  do { f = `CV-${a}-${String(n++).padStart(3, "0")}`; } while (usados.has(f));
+  return f;
+}
+
+/** ¿Tiene la forma que arma la aplicación sola? */
+const folioAutomatico = f => /^CV-\d{4}-\d+$/i.test(String(f || "").trim());
+
+/**
+ * Dos ejecutivos capturando a la vez, cada uno en su equipo, pueden tomar el
+ * mismo folio: cada quien cuenta con lo que tiene bajado en ese momento y
+ * ninguno ve todavía el convenio del otro. Se detecta al sincronizar, que es
+ * segundos después.
+ *
+ * Se renumera el que se creó después, y sólo si sigue en borrador: un convenio
+ * ya firmado o ya enviado lleva su folio impreso en un PDF que anda en el
+ * correo de un cliente, y cambiárselo por detrás sería peor que el problema.
+ * Esos se marcan para que alguien decida.
+ */
+function resolverFoliosRepetidos(){
+  const porFolio = new Map();
+  for (const v of state.convenios){
+    const f = String(v.folio || "").trim().toUpperCase();
+    if (!f) continue;
+    if (!porFolio.has(f)) porFolio.set(f, []);
+    porFolio.get(f).push(v);
+  }
+
+  let cambio = false;
+  for (const [folio, grupo] of porFolio){
+    if (grupo.length < 2) continue;
+    // El primero en crearse se queda con el folio.
+    grupo.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    for (const v of grupo.slice(1)){
+      const intocable = v.estado !== "borrador" || v.enviado || v.firmaHotel;
+      if (intocable){ v.folioRepetido = folio; continue; }
+      const nuevo = folioLibre(anioConvenio(v), v.id);
+      registrarAuto(v.clienteId, `El convenio ${v.folio} se renumeró como ${nuevo}`,
+        `Otro equipo había tomado el folio ${v.folio} al mismo tiempo. Como este seguía en ` +
+        "borrador, se le dio el siguiente libre.", "");
+      v.folio = nuevo;
+      v.folioRepetido = "";
+      v.updatedAt = new Date().toISOString();
+      cambio = true;
+    }
+  }
+  if (cambio) guardar();
+  return cambio;
+}
+
 
 function editarConvenio(id, clientePre, alCerrar){
   const existente = id ? state.convenios.find(v => v.id === id) : null;
@@ -4224,6 +4296,23 @@ function editarConvenio(id, clientePre, alCerrar){
     }));
   }
 
+  /**
+   * El folio se decide al guardar, no al abrir el editor.
+   *
+   * Entre que alguien abre el editor y le da guardar pueden pasar minutos, y
+   * en ese rato otro pudo haber tomado el mismo número. Sólo se recalcula si
+   * sigue siendo el que puso la aplicación: si lo escribieron a mano, manda
+   * lo que escribieron aunque se repita.
+   */
+  function folioAlGuardar(){
+    const escrito = ov.querySelector("#cFolio").value.trim();
+    if (!folioAutomatico(escrito)) return escrito;
+    const chocado = state.convenios.some(x =>
+      x.id !== v.id && String(x.folio || "").trim().toUpperCase() === escrito.toUpperCase());
+    if (!chocado) return escrito;
+    return folioLibre(String(ov.querySelector("#cDesde").value || escrito.slice(3, 7)).slice(0, 4), v.id);
+  }
+
   function recoger(){
     const cid = ov.querySelector("#cCli").value;
     if (!cid){
@@ -4244,7 +4333,7 @@ function editarConvenio(id, clientePre, alCerrar){
 
     Object.assign(v, {
       clienteId: cid,
-      folio: ov.querySelector("#cFolio").value.trim(),
+      folio: folioAlGuardar(),
       fecha: ov.querySelector("#cFecha").value || hoyISO(),
       vigenciaDesde: desde, vigenciaHasta: hasta,
       incluyeRecovery: ov.querySelector("#cRec").checked,
