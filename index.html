@@ -264,14 +264,32 @@
   .act-del{background:transparent; border:0; color:var(--muted); cursor:pointer; padding:0 4px; flex:0 0 auto}
   .act-del:hover{color:var(--bad)}
 
-  .sign-pad{border:1px dashed var(--line); border-radius:8px; background:var(--panel-2);
+  .sign-pad{border:1px dashed var(--line); border-radius:8px; background:#fff;
     touch-action:none; width:100%; height:170px; display:block; cursor:crosshair}
+  @media (max-width:640px){ .sign-pad{height:200px} }
 
   /* ---------- Documento (carta-convenio) ---------- */
   .doc-body{padding:30px 40px 34px; font-size:12.4px; line-height:1.5; color:#2b0d3a;
     background:#fff; position:relative; overflow:hidden}
   /* Marca de agua tipo hoja membretada: va como elemento, no como fondo CSS,
      para que también salga al imprimir. */
+  /* La página que abre el cliente. El CRM ocupa la pantalla completa y no se
+     desplaza —las columnas del tablero se desplazan solas—, pero un documento
+     de varias páginas sí tiene que poder recorrerse de arriba abajo. */
+  html.modo-firma, html.modo-firma body{
+    height:auto; min-height:100%; overflow:visible; display:block; background:var(--bg)}
+  #firmaCliente{max-width:860px; margin:0 auto; padding:16px 12px 70px}
+  #firmaCliente .hoja-cliente{border-radius:10px; box-shadow:var(--shadow); margin:0 0 20px}
+  /* El convenio es papel y va sobre .doc-body, que trae su propio blanco y su
+     propia tinta: así se lee igual traiga el teléfono el tema que traiga. */
+  #firmaCliente .doc-body table.tar{font-size:11.5px}
+  @media (max-width:640px){
+    #firmaCliente .hoja-cliente{padding:18px 15px 20px; font-size:13px}
+    #firmaCliente .doc-cols, #firmaCliente .firmas{flex-direction:column; gap:16px}
+    #firmaCliente .doc-body table.tar{font-size:11px}
+    #firmaCliente .doc-body table.tar th, #firmaCliente .doc-body table.tar td{padding:5px 6px}
+  }
+
   .doc-agua{position:absolute; top:90px; left:0; right:0; height:840px;
     display:flex; align-items:center; justify-content:center; pointer-events:none;
     z-index:0; opacity:.05; -webkit-print-color-adjust:exact; print-color-adjust:exact}
@@ -457,7 +475,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.10-16";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.10-18";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -899,7 +917,7 @@ function saneaConv(c){
   const o = Object.assign({ id:"", folio:"", clienteId:"", fecha:"", vigenciaDesde:"", vigenciaHasta:"",
     habitaciones:[], incluyeRecovery:false, notas:"", textos:null, grupos:null,
     estado:"borrador", firmaHotel:null, firmaEmpresa:null, createdAt:"", updatedAt:"",
-    tokenFirma:"", enviado:null, firmaManual:null, avisado:false }, c || {});
+    tokenFirma:"", enviado:null, firmaManual:null, avisado:false, destinatario:null }, c || {});
   o.id = o.id || nuevoId("v");
   if (!ESTADOS_CONV[o.estado]) o.estado = "borrador";
   o.textos = Object.assign({}, TEXTOS_DEF, o.textos || {});
@@ -908,6 +926,11 @@ function saneaConv(c){
   o.enviado      = saneaEnvio(o.enviado);
   o.firmaManual  = saneaManual(o.firmaManual);
   o.avisado      = !!o.avisado;
+  o.destinatario = o.destinatario && o.destinatario.empresa
+    ? { empresa:o.destinatario.empresa || "", contacto:o.destinatario.contacto || "",
+        ubicacion:o.destinatario.ubicacion || "", telefono:o.destinatario.telefono || "",
+        email:o.destinatario.email || "" }
+    : null;
   o.grupos = saneaGrupos(o.grupos);
   o.habitaciones = (Array.isArray(o.habitaciones) ? o.habitaciones : []).map(h => ({
     tipoId: h.tipoId || "", codigo: h.codigo || "", nombre: h.nombre || "",
@@ -4066,6 +4089,9 @@ function editarConvenio(id, clientePre, alCerrar){
 
 /** Cuerpo de la carta-convenio. Se usa para verla, imprimirla y armar el PDF. */
 function cuerpoConvenio(v, c){
+  // En la página del cliente no hay cartera que consultar: el destinatario
+  // viene congelado dentro del propio convenio.
+  if (!(c && c.empresa) && v.destinatario) c = v.destinatario;
   const h = state.ajustes.hotel;
   const t = v.textos;
   const T = k => vars(t[k], v, c);
@@ -4261,6 +4287,8 @@ function firmar(v, quien, d){
     v.firmaHotel = f;
     v.estado = "firmado_ejecutiva";
     v.tokenFirma = v.tokenFirma || nuevoToken();   // habilita el enlace del cliente
+    if (c) v.destinatario = { empresa:c.empresa, contacto:c.contacto,
+      ubicacion:c.ubicacion, telefono:c.telefono, email:c.email };
     if (c && !est(c.estatus).lost){ c.estatus = "cotizacion_enviada"; c.updatedAt = fecha; }
     registrarAuto(v.clienteId, `Convenio ${v.folio} firmado por el ejecutivo`,
       `Firmado por ${d.nombre}. Listo para enviarse al cliente.\nEl cliente pasó a "Cotización enviada".`, d.nombre);
@@ -4362,8 +4390,7 @@ const enlaceDeFirma = () => {
 
 function pantallaFirmaCliente(datos){
   document.documentElement.classList.add("modo-firma");
-  document.body.innerHTML = `<div id="firmaCliente" class="doc-body"
-    style="max-width:860px;margin:0 auto;padding:22px 18px 60px"></div>`;
+  document.body.innerHTML = `<div id="firmaCliente"></div>`;
   const caja = document.getElementById("firmaCliente");
   const aviso = (clase, html) => { caja.innerHTML = `<div class="note ${clase}">${html}</div>`; };
 
@@ -4412,10 +4439,9 @@ function dibujarParaFirmar(caja, v, datos, pedir){
       use <i>Descargar en PDF</i> y devuélvasela a su ejecutivo.</div>
     <p style="text-align:right;margin:0 0 12px">
       <button class="btn" id="bBajarCli">Descargar en PDF</button></p>
-    <div class="doc-contenido" style="position:relative;background:var(--panel);
-         padding:22px 26px;border:1px solid var(--line);border-radius:10px">
+    <div class="doc-body hoja-cliente">
       ${agua ? `<div class="doc-agua">${agua}</div>` : ""}
-      ${cuerpoConvenio(v, c)}
+      <div class="doc-contenido">${cuerpoConvenio(v, c)}</div>
     </div>
     <div id="zonaFirma" style="max-width:520px;margin:26px auto 0"></div>`;
 

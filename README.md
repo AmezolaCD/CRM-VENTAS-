@@ -173,6 +173,11 @@ El cliente no tiene cuenta ni tiene por qué tenerla. El enlace lleva una clave 
 azar, y esa clave es **lo único que abre ese convenio y ningún otro**. Al abrirlo, la
 aplicación se convierte en su documento: no enseña tablero, ni cartera, ni pestañas.
 
+El convenio se le enseña **como papel: tinta oscura sobre blanco**, traiga su teléfono el tema
+que traiga. Y el destinatario va **congelado dentro del propio convenio**, junto con las
+tarifas y los textos: la carta que ve el cliente no depende de que nadie ande editando su
+ficha mientras tanto.
+
 La firma **no se escribe encima del convenio**. El visitante la deja en un buzón aparte donde
 puede depositar pero no leer ni corregir, y de ahí la levanta el CRM en la siguiente
 sincronización. Así, aunque alguien anduviera de mirón, no podría leer convenios ajenos ni
