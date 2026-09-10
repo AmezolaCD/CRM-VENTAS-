@@ -186,6 +186,13 @@ alterar el suyo. La clave deja de servir en cuanto se firma.
 Todo esto lo habilita `firmas.sql`. **Sin correrlo, el CRM funciona igual**: el enlace no se
 ofrece y quedan los otros dos caminos.
 
+##### Lo que se ve en la tabla
+
+La columna **Habitaciones** enseña las claves del convenio —`STKN`, `GDDO`, `CARE`— y no
+cuántas son: un número no dice nada de un vistazo, y la clave es la que usa el equipo a
+diario. Las de Recovery van en dorado, que es lo que antes decía el "+R". Al pasar el cursor
+salen los nombres completos, para quien no se las sepa de memoria.
+
 ##### El aviso al ejecutivo
 
 Cuando un cliente firma, aparece un aviso en el encabezado del CRM: *«Grupo Marín firmó el

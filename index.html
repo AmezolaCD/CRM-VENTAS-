@@ -264,6 +264,10 @@
   .act-del{background:transparent; border:0; color:var(--muted); cursor:pointer; padding:0 4px; flex:0 0 auto}
   .act-del:hover{color:var(--bad)}
 
+  .cod{display:inline-block; font-size:11px; font-weight:700; letter-spacing:.04em;
+    color:var(--muted); background:var(--panel-2); border-radius:4px; padding:1px 5px; margin:1px 0}
+  .cod.rec{color:var(--ok); background:var(--ok-soft)}
+
   .sign-pad{border:1px dashed var(--line); border-radius:8px; background:#fff;
     touch-action:none; width:100%; height:170px; display:block; cursor:crosshair}
   @media (max-width:640px){ .sign-pad{height:200px} }
@@ -475,7 +479,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.10-20";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.10-21";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2380,6 +2384,24 @@ function renderClientes(){
   }));
 }
 
+/**
+ * Las claves de las habitaciones que trae un convenio: STKN, GDDO, CARE…
+ *
+ * Un número —"3 habitaciones"— no dice nada útil de un vistazo; la clave sí,
+ * porque es la que el equipo usa a diario. Las de Recovery van marcadas en
+ * otro color, que es lo que antes decía el "+R".
+ */
+function codigosConvenio(v){
+  if (!v.habitaciones.length) return `<span class="hint">—</span>`;
+  return v.habitaciones.map(x =>
+    `<span class="cod${x.grupo === "recovery" ? " rec" : ""}">${esc(x.codigo || x.nombre)}</span>`
+  ).join(" ");
+}
+
+/** Los nombres completos, para quien no se sepa las claves de memoria. */
+const nombresConvenio = v => v.habitaciones
+  .map(x => (x.codigo ? x.codigo + " · " : "") + x.nombre).join("\n");
+
 function renderConvenios(){
   const cont = document.getElementById("tblConvenios");
   const mios = new Set(state.clientes.filter(esMio).map(c => c.id));
@@ -2396,7 +2418,7 @@ function renderConvenios(){
   } else {
     cont.innerHTML = cab + `<table class="data">
       <thead><tr><th>Folio</th><th>Cliente</th><th>Fecha</th><th>Vigencia</th>
-        <th class="num">Hab.</th><th>Estado</th><th>Enviado</th><th>Firmas</th><th></th></tr></thead>
+        <th>Habitaciones</th><th>Estado</th><th>Enviado</th><th>Firmas</th><th></th></tr></thead>
       <tbody>${vs.map(v => {
         const ec = ESTADOS_CONV[v.estado];
         return `<tr class="row-link" data-id="${v.id}">
@@ -2404,7 +2426,7 @@ function renderConvenios(){
           <td>${esc(nombreCli(v.clienteId))}</td>
           <td class="nowrap">${esc(fechaCorta(v.fecha))}</td>
           <td class="nowrap">${v.vigenciaHasta ? "hasta " + esc(fechaCorta(v.vigenciaHasta)) : "—"}</td>
-          <td class="num">${v.habitaciones.length}${v.incluyeRecovery ? " +R" : ""}</td>
+          <td style="max-width:230px" title="${esc(nombresConvenio(v))}">${codigosConvenio(v)}</td>
           <td><span class="estado-chip" style="background:${ec.bg};color:${ec.fg}">${esc(ec.name)}</span></td>
           <td class="nowrap">${selloEnvio(v)}</td>
           <td class="nowrap">${v.firmaHotel ? "✍️ Hotel" : "—"}${
@@ -3608,13 +3630,13 @@ function abrirCliente(id, estatusInicial, pane){
         <button class="btn primary" id="bAddConv">+ Nuevo convenio</button>
       </div>
       ${lista.length ? `<table class="data"><thead><tr>
-          <th>Folio</th><th>Fecha</th><th class="num">Hab.</th><th>Estado</th><th></th></tr></thead>
+          <th>Folio</th><th>Fecha</th><th>Habitaciones</th><th>Estado</th><th></th></tr></thead>
         <tbody>${lista.map(v => {
           const ec = ESTADOS_CONV[v.estado];
           return `<tr class="row-link" data-conv="${v.id}">
             <td><b>${esc(v.folio || "—")}</b></td>
             <td class="nowrap">${esc(fechaCorta(v.fecha))}</td>
-            <td class="num">${v.habitaciones.length}</td>
+            <td style="max-width:190px" title="${esc(nombresConvenio(v))}">${codigosConvenio(v)}</td>
             <td><span class="estado-chip" style="background:${ec.bg};color:${ec.fg}">${esc(ec.name)}</span></td>
             <td class="nowrap"><button class="btn sm" data-verconv="${v.id}">Ver carta</button></td></tr>`;
         }).join("")}</tbody></table>`
