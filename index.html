@@ -122,6 +122,11 @@
   nav button[aria-current="true"]{background:var(--panel); color:var(--text); box-shadow:var(--shadow)}
   .spacer{flex:1 1 auto}
   #estadoNube{display:inline-flex; align-items:center; gap:6px; cursor:default}
+  .pill.aviso{display:inline-flex; align-items:center; gap:6px; cursor:pointer; border:0;
+    background:var(--ok-soft); color:var(--ok); font-weight:600; animation:latir 2s ease-in-out 3}
+  .pill.aviso:hover{filter:brightness(1.06)}
+  @keyframes latir{0%,100%{transform:scale(1)} 50%{transform:scale(1.06)}}
+  @media (prefers-reduced-motion: reduce){ .pill.aviso{animation:none} }
   .punto-nube{width:8px; height:8px; border-radius:50%; flex:0 0 auto}
   .tools{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
 
@@ -424,6 +429,8 @@
     <button class="btn primary" id="bNuevo">+ Cliente</button>
     <button class="btn" id="bImport">Importar</button>
     <button class="btn" id="bExport">Exportar</button>
+    <button id="avisos" class="pill aviso" type="button" style="display:none"
+      title="Convenios firmados por el cliente"></button>
     <span id="estadoNube" class="pill" style="display:none"></span>
     <button class="btn" id="bTema" title="Cambiar tema">◐</button>
   </div>
@@ -450,7 +457,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.09-15";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.10-16";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -891,12 +898,16 @@ function saneaFirma(f){
 function saneaConv(c){
   const o = Object.assign({ id:"", folio:"", clienteId:"", fecha:"", vigenciaDesde:"", vigenciaHasta:"",
     habitaciones:[], incluyeRecovery:false, notas:"", textos:null, grupos:null,
-    estado:"borrador", firmaHotel:null, firmaEmpresa:null, createdAt:"", updatedAt:"" }, c || {});
+    estado:"borrador", firmaHotel:null, firmaEmpresa:null, createdAt:"", updatedAt:"",
+    tokenFirma:"", enviado:null, firmaManual:null, avisado:false }, c || {});
   o.id = o.id || nuevoId("v");
   if (!ESTADOS_CONV[o.estado]) o.estado = "borrador";
   o.textos = Object.assign({}, TEXTOS_DEF, o.textos || {});
   o.firmaHotel   = saneaFirma(o.firmaHotel);
   o.firmaEmpresa = saneaFirma(o.firmaEmpresa);
+  o.enviado      = saneaEnvio(o.enviado);
+  o.firmaManual  = saneaManual(o.firmaManual);
+  o.avisado      = !!o.avisado;
   o.grupos = saneaGrupos(o.grupos);
   o.habitaciones = (Array.isArray(o.habitaciones) ? o.habitaciones : []).map(h => ({
     tipoId: h.tipoId || "", codigo: h.codigo || "", nombre: h.nombre || "",
@@ -917,17 +928,23 @@ function saneaHuesped(g){
   return o;
 }
 
-/**
- * Constancia de que la carta salió: cuándo, por dónde y desde qué cuenta.
- *
- * Ojo con lo que esto significa de verdad: la aplicación abre el correo o
- * WhatsApp, pero no puede asomarse a ver si el mensaje se mandó o si la
- * persona se arrepintió a media captura. Así que la marca dice "de aquí salió
- * la carta", no "el huésped ya la tiene", y por eso se puede desmarcar a mano.
- */
 function saneaEnvio(e){
   if (!e || !e.fecha) return null;
   return { fecha: e.fecha, via: e.via === "whatsapp" ? "whatsapp" : "correo", quien: e.quien || "" };
+}
+
+/** Constancia de que el cliente lo firmó en papel y alguien subió el escaneado. */
+function saneaManual(m){
+  if (!m || !m.fecha) return null;
+  return { fecha:m.fecha, quien:m.quien || "", archivo:m.archivo || "",
+           pdf: typeof m.pdf === "string" ? m.pdf : "" };
+}
+
+/** Clave del enlace de firma: larga y al azar, para que no se pueda adivinar. */
+function nuevoToken(){
+  const b = new Uint8Array(18);
+  crypto.getRandomValues(b);
+  return [...b].map(x => x.toString(36).padStart(2,"0")).join("").slice(0, 28);
 }
 
 const VIAS = { correo:"correo", whatsapp:"WhatsApp" };
@@ -1397,6 +1414,48 @@ async function subir(cambios, borrados){
   }
 }
 
+/**
+ * Recoge del buzón las firmas que dejaron los clientes.
+ *
+ * El cliente no escribe sobre su convenio —no podría, y no debe—: deposita su
+ * firma en crm_firmas y de ahí la levanta el CRM. Se hace en cada
+ * sincronización, así que el ejecutivo se entera al minuto siguiente sin tener
+ * que preguntar nada.
+ */
+async function recogerFirmas(){
+  if (!nubeActiva() || nube.sinBuzon) return false;
+  let filas;
+  try{
+    filas = await api("/rest/v1/crm_firmas?select=id,convenio_id,token,nombre,puesto,celular,img,creado&aplicada=is.false");
+  }catch(e){
+    // Sin firmas.sql corrido no existe el buzón. No es un error que reportar:
+    // simplemente todavía no se usa esa forma de firmar.
+    if (/crm_firmas|schema cache|does not exist|404/i.test(e.message)){ nube.sinBuzon = true; return false; }
+    throw e;
+  }
+  if (!filas || !filas.length) return false;
+
+  let cambio = false;
+  for (const f of filas){
+    const v = state.convenios.find(x => x.id === f.convenio_id);
+    // Se comprueba la clave otra vez de este lado: el servidor ya la validó,
+    // pero una firma que no cuadra no debe cerrar un convenio.
+    if (v && v.tokenFirma && v.tokenFirma === f.token && !v.firmaEmpresa){
+      cerrarConvenio(v, { nombre:f.nombre, puesto:f.puesto, celular:f.celular,
+                          fecha:f.creado || new Date().toISOString(), img:f.img },
+        "Firmado por el cliente desde el enlace que se le envió.", "");
+      cambio = true;
+    }
+    try{
+      await api(`/rest/v1/crm_firmas?id=eq.${encodeURIComponent(f.id)}`, {
+        method:"PATCH", headers:{ "Prefer":"return=minimal" },
+        body: JSON.stringify({ aplicada:true })
+      });
+    }catch(e){ /* si no se pudo marcar, se volverá a intentar en el siguiente sondeo */ }
+  }
+  return cambio;
+}
+
 function programarSubida(){
   if (!nubeActiva()) return;
   clearTimeout(nube.pendiente);
@@ -1439,6 +1498,10 @@ async function sincronizar(){
         render();
       }
     }
+
+    // Las firmas que dejaron los clientes se recogen antes de subir, para que
+    // el convenio cerrado viaje a los demás equipos en esta misma tanda.
+    if (await recogerFirmas()) render();
 
     const actuales = filasDeEstado();
     const cambios = actuales.filter(f => sincronizado.get(f.id) !== JSON.stringify(f.datos));
@@ -2081,6 +2144,7 @@ function render(){
     ["convenios","confirmaciones","ajustes","actividades"].includes(vista) ? "none" : "";
 
   renderEjecutivos();
+  pintarAvisos();
   if (vista === "tablero")   { renderKpis(); renderTablero(); }
   if (vista === "clientes")  renderClientes();
   if (vista === "actividades") renderActividades();
@@ -2257,7 +2321,7 @@ function renderConvenios(){
   } else {
     cont.innerHTML = cab + `<table class="data">
       <thead><tr><th>Folio</th><th>Cliente</th><th>Fecha</th><th>Vigencia</th>
-        <th class="num">Hab.</th><th>Recovery</th><th>Estado</th><th>Firmas</th><th></th></tr></thead>
+        <th class="num">Hab.</th><th>Estado</th><th>Enviado</th><th>Firmas</th><th></th></tr></thead>
       <tbody>${vs.map(v => {
         const ec = ESTADOS_CONV[v.estado];
         return `<tr class="row-link" data-id="${v.id}">
@@ -2265,10 +2329,11 @@ function renderConvenios(){
           <td>${esc(nombreCli(v.clienteId))}</td>
           <td class="nowrap">${esc(fechaCorta(v.fecha))}</td>
           <td class="nowrap">${v.vigenciaHasta ? "hasta " + esc(fechaCorta(v.vigenciaHasta)) : "—"}</td>
-          <td class="num">${v.habitaciones.length}</td>
-          <td>${v.incluyeRecovery ? "Sí" : "No"}</td>
+          <td class="num">${v.habitaciones.length}${v.incluyeRecovery ? " +R" : ""}</td>
           <td><span class="estado-chip" style="background:${ec.bg};color:${ec.fg}">${esc(ec.name)}</span></td>
-          <td class="nowrap">${v.firmaHotel ? "✍️ Hotel" : "—"}${v.firmaEmpresa ? " · ✍️ Empresa" : ""}</td>
+          <td class="nowrap">${selloEnvio(v)}</td>
+          <td class="nowrap">${v.firmaHotel ? "✍️ Hotel" : "—"}${
+            v.firmaEmpresa ? " · ✍️ Empresa" : v.firmaManual ? " · 📄 En papel" : ""}</td>
           <td class="nowrap"><button class="btn sm" data-doc="${v.id}">Ver carta</button></td>
         </tr>`;
       }).join("")}</tbody></table>`;
@@ -2286,7 +2351,7 @@ function renderConvenios(){
    CONFIRMACIONES DE HOSPEDAJE
    ========================================================================== */
 
-/** Sello de "ya se mandó" para la tabla y para la carta abierta. */
+/** Sello de "ya se mandó", para la carta de un huésped o el enlace de un convenio. */
 function selloEnvio(g){
   if (!g.enviado)
     return `<span class="pill" title="Todavía no se manda desde aquí">Sin enviar</span>`;
@@ -4120,9 +4185,12 @@ function verConvenio(id, alCerrar, pedirFirma){
         ${v.estado === "borrador" ? `<button class="btn" id="bEdit">Editar</button>` : ""}
         <div class="spacer"></div>
         ${!v.firmaHotel ? `<button class="btn ok" id="bF1">Firmar como ejecutivo</button>` : ""}
-        ${v.firmaHotel && !v.firmaEmpresa ? `<button class="btn" id="bEnviar">Enviar al cliente</button>
+        ${v.firmaHotel && v.estado !== "firmado_cliente" ? `<button class="btn primary" id="bEnviar">Enviar al cliente</button>
+          <button class="btn" id="bSubirF">Subir convenio firmado</button>
           <button class="btn ok" id="bF2">Registrar firma del cliente</button>` : ""}
-        ${v.firmaEmpresa ? `<span class="hint">Convenio cerrado. El cliente pasó a <b>Ganado</b>.</span>` : ""}
+        ${v.estado === "firmado_cliente" ? `<span class="hint">Convenio cerrado. El cliente pasó a <b>Ganado</b>.${
+          v.firmaManual ? ` Firmado en papel.` : ""}</span>
+          ${v.firmaManual && v.firmaManual.pdf ? `<button class="btn sm" id="bVerEscaneo">Ver el escaneado</button>` : ""}` : ""}
       </div>
     </div>`);
 
@@ -4160,7 +4228,25 @@ function verConvenio(id, alCerrar, pedirFirma){
     d => { firmar(v, "empresa", d); ov.remove(); verConvenio(v.id, alCerrar); });
 
   const env = ov.querySelector("#bEnviar");
-  if (env) env.onclick = () => enviarConvenio(v, c);
+  if (env) env.onclick = () => {
+    // Un convenio firmado antes de que existiera el enlace no tiene clave: se
+    // le hace una al vuelo en vez de mandarlo sin poder firmar en pantalla.
+    if (!v.tokenFirma && puedeMandarLiga()){ v.tokenFirma = nuevoToken(); guardar(); }
+    enviarConvenio(v, c);
+  };
+
+  const bs = ov.querySelector("#bSubirF");
+  if (bs) bs.onclick = () => subirConvenioFirmado(v, () => { ov.remove(); verConvenio(v.id, alCerrar); });
+
+  const bve = ov.querySelector("#bVerEscaneo");
+  if (bve) bve.onclick = () => {
+    const w = window.open("", "_blank", "noopener");
+    if (!w){ alert("El navegador bloqueó la ventana. Permite las ventanas emergentes."); return; }
+    w.document.write(`<title>${esc(v.firmaManual.archivo)}</title>` +
+      `<iframe src="${esc(v.firmaManual.pdf)}" style="border:0;width:100%;height:100vh"></iframe>`);
+  };
+
+  marcarVisto(v);
 
   if (pedirFirma && !v.firmaHotel && f1) setTimeout(() => f1.click(), 60);
 }
@@ -4174,59 +4260,348 @@ function firmar(v, quien, d){
   if (quien === "hotel"){
     v.firmaHotel = f;
     v.estado = "firmado_ejecutiva";
+    v.tokenFirma = v.tokenFirma || nuevoToken();   // habilita el enlace del cliente
     if (c && !est(c.estatus).lost){ c.estatus = "cotizacion_enviada"; c.updatedAt = fecha; }
     registrarAuto(v.clienteId, `Convenio ${v.folio} firmado por el ejecutivo`,
       `Firmado por ${d.nombre}. Listo para enviarse al cliente.\nEl cliente pasó a "Cotización enviada".`, d.nombre);
   } else {
     if (!v.firmaHotel){ alert("Primero debe firmar el ejecutivo de ventas."); return; }
-    v.firmaEmpresa = f;
-    v.estado = "firmado_cliente";
-    if (c){
-      c.estatus = "ganado";
-      c.updatedAt = fecha;
-      const precios = v.habitaciones.map(x => Number(x.convenio)).filter(n => n > 0);
-      if (precios.length) c.tarifa = Math.min(...precios);
-    }
-    registrarAuto(v.clienteId, `Convenio ${v.folio} firmado por el cliente`,
-      `Firmado por ${d.nombre}. El cliente pasó automáticamente a "Ganado".`, (c && c.ejecutivo) || "");
+    cerrarConvenio(v, f, `Firmado por ${d.nombre}, capturado por el ejecutivo.`, (c && c.ejecutivo) || "");
+    v.avisado = true;          // lo capturó el propio ejecutivo: no hay nada que avisarle
+    guardar(); render();
+    return;
   }
   v.updatedAt = fecha;
   guardar(); render();
 }
 
+/**
+ * El cliente lo firmó en papel y alguien lo escaneó.
+ *
+ * El archivo se guarda dentro del convenio, y el convenio viaja completo a
+ * cada equipo en cada sincronización: por eso el límite de tamaño es bajo y se
+ * dice en voz alta. Un escaneado de 8 MB haría lenta la aplicación para todos,
+ * todo el día, por un documento que se consulta una vez al año.
+ */
+function subirConvenioFirmado(v, alTerminar){
+  const c = cliente(v.clienteId);
+  const ov = modal(`
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head"><h2>Subir convenio firmado</h2><button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <p class="hint" style="margin-top:0">Para cuando el cliente lo firmó en papel. Al subirlo,
+          el convenio queda <b>Firmado por cliente</b> y <b>${esc((c && c.empresa) || "el cliente")}</b>
+          pasa a <b>Ganado</b>, igual que si lo hubiera firmado en pantalla.</p>
+        <div class="grid">
+          <div class="full"><label class="lbl">El PDF escaneado</label>
+            <input type="file" class="field" id="fPdfFirmado" accept="application/pdf,image/*">
+            <div class="hint">PDF o foto, <b>máximo 2 MB</b>. El archivo viaja a todos los
+              equipos en cada sincronización, así que uno pesado los hace lentos a todos.
+              Si tu escáner lo saca muy grande, sube una foto del documento.</div></div>
+          <div class="full"><label class="lbl">¿Quién lo recibió?</label>
+            <input class="field" id="fQuienRecibe" value="${esc(miNombre() || (c && c.ejecutivo) || "")}"></div>
+        </div>
+        <div id="errPdf" style="margin-top:10px"></div>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="bOkPdf">Subir y cerrar el convenio</button></div>
+    </div>`);
+
+  ov.querySelector("#bOkPdf").onclick = () => {
+    const f = ov.querySelector("#fPdfFirmado").files[0];
+    const err = ov.querySelector("#errPdf");
+    if (!f){ err.innerHTML = `<div class="errbox">Elige el archivo escaneado.</div>`; return; }
+    const MAX = 2 * 1024 * 1024;
+    if (f.size > MAX){
+      err.innerHTML = `<div class="errbox">Pesa ${Math.round(f.size/1024/1024*10)/10} MB y el límite
+        son 2 MB. Vuelve a escanearlo en blanco y negro o a menor resolución, o toma una foto.</div>`;
+      return;
+    }
+    const r = new FileReader();
+    r.onload = () => {
+      v.firmaManual = saneaManual({ fecha:new Date().toISOString(),
+        quien: ov.querySelector("#fQuienRecibe").value.trim(),
+        archivo: f.name, pdf: String(r.result) });
+      // Sin firma trazada: la constancia es el archivo.
+      cerrarConvenio(v, null, `Firmado en papel. Se subió el archivo "${f.name}".`,
+        v.firmaManual.quien);
+      v.avisado = true;        // lo subió el propio equipo: no hay novedad que avisar
+      guardar(); render();
+      ov.remove();
+      if (alTerminar) alTerminar();
+    };
+    r.onerror = () => { err.innerHTML = `<div class="errbox">No se pudo leer el archivo.</div>`; };
+    r.readAsDataURL(f);
+  };
+}
+
+/* ==========================================================================
+   LA PÁGINA DEL CLIENTE
+
+   El cliente no tiene cuenta ni tiene por qué tenerla: abre un enlace, lee su
+   convenio y firma. Esta parte de la aplicación se enciende cuando el enlace
+   trae "#firmar=..." y no enseña nada del CRM — ni tablero, ni cartera, ni
+   pestañas—: sólo su documento.
+
+   El enlace lleva la clave del convenio, y esa clave es lo único que abre ese
+   convenio y ningún otro. La firma no se guarda encima del documento: se deja
+   en un buzón aparte (crm_firmas) donde el visitante sólo puede depositar, no
+   leer ni corregir. El CRM la recoge de ahí y la aplica. Así, aunque alguien
+   estuviera de mirón, no podría leer convenios ajenos ni alterar el suyo.
+   ========================================================================== */
+
+const enlaceDeFirma = () => {
+  const m = String(location.hash || "").match(/[#&]firmar=([A-Za-z0-9_-]+)/);
+  if (!m) return null;
+  try{
+    const d = JSON.parse(deB64url(m[1]));
+    return (d && d.v && d.t && d.u && d.k) ? d : null;
+  }catch(e){ return null; }
+};
+
+function pantallaFirmaCliente(datos){
+  document.documentElement.classList.add("modo-firma");
+  document.body.innerHTML = `<div id="firmaCliente" class="doc-body"
+    style="max-width:860px;margin:0 auto;padding:22px 18px 60px"></div>`;
+  const caja = document.getElementById("firmaCliente");
+  const aviso = (clase, html) => { caja.innerHTML = `<div class="note ${clase}">${html}</div>`; };
+
+  aviso("", "Abriendo su convenio…");
+
+  const pedir = (ruta, opciones = {}) => fetch(datos.u + ruta, Object.assign({}, opciones, {
+    headers: Object.assign({
+      apikey: datos.k, "Content-Type":"application/json", "x-firma-token": datos.t
+    }, opciones.headers || {})
+  }));
+
+  pedir(`/rest/v1/crm_datos?select=id,datos&id=eq.${encodeURIComponent("convenios:" + datos.v)}`)
+    .then(async r => {
+      const txt = await r.text();
+      if (!r.ok) throw new Error(`${r.status} · ${txt.slice(0,200)}`);
+      const filas = JSON.parse(txt || "[]");
+      if (!filas.length) throw new Error("vacio");
+      return saneaConv(filas[0].datos);
+    })
+    .then(v => dibujarParaFirmar(caja, v, datos, pedir))
+    .catch(e => {
+      if (String(e.message) === "vacio")
+        aviso("warn", `<b>Este enlace ya no sirve.</b><br><br>Puede ser que el convenio ya se
+          haya firmado, o que le hayan mandado un enlace nuevo. Pídale al hotel que se lo
+          reenvíe.`);
+      else if (/401|403|permission|policy/i.test(e.message))
+        aviso("warn", `<b>Este enlace todavía no está habilitado.</b><br><br>Avísele al hotel:
+          les falta correr el archivo <code>firmas.sql</code> en su servidor.
+          <br><br><span class="hint">${esc(e.message)}</span>`);
+      else
+        aviso("warn", `<b>No se pudo abrir el convenio.</b><br>${esc(e.message)}
+          <br><br>Revise su conexión y vuelva a abrir el enlace.`);
+    });
+}
+
+function dibujarParaFirmar(caja, v, datos, pedir){
+  const h = state.ajustes.hotel;
+  const c = { empresa: v._empresa || "", contacto:"", ubicacion:"", telefono:"", email:"" };
+  const agua = h.marcaAgua === "ninguna" ? ""
+             : (h.marcaAgua === "logo" && h.logo) ? `<img src="${esc(h.logo)}" alt="">`
+             : monogramaQ(MORADO_QUARTZ);
+
+  caja.innerHTML = `
+    <div class="note"><b>Revise su carta-convenio y fírmela al final.</b>
+      No hace falta instalar nada ni crear ninguna cuenta. Si prefiere firmarla en papel,
+      use <i>Descargar en PDF</i> y devuélvasela a su ejecutivo.</div>
+    <p style="text-align:right;margin:0 0 12px">
+      <button class="btn" id="bBajarCli">Descargar en PDF</button></p>
+    <div class="doc-contenido" style="position:relative;background:var(--panel);
+         padding:22px 26px;border:1px solid var(--line);border-radius:10px">
+      ${agua ? `<div class="doc-agua">${agua}</div>` : ""}
+      ${cuerpoConvenio(v, c)}
+    </div>
+    <div id="zonaFirma" style="max-width:520px;margin:26px auto 0"></div>`;
+
+  caja.querySelector("#bBajarCli").onclick = async e => {
+    const b = e.currentTarget, antes = b.textContent;
+    b.disabled = true; b.textContent = "Generando…";
+    try{
+      const bytes = await pdfDeConvenio(v, c);
+      descargarBlob(new Blob([bytes], { type:"application/pdf" }), nombrePdfConvenio(v, c));
+    }catch(err){ alert("No se pudo generar el PDF: " + err.message + "\n\nUse Imprimir del navegador."); }
+    finally{ b.disabled = false; b.textContent = antes; }
+  };
+
+  const zona = caja.querySelector("#zonaFirma");
+  if (v.firmaEmpresa){
+    zona.innerHTML = `<div class="note"><b>Este convenio ya está firmado.</b> No hay nada más
+      que hacer; conserve el PDF para sus registros.</div>`;
+    return;
+  }
+
+  zona.innerHTML = `
+    <h3 class="sec">Su firma</h3>
+    <div class="grid">
+      <div class="full"><label class="lbl">Nombre completo</label>
+        <input class="field" id="cfNombre" style="width:100%" autocomplete="name"></div>
+      <div><label class="lbl">Puesto</label><input class="field" id="cfPuesto" style="width:100%"></div>
+      <div><label class="lbl">Celular</label><input class="field" id="cfCel" style="width:100%" inputmode="tel"></div>
+    </div>
+    <label class="lbl" style="margin-top:10px;display:block">Firme con el dedo o el ratón</label>
+    <canvas class="sign-pad" id="pad"></canvas>
+    <p><button class="btn sm" id="cfBorrar">Borrar y volver a firmar</button></p>
+    <div id="cfErr"></div>
+    <p><button class="btn ok" id="cfOk" style="width:100%;font-size:16px;padding:12px">
+      Firmar el convenio</button></p>
+    <p class="hint">Al firmar, su firma queda registrada con la fecha y la hora.</p>`;
+
+  const limpiar = prepararPad(zona.querySelector("#pad"));
+  zona.querySelector("#cfBorrar").onclick = limpiar;
+
+  zona.querySelector("#cfOk").onclick = async e => {
+    const err = zona.querySelector("#cfErr");
+    const nombre = zona.querySelector("#cfNombre").value.trim();
+    const pad = zona.querySelector("#pad");
+    if (!nombre){ err.innerHTML = `<div class="errbox">Escriba su nombre completo.</div>`; return; }
+    if (!pad.dataset.trazado){ err.innerHTML = `<div class="errbox">Falta su firma.</div>`; return; }
+    err.innerHTML = "";
+    const b = e.currentTarget, antes = b.textContent;
+    b.disabled = true; b.textContent = "Enviando…";
+    try{
+      const r = await pedir("/rest/v1/crm_firmas", {
+        method:"POST",
+        headers:{ "Prefer":"return=minimal" },
+        body: JSON.stringify({
+          convenio_id: datos.v, token: datos.t, nombre,
+          puesto: zona.querySelector("#cfPuesto").value.trim(),
+          celular: zona.querySelector("#cfCel").value.trim(),
+          img: pad.toDataURL("image/png")
+        })
+      });
+      if (!r.ok) throw new Error(`${r.status} · ${(await r.text()).slice(0,200)}`);
+      caja.innerHTML = `<div class="note" style="border-left:3px solid var(--ok)">
+        <b>Listo, ${esc(nombre)}. Su convenio quedó firmado.</b><br><br>
+        El hotel ya fue notificado. Si quiere guardar una copia, vuelva a abrir este enlace
+        antes de cerrarlo y use <i>Descargar en PDF</i>.</div>`;
+      window.scrollTo(0, 0);
+    }catch(ex){
+      err.innerHTML = `<div class="errbox">No se pudo registrar la firma.<br>${esc(ex.message)}
+        <br><br>Intente de nuevo, o avísele a su ejecutivo.</div>`;
+      b.disabled = false; b.textContent = antes;
+    }
+  };
+}
+
+/* ----- El convenio se cierra por tres caminos ----- */
+
+/** El enlace que se le manda al cliente para que firme en su pantalla. */
+const ligaFirma = v =>
+  location.origin + location.pathname + "#firmar=" +
+  b64url(JSON.stringify({ v: v.id, t: v.tokenFirma, u: nube.url, k: nube.anon }));
+
+const puedeMandarLiga = () => !!(nube.url && nube.anon);
+
+/**
+ * Aplica la firma del cliente, venga de donde venga: de la pantalla, de un
+ * PDF escaneado, o capturada a mano por el ejecutivo. Los tres caminos tienen
+ * que dejar el convenio y el cliente exactamente igual, o el tablero acabaría
+ * diciendo una cosa y la carta otra.
+ */
+function cerrarConvenio(v, firma, comoLlego, quien){
+  const fecha = new Date().toISOString();
+  const c = cliente(v.clienteId);
+  if (firma) v.firmaEmpresa = saneaFirma(firma);
+  v.estado = "firmado_cliente";
+  v.updatedAt = fecha;
+  v.tokenFirma = "";          // el enlace deja de servir en cuanto se firma
+  v.avisado = false;          // hay novedad que contarle al ejecutivo
+  if (c){
+    c.estatus = "ganado";
+    c.updatedAt = fecha;
+    const precios = v.habitaciones.map(x => Number(x.convenio)).filter(n => n > 0);
+    if (precios.length) c.tarifa = Math.min(...precios);
+  }
+  registrarAuto(v.clienteId, `Convenio ${v.folio} firmado por el cliente`,
+    `${comoLlego}\nEl cliente pasó automáticamente a "Ganado".`,
+    quien || (c && c.ejecutivo) || "");
+  guardar();
+}
+
+/* ----- Aviso al ejecutivo ----- */
+
+/** Convenios firmados por el cliente que el ejecutivo todavía no ha visto. */
+const novedadesFirma = () => state.convenios.filter(v =>
+  v.estado === "firmado_cliente" && v.firmaEmpresa && !v.avisado &&
+  (puedeVerTodo() || esMio(cliente(v.clienteId) || {})));
+
+function pintarAvisos(){
+  const el = document.getElementById("avisos");
+  if (!el) return;
+  const ns = novedadesFirma();
+  if (!ns.length){ el.style.display = "none"; return; }
+  el.style.display = "";
+  el.innerHTML = `<span>✍️</span> ${ns.length === 1
+      ? `<b>${esc(nombreCli(ns[0].clienteId))}</b> firmó el convenio ${esc(ns[0].folio)}`
+      : `<b>${ns.length} convenios</b> fueron firmados por el cliente`}`;
+  el.title = ns.map(v => `${v.folio} · ${nombreCli(v.clienteId)}`).join("\n");
+  el.onclick = () => {
+    if (ns.length === 1){ verConvenio(ns[0].id); return; }
+    vista = "convenios"; render();
+  };
+}
+
+/** Se da por visto al abrir la carta: ya lo está viendo. */
+function marcarVisto(v){
+  if (v.estado === "firmado_cliente" && !v.avisado){
+    v.avisado = true;
+    guardar();
+    pintarAvisos();
+  }
+}
+
 function enviarConvenio(v, c){
   const h = state.ajustes.hotel;
   const asunto = `Carta-convenio ${v.folio} · ${h.nombre}`;
-  const cuerpo = `Estimado(a) ${(c && c.contacto) || ""}:\n\n` +
-    `Adjunto la carta-convenio ${v.folio} de ${h.nombre}, vigente ` +
-    `${textoVigencia(v)}, ya firmada por nuestra parte.\n\n` +
-    `Le suplicamos hacerla llegar debidamente firmada de aceptación para proceder con la carga ` +
-    `de tarifas en nuestro sistema de reservaciones.\n\nSaludos cordiales,\n` +
-    `${(v.firmaHotel && v.firmaHotel.nombre) || (c && c.ejecutivo) || ""}\n${h.nombre}`;
   const archivo = nombrePdfConvenio(v, c);
+  const conLiga = puedeMandarLiga() && !!v.tokenFirma;
+  const firmante = (v.firmaHotel && v.firmaHotel.nombre) || (c && c.ejecutivo) || "";
+
+  const saludo = `Estimado(a) ${(c && c.contacto) || ""}:\n\n` +
+    `Adjunto la carta-convenio ${v.folio} de ${h.nombre}, vigente ` +
+    `${textoVigencia(v)}, ya firmada por nuestra parte.\n\n`;
+  const despedida = `\nSaludos cordiales,\n${firmante}\n${h.nombre}`;
+
+  const msgLiga = saludo +
+    `Puede revisarla y firmarla desde este enlace, sin instalar nada:\n${conLiga ? ligaFirma(v) : ""}\n\n` +
+    `En cuanto la firme, queda registrada de nuestro lado.` + despedida;
+  const msgPdf = saludo +
+    `Le suplicamos hacerla llegar debidamente firmada de aceptación para proceder con la carga ` +
+    `de tarifas en nuestro sistema de reservaciones.` + despedida;
 
   const ov = modal(`
     <div class="modal">
       <div class="modal-head"><h2>Enviar convenio al cliente</h2><button class="btn" data-close>✕</button></div>
       <div class="modal-body" id="cuerpoEnvioC">
-        <p class="hint">Preparando el PDF del convenio…</p>
+        <p class="hint">Preparando el convenio…</p>
       </div>
       <div class="modal-foot"><div class="spacer"></div><button class="btn" data-close>Cerrar</button></div>
     </div>`);
 
-  const paso3 = `<p class="hint" style="margin-top:16px">Cuando el cliente la devuelva firmada,
-      regresa a la carta y usa <i>Registrar firma del cliente</i>: pasará a <b>Ganado</b> solo.</p>`;
-
   const anotar = via => {
-    registrarAuto(v.clienteId, `Convenio ${v.folio} enviado por ${via}`,
+    v.enviado = { fecha: new Date().toISOString(), via, quien: correoSesion() };
+    registrarAuto(v.clienteId, `Convenio ${v.folio} enviado por ${VIAS[via]}`,
       `Enviado a ${via === "correo" ? (c && c.email) : (c && c.telefono)}.`, (c && c.ejecutivo) || "");
     guardar(); render();
   };
-  const abrirCorreo = () => {
+  const abrirCorreo = cuerpo => {
     window.location.href = `mailto:${encodeURIComponent(c.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
     anotar("correo");
   };
-  const abrirWa = () => { window.open(waLink(c.telefono, cuerpo), "_blank", "noopener"); anotar("WhatsApp"); };
+  const abrirWa = cuerpo => { window.open(waLink(c.telefono, cuerpo), "_blank", "noopener"); anotar("whatsapp"); };
+
+  const botones = (id, hint) => `
+    <p class="hint" style="margin:10px 0 4px">${hint}</p>
+    <p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn" data-mail="${id}" ${(c && c.email) ? "" : "disabled"}>Enviar por correo</button>
+      <button class="btn wa" data-wa="${id}" ${(c && c.telefono) ? "" : "disabled"}
+        title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button></p>`;
 
   pdfDeConvenio(v, c).then(bytes => {
     const blob = new Blob([bytes], { type:"application/pdf" });
@@ -4234,48 +4609,62 @@ function enviarConvenio(v, c){
     const puedeCompartir = typeof navigator.canShare === "function" && navigator.canShare({ files:[file] });
     const bajar = () => descargarBlob(blob, archivo);
 
-    ov.querySelector("#cuerpoEnvioC").innerHTML = (puedeCompartir
-      ? `<div class="note"><b>El convenio ya está listo.</b> Al compartir, el PDF firmado y el
-           mensaje van juntos: elige correo o WhatsApp en la lista que abra el sistema.</div>
-         <p><button class="btn ok" id="cCompartir" style="font-size:15px;padding:10px 16px">
-            Compartir convenio y mensaje</button></p>
-         <p class="hint">¿Prefieres hacerlo a mano?</p>`
-      : `<div class="note warn"><b>Este equipo no puede adjuntar archivos desde el navegador.</b>
-           Ni el correo ni WhatsApp aceptan adjuntos por enlace, así que se hace en dos pasos:
-           se descarga el PDF y lo adjuntas al abrir el correo o WhatsApp.
-           <br><br>En un celular sí sale todo junto de una vez.</div>`) +
+    ov.querySelector("#cuerpoEnvioC").innerHTML = (conLiga
+      ? `<h3 class="sec" style="margin-top:0">Que lo firme en su pantalla</h3>
+         <div class="note"><b>Es el camino corto.</b> El cliente abre el enlace desde su
+           teléfono o computadora, lee el convenio y lo firma con el dedo o el ratón. Cuando
+           firme, este convenio pasa a <b>Firmado por cliente</b> y el cliente a
+           <b>Ganado</b>, y aquí te avisamos.</div>
+         ${botones("liga", "Se manda el enlace con el mensaje ya redactado:")}
+         <p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+           <button class="btn sm" id="cCopiar">Copiar el enlace</button>
+           <span class="hint">El enlace sólo abre este convenio y deja de servir en cuanto se firma.</span></p>
+         <h3 class="sec">O mándale el PDF</h3>
+         <div class="note warn">Para quien prefiera imprimirlo y firmarlo a mano. Cuando te
+           lo devuelva, súbelo con <b>Subir convenio firmado</b> en la carta.</div>`
+      : `<div class="note warn"><b>El enlace de firma no está disponible.</b>
+           ${puedeMandarLiga()
+             ? "Este convenio se firmó antes de que existiera esa opción: vuelve a abrir la carta y usa <i>Rehacer enlace de firma</i>."
+             : "Hace falta tener la nube configurada (Ajustes → Nube y equipo): el enlace vive ahí."}
+           <br><br>Mientras tanto, mándale el PDF para que lo firme a mano.</div>`) +
+      (puedeCompartir
+        ? `<p><button class="btn ok" id="cCompartir" style="font-size:15px;padding:10px 16px">
+             Compartir el PDF y el mensaje</button></p>`
+        : "") +
       `<p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-         <button class="btn" id="cBajar">Descargar el PDF</button>
-         <button class="btn" id="cMail" ${(c && c.email) ? "" : "disabled"}>Abrir correo con el mensaje</button>
-         <button class="btn wa" id="cWa" ${(c && c.telefono) ? "" : "disabled"}
-           title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button></p>
-       <p class="hint">Se guardará como <b>${esc(archivo)}</b></p>` + paso3;
+         <button class="btn" id="cBajar">Descargar el PDF</button></p>` +
+      botones("pdf", "O ábrelo con el mensaje del PDF:") +
+      `<p class="hint">Se guardará como <b>${esc(archivo)}</b></p>
+       <p class="hint" style="margin-top:14px">Si te lo devuelve firmado en papel, ábrelo desde
+         la carta y usa <i>Subir convenio firmado</i>: queda igual de cerrado que si lo hubiera
+         firmado en pantalla.</p>`;
 
+    const cop = ov.querySelector("#cCopiar");
+    if (cop) cop.onclick = async () => {
+      try{ await navigator.clipboard.writeText(ligaFirma(v)); alert("Enlace copiado."); }
+      catch(e){ prompt("Copia este enlace y mándaselo al cliente:", ligaFirma(v)); }
+    };
     const bc = ov.querySelector("#cCompartir");
     if (bc) bc.onclick = async () => {
       try{
-        await navigator.share({ files:[file], text: cuerpo, title: asunto });
-        anotar("correo o WhatsApp");
+        await navigator.share({ files:[file], text: msgPdf, title: asunto });
+        anotar("correo");
         ov.remove();
       }catch(err){ if (err && err.name !== "AbortError") alert("No se pudo compartir: " + err.message); }
     };
     ov.querySelector("#cBajar").onclick = bajar;
-    const m = ov.querySelector("#cMail");
-    if (m && !m.disabled) m.onclick = () => { if (!puedeCompartir) bajar(); setTimeout(abrirCorreo, puedeCompartir ? 0 : 600); };
-    const w = ov.querySelector("#cWa");
-    if (w && !w.disabled) w.onclick = () => { if (!puedeCompartir) bajar(); setTimeout(abrirWa, puedeCompartir ? 0 : 600); };
+    ov.querySelectorAll("[data-mail]").forEach(b => { if (!b.disabled) b.onclick = () =>
+      abrirCorreo(b.dataset.mail === "liga" ? msgLiga : msgPdf); });
+    ov.querySelectorAll("[data-wa]").forEach(b => { if (!b.disabled) b.onclick = () =>
+      abrirWa(b.dataset.wa === "liga" ? msgLiga : msgPdf); });
   }).catch(err => {
     ov.querySelector("#cuerpoEnvioC").innerHTML =
-      `<div class="note warn"><b>No se pudo generar el PDF aquí.</b> ${esc(err.message)}
-        <br><br>Usa <i>Imprimir / Guardar PDF</i> en la carta y adjúntalo a mano.</div>
-       <p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-         <button class="btn" id="cVer">Abrir la carta</button>
-         <button class="btn" id="cMail2" ${(c && c.email) ? "" : "disabled"}>Abrir correo con el mensaje</button>
-         <button class="btn wa" id="cWa2" ${(c && c.telefono) ? "" : "disabled"}
-           title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button></p>` + paso3;
+      `<div class="note warn"><b>No se pudo generar el PDF aquí.</b> ${esc(err.message)}</div>` +
+      (conLiga ? botones("liga", "El enlace de firma sí funciona; mándaselo:") : "") +
+      `<p><button class="btn" id="cVer">Abrir la carta para imprimirla</button></p>`;
     ov.querySelector("#cVer").onclick = () => { ov.remove(); verConvenio(v.id); };
-    const m2 = ov.querySelector("#cMail2"); if (m2 && !m2.disabled) m2.onclick = abrirCorreo;
-    const w2 = ov.querySelector("#cWa2");   if (w2 && !w2.disabled) w2.onclick = abrirWa;
+    ov.querySelectorAll("[data-mail]").forEach(b => { if (!b.disabled) b.onclick = () => abrirCorreo(msgLiga); });
+    ov.querySelectorAll("[data-wa]").forEach(b => { if (!b.disabled) b.onclick = () => abrirWa(msgLiga); });
   });
 }
 
@@ -4306,11 +4695,34 @@ function padFirma(titulo, def, alFirmar){
     </div>`);
 
   const cv = ov.querySelector("#pad");
+  const limpiar = prepararPad(cv);
+
+  ov.querySelector("#bClear").onclick = limpiar;
+  ov.querySelector("#bOk").onclick = () => {
+    const nombre = ov.querySelector("#fNombre").value.trim();
+    if (!nombre){ alert("Escribe el nombre de quien firma."); return; }
+    if (!cv.dataset.trazado){ alert("Falta trazar la firma."); return; }
+    const img = padAPng(cv);
+    const puesto  = ov.querySelector("#fPuesto").value.trim();
+    const celular = ov.querySelector("#fCel").value.trim();
+    ov.remove();
+    alFirmar({ nombre, puesto, celular, img });
+  };
+}
+
+/**
+ * Deja un <canvas> listo para firmar con el dedo, el ratón o un lápiz.
+ *
+ * Lo usan el pad del ejecutivo y la página del cliente, que son pantallas muy
+ * distintas: por eso vive aparte y no dentro de ninguna de las dos.
+ */
+function prepararPad(cv){
   const ctx = cv.getContext("2d");
-  let trazando = false, huboTrazo = false, last = null;
+  let trazando = false, last = null;
+  cv.dataset.trazado = "";
 
   // Se dimensiona en píxeles físicos para que la firma no salga pixelada al imprimir.
-  requestAnimationFrame(() => {
+  const medir = () => {
     const r = cv.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     cv.width  = Math.max(1, Math.round(r.width * dpr));
@@ -4318,11 +4730,12 @@ function padFirma(titulo, def, alFirmar){
     ctx.scale(dpr, dpr);
     ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round";
     ctx.strokeStyle = "#39104e";
-  });
+  };
+  requestAnimationFrame(medir);
 
   const punto = ev => { const r = cv.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; };
   cv.addEventListener("pointerdown", ev => {
-    ev.preventDefault(); trazando = true; huboTrazo = true;
+    ev.preventDefault(); trazando = true; cv.dataset.trazado = "sí";
     try{ cv.setPointerCapture(ev.pointerId); }catch(e){}
     last = punto(ev);
   });
@@ -4337,23 +4750,17 @@ function padFirma(titulo, def, alFirmar){
   cv.addEventListener("pointercancel", fin);
   cv.addEventListener("pointerleave", fin);
 
-  ov.querySelector("#bClear").onclick = () => { ctx.clearRect(0,0,cv.width,cv.height); huboTrazo = false; };
-  ov.querySelector("#bOk").onclick = () => {
-    const nombre = ov.querySelector("#fNombre").value.trim();
-    if (!nombre){ alert("Escribe el nombre de quien firma."); return; }
-    if (!huboTrazo){ alert("Falta trazar la firma."); return; }
-    // Fondo blanco: un PNG transparente se ve mal al imprimir.
-    const out = document.createElement("canvas");
-    out.width = cv.width; out.height = cv.height;
-    const o = out.getContext("2d");
-    o.fillStyle = "#fff"; o.fillRect(0,0,out.width,out.height);
-    o.drawImage(cv, 0, 0);
-    ov.remove();
-    alFirmar({ nombre,
-      puesto: ov.querySelector("#fPuesto").value.trim(),
-      celular: ov.querySelector("#fCel").value.trim(),
-      img: out.toDataURL("image/png") });
-  };
+  return () => { ctx.clearRect(0, 0, cv.width, cv.height); cv.dataset.trazado = ""; };
+}
+
+/** La firma como PNG con fondo blanco: uno transparente se ve mal al imprimir. */
+function padAPng(cv){
+  const out = document.createElement("canvas");
+  out.width = cv.width; out.height = cv.height;
+  const o = out.getContext("2d");
+  o.fillStyle = "#fff"; o.fillRect(0, 0, out.width, out.height);
+  o.drawImage(cv, 0, 0);
+  return out.toDataURL("image/png");
 }
 
 /* ==========================================================================
@@ -4741,7 +5148,11 @@ try{
 
 guardar();
 render();
-arrancarNube();
+// Si el enlace es el de un cliente que viene a firmar, la aplicación se
+// convierte en su documento y no arranca nada del CRM.
+const _firma = enlaceDeFirma();
+if (_firma) pantallaFirmaCliente(_firma);
+else arrancarNube();
 </script>
 </body>
 </html>

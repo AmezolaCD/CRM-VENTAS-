@@ -145,18 +145,54 @@ enumera arriba del formulario y las filas incompletas se marcan en rojo:
 
 1. **Borrador** — se puede editar libremente.
 2. **Firma el ejecutivo** (nombre, puesto, celular y firma trazada con el ratón o el dedo).
-   → El convenio queda bloqueado y **el cliente pasa automáticamente a "Cotización enviada"**.
-3. **Se envía al cliente** — el botón genera el PDF de la carta y lo manda junto con el
-   mensaje ya redactado, por correo o WhatsApp.
-4. **Firma el cliente** → **el cliente pasa automáticamente a "Ganado"** y su tarifa se
-   actualiza con la habitación más económica del convenio.
+   → El convenio queda bloqueado, **el cliente pasa a "Cotización enviada"** y se genera la
+   clave del enlace de firma.
+3. **Se envía al cliente**, por correo o WhatsApp. La columna **Enviado** de la tabla dice
+   cuándo salió y por dónde, igual que en las confirmaciones.
+4. **Firma el cliente** → **pasa automáticamente a "Ganado"** y su tarifa se actualiza con la
+   habitación más económica del convenio.
 
 Cada paso deja constancia en la bitácora del cliente.
 
-> **Límite que conviene tener claro:** la aplicación **no recibe la firma del cliente a
-> distancia**. Cuando el cliente devuelva la carta firmada, capturas su firma con *Registrar
-> firma del cliente*. Si necesitan firma remota real —el cliente abre un enlace y firma desde
-> su dispositivo— eso requiere backend.
+##### El paso 4 tiene tres caminos, y los tres cierran igual
+
+- **En su pantalla.** El cliente abre el enlace, lee su convenio y firma con el dedo o el
+  ratón. No instala nada ni crea ninguna cuenta. Requiere haber corrido `firmas.sql`.
+- **En papel.** Se le manda el PDF, lo firma a mano y lo devuelve escaneado; el ejecutivo lo
+  sube con **Subir convenio firmado**. Queda tan cerrado como el anterior, y con el escaneado
+  guardado como constancia.
+- **Capturada por el ejecutivo**, con *Registrar firma del cliente*, para cuando el cliente
+  firma delante de él.
+
+Los tres pasan por la misma función a propósito: si cada camino cerrara el convenio a su
+manera, el tablero acabaría diciendo una cosa y la carta otra.
+
+##### Cómo está pensado el enlace del cliente
+
+El cliente no tiene cuenta ni tiene por qué tenerla. El enlace lleva una clave larga y al
+azar, y esa clave es **lo único que abre ese convenio y ningún otro**. Al abrirlo, la
+aplicación se convierte en su documento: no enseña tablero, ni cartera, ni pestañas.
+
+La firma **no se escribe encima del convenio**. El visitante la deja en un buzón aparte donde
+puede depositar pero no leer ni corregir, y de ahí la levanta el CRM en la siguiente
+sincronización. Así, aunque alguien anduviera de mirón, no podría leer convenios ajenos ni
+alterar el suyo. La clave deja de servir en cuanto se firma.
+
+Todo esto lo habilita `firmas.sql`. **Sin correrlo, el CRM funciona igual**: el enlace no se
+ofrece y quedan los otros dos caminos.
+
+##### El aviso al ejecutivo
+
+Cuando un cliente firma, aparece un aviso en el encabezado del CRM: *«Grupo Marín firmó el
+convenio CV-2026-002»*. Se apaga al abrir la carta — ya la está viendo. Sólo le sale a quien
+le toca: el ejecutivo dueño del cliente, la gerencia y el administrador.
+
+**Por correo no.** Una página web no puede mandar correos por sí sola; hace falta un servicio
+de envío. Queda pendiente y está anotado al final.
+
+> **Límite que conviene tener claro:** el CRM no manda el correo ni el mensaje por sí solo:
+> abre el tuyo con todo redactado y tú le das enviar. Y el aviso de que el cliente firmó sale
+> dentro del CRM, no por correo.
 
 #### La carta
 
@@ -408,3 +444,7 @@ por cliente y viven en Supabase.
   gerencia edite tarifas o cierre convenios, se hace con una tabla de roles y ajustando las
   políticas de `nube.sql`.
 - **Aviso instantáneo** en lugar del sondeo de 15 segundos: Supabase lo permite (Realtime).
+- **Avisar por correo al ejecutivo** cuando el cliente firma. Hoy el aviso sale dentro del
+  CRM. Para que además llegue un correo hace falta un servicio de envío (Resend, SendGrid o
+  similar) y una función en el servidor de Supabase que lo dispare: una página web no manda
+  correos por sí sola.

@@ -80,6 +80,27 @@ así que el día que se corra `roles.sql` empieza a usarla sola.
 
 ---
 
+## El cliente que firma desde un enlace
+
+Es otro archivo y otro asunto: `firmas.sql`. Lo que hace es dejar que alguien **sin cuenta**
+—el cliente— abra el enlace que le mandó su ejecutivo, lea **su** convenio y lo firme.
+
+Está pensado para no abrir de más:
+
+- El visitante puede leer **un** convenio: aquel cuya clave viene en el enlace. Sin clave no
+  ve nada, y con una clave no puede ver otros.
+- **No escribe sobre el convenio.** Deja su firma en un buzón aparte donde puede depositar
+  pero no leer ni corregir. El CRM la recoge de ahí y la aplica.
+- La clave deja de servir en cuanto se firma.
+
+Se corre igual que los demás, en el SQL Editor, y se puede repetir. Al final del archivo están
+las líneas para deshacerlo; los convenios ya firmados se quedan como están, porque la firma
+vive dentro del convenio y no en el buzón.
+
+**Sin correrlo el CRM funciona igual**: simplemente no se ofrece el enlace, y quedan los otros
+dos caminos —mandar el PDF para que lo firmen en papel, o capturar la firma delante del
+cliente—.
+
 ## Lo que no hace
 
 - **No impide editar.** Quien puede ver un registro puede corregirlo, que es lo que se espera
