@@ -131,6 +131,9 @@
   nav button:hover{color:var(--text)}
   nav button[aria-current="true"]{background:var(--panel); color:var(--text); box-shadow:var(--shadow)}
   .spacer{flex:1 1 auto}
+  .firma-previa{background:#fff; border:1px solid var(--line); border-radius:10px;
+    padding:8px; text-align:center}
+  .firma-previa img{max-height:86px; max-width:100%}
   #estadoNube{display:inline-flex; align-items:center; gap:6px; cursor:default;
     border:1px solid var(--line); font:inherit; font-size:12px}
   #estadoNube.conSesion{cursor:pointer}
@@ -492,7 +495,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.12-28";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.12-29";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -795,12 +798,46 @@ const USUARIOS_DEF = [
 ];
 
 function saneaUsuario(u){
-  const o = Object.assign({ id:"", correo:"", nombre:"", rol:"ejecutivo" }, u || {});
+  const o = Object.assign({ id:"", correo:"", nombre:"", rol:"ejecutivo", firma:null }, u || {});
   o.id = o.id || nuevoId("u");
   o.correo = String(o.correo).trim().toLowerCase();
   o.nombre = String(o.nombre).trim();
   if (!ROLES.some(r => r.id === o.rol)) o.rol = "ejecutivo";
+  o.firma = saneaFirma(o.firma);      // la que dejó guardada para no volver a trazarla
   return o;
+}
+
+/**
+ * La firma del ejecutivo se traza una vez y se vuelve a usar.
+ *
+ * Vive en la ficha del usuario, no en el equipo: aquí se trabaja desde
+ * computadoras compartidas y cada quien debe traer la suya a donde entre.
+ * Sin nube no hay usuario a quién colgarla, y entonces se queda nada más en
+ * esta máquina —y se borra al cerrar sesión, para no dejarle a nadie una
+ * firma ajena a la mano.
+ */
+const FIRMA_LOCAL = "crm-hotel-firma";
+
+function firmaGuardada(){
+  const u = usuarioActual();
+  if (u) return u.firma && u.firma.img ? u.firma : null;
+  try{
+    const f = JSON.parse(localStorage.getItem(FIRMA_LOCAL) || "null");
+    return f && f.img ? f : null;
+  }catch(e){ return null; }
+}
+
+function guardarFirmaPropia(d){
+  const f = { nombre:d.nombre || "", puesto:d.puesto || "", celular:d.celular || "", img:d.img };
+  const u = usuarioActual();
+  if (u){ u.firma = f; guardar(); }
+  else try{ localStorage.setItem(FIRMA_LOCAL, JSON.stringify(f)); }catch(e){}
+}
+
+function olvidarFirmaPropia(){
+  const u = usuarioActual();
+  if (u){ u.firma = null; guardar(); }
+  else try{ localStorage.removeItem(FIRMA_LOCAL); }catch(e){}
 }
 
 /** El usuario de la sesión, buscado por el correo con el que entró. */
@@ -1005,7 +1042,8 @@ function saneaConv(c){
     habitaciones:[], incluyeRecovery:false, notas:"", textos:null, grupos:null,
     estado:"borrador", firmaHotel:null, firmaEmpresa:null, createdAt:"", updatedAt:"",
     tokenFirma:"", enviado:null, firmaManual:null, avisado:false, destinatario:null,
-    folioRepetido:"" }, c || {});
+    folioRepetido:"", ejecutivo:"" }, c || {});
+  o.ejecutivo = String(o.ejecutivo || "").trim();
   o.id = o.id || nuevoId("v");
   if (!ESTADOS_CONV[o.estado]) o.estado = "borrador";
   o.textos = Object.assign({}, TEXTOS_DEF, o.textos || {});
@@ -1473,6 +1511,7 @@ async function salir(){
   detenerSondeo();
   nube.sesion = null;
   nube.ultimo = "";
+  try{ localStorage.removeItem(FIRMA_LOCAL); }catch(e){}
   nube.enlazado = false;      // el que entre después baja todo otra vez
   nube.estado = "local";
   guardarSesion();
@@ -1501,6 +1540,7 @@ function menuSesion(){
         <p style="margin:0;font-size:17px"><b>${esc((u && u.nombre) || correoSesion() || "Sin sesión")}</b></p>
         <p class="hint" style="margin:2px 0 0">${esc(u ? infoRol(u.rol).name : "Este correo no está dado de alta")}</p>
         <p class="hint" style="margin:2px 0 14px">${esc(correoSesion())}</p>
+        <div id="miFirma" style="text-align:left;margin-bottom:14px"></div>
         <div class="note" style="text-align:left">Al cerrar la sesión, los datos de esta
           computadora se borran y el siguiente que entre baja los suyos de la nube.
           <b>Nada se pierde:</b> todo vive en el servidor.</div>
@@ -1508,6 +1548,26 @@ function menuSesion(){
           Cerrar sesión</button></p>
       </div>
     </div>`);
+  // Su firma guardada, para poder verla o quitarla sin abrir un convenio.
+  (function pintarMiFirma(){
+    const caja = ov.querySelector("#miFirma");
+    const f = firmaGuardada();
+    if (!f){
+      caja.innerHTML = `<p class="hint" style="margin:0">Todavía no tiene una firma guardada.
+        La primera vez que firme un convenio se le ofrecerá guardarla.</p>`;
+      return;
+    }
+    caja.innerHTML = `<label class="lbl">Su firma guardada</label>
+      <div class="firma-previa"><img src="${f.img}" alt="Firma guardada"></div>
+      <p style="margin:6px 0 0;text-align:right">
+        <button class="btn sm danger" id="bQuitarFirma">Borrar la firma</button></p>`;
+    caja.querySelector("#bQuitarFirma").onclick = () => {
+      if (!confirm("¿Borrar la firma guardada? La próxima vez habrá que trazarla de nuevo.")) return;
+      olvidarFirmaPropia();
+      pintarMiFirma();
+    };
+  })();
+
   ov.querySelector("#bSalirYa").onclick = async e => {
     const b = e.currentTarget;
     b.disabled = true; b.textContent = "Cerrando…";
@@ -1566,7 +1626,8 @@ function duenioDe(fila){
   if (fila.tipo === "clientes")    return String(fila.datos.ejecutivo || "").trim() || null;
   if (fila.tipo === "actividades") return deCliente(fila.datos.clienteId) ||
                                           String(fila.datos.responsable || "").trim() || null;
-  if (fila.tipo === "convenios")   return deCliente(fila.datos.clienteId);
+  if (fila.tipo === "convenios")   return String(fila.datos.ejecutivo || "").trim() ||
+                                          deCliente(fila.datos.clienteId);
   return null;
 }
 
@@ -2584,9 +2645,10 @@ const nombresConvenio = v => v.habitaciones
 
 function renderConvenios(){
   const cont = document.getElementById("tblConvenios");
-  const mios = new Set(state.clientes.filter(esMio).map(c => c.id));
-  const vs = state.convenios.filter(v => mios.has(v.clienteId))
+  const vs = state.convenios.filter(convenioEsMio)
     .sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  // A un ejecutivo la columna le diría siempre lo mismo: sólo se pone a quien ve a varios.
+  const conEje = puedeVerTodo();
   const repetidos = vs.filter(v => v.folioRepetido);
   const cab = `${repetidos.length ? `<div class="note warn">
       <b>Hay ${repetidos.length} convenio(s) con el folio repetido.</b>
@@ -2604,7 +2666,7 @@ function renderConvenios(){
       Se crean desde aquí o desde la ficha de un cliente.</div>`;
   } else {
     cont.innerHTML = cab + `<table class="data">
-      <thead><tr><th>Folio</th><th>Cliente</th><th>Fecha</th><th>Vigencia</th>
+      <thead><tr><th>Folio</th><th>Cliente</th>${conEje ? "<th>Ejecutivo</th>" : ""}<th>Fecha</th><th>Vigencia</th>
         <th>Habitaciones</th><th>Estado</th><th>Enviado</th><th>Firmas</th><th></th></tr></thead>
       <tbody>${vs.map(v => {
         const ec = ESTADOS_CONV[v.estado];
@@ -2613,6 +2675,7 @@ function renderConvenios(){
             ? ` <span class="pill" style="background:var(--bad-soft);color:var(--bad)"
                  title="Otro convenio tiene este mismo folio">repetido</span>` : ""}</td>
           <td>${esc(nombreCli(v.clienteId))}</td>
+          ${conEje ? `<td class="nowrap">${esc(ejecutivoDe(v) || "—")}</td>` : ""}
           <td class="nowrap">${esc(fechaCorta(v.fecha))}</td>
           <td class="nowrap">${v.vigenciaHasta ? "hasta " + esc(fechaCorta(v.vigenciaHasta)) : "—"}</td>
           <td style="max-width:230px" title="${esc(nombresConvenio(v))}">${codigosConvenio(v)}</td>
@@ -4328,6 +4391,10 @@ function editarConvenio(id, clientePre, alCerrar){
               ${[...state.clientes].sort((a,b)=>a.empresa.localeCompare(b.empresa,"es")).map(c =>
                 `<option value="${c.id}"${c.id===v.clienteId?" selected":""}>${esc(c.empresa)}${c.contacto?" · "+esc(c.contacto):""}</option>`).join("")}
             </select></div>
+          <div class="full"><label class="lbl">Ejecutivo de ventas</label>
+            ${selectEjecutivo(v.ejecutivo || (cliente(v.clienteId) || {}).ejecutivo || miNombre(), "cEje")}
+            <div class="hint">Quien firma la carta por el hotel y a quien se le avisa cuando el
+              cliente la firma. La lista sale de <i>Ajustes → Usuarios y permisos</i>.</div></div>
           <div><label class="lbl">Folio</label><input class="field" id="cFolio" value="${esc(v.folio)}"></div>
           <div><label class="lbl">Fecha de la carta</label><input class="field" type="date" id="cFecha" value="${esc(v.fecha)}"></div>
           <div><label class="lbl">Vigencia desde</label><input class="field" type="date" id="cDesde" value="${esc(v.vigenciaDesde)}"></div>
@@ -4419,6 +4486,18 @@ function editarConvenio(id, clientePre, alCerrar){
       const anio = String(fDesde.value || "").slice(0, 4);
       if (anio.length !== 4) return;
       fFolio.value = ultimoAuto = folioAuto(anio);
+    });
+  }
+
+  // El ejecutivo sigue al cliente mientras nadie lo haya cambiado a mano.
+  {
+    const fCli = ov.querySelector("#cCli"), fEje = ov.querySelector('[name="cEje"]');
+    let auto = existente ? null : fEje.value;
+    fEje.addEventListener("change", () => { if (fEje.value !== auto) auto = null; });
+    fCli.addEventListener("change", () => {
+      if (auto === null || fEje.value !== auto) return;
+      const e = String((cliente(fCli.value) || {}).ejecutivo || "").trim();
+      if (e && [...fEje.options].some(o => o.value === e)) fEje.value = auto = e;
     });
   }
 
@@ -4528,6 +4607,7 @@ function editarConvenio(id, clientePre, alCerrar){
 
     Object.assign(v, {
       clienteId: cid,
+      ejecutivo: ov.querySelector('[name="cEje"]').value.trim(),
       folio: folioAlGuardar(),
       fecha: ov.querySelector("#cFecha").value || hoyISO(),
       vigenciaDesde: desde, vigenciaHasta: hasta,
@@ -4544,6 +4624,20 @@ function editarConvenio(id, clientePre, alCerrar){
 }
 
 /* ----- La carta-convenio ----- */
+
+/**
+ * De quién es un convenio.
+ *
+ * Manda lo que diga el propio convenio: a veces lo levanta un ejecutivo para
+ * un cliente que atiende otro. Si no dice nada —los de antes no lo decían—,
+ * es del dueño del cliente.
+ */
+const ejecutivoDe = v => String(v.ejecutivo || "").trim() ||
+  String((cliente(v.clienteId) || {}).ejecutivo || "").trim();
+
+const convenioEsMio = v => puedeVerTodo() ||
+  (!!miNombre().trim() && ejecutivoDe(v).toLowerCase() === miNombre().trim().toLowerCase()) ||
+  esMio(cliente(v.clienteId) || {});
 
 /** Cuerpo de la carta-convenio. Se usa para verla, imprimirla y armar el PDF. */
 function cuerpoConvenio(v, c){
@@ -4636,7 +4730,7 @@ function cuerpoConvenio(v, c){
       <p style="white-space:pre-wrap;margin-top:14px">${esc(T("cierre"))}</p>
 
       <div class="firmas">
-        ${bloqueFirma(v.firmaHotel, "De conformidad · Hotel", (c && c.ejecutivo) || "", "Ejecutivo de ventas", "")}
+        ${bloqueFirma(v.firmaHotel, "De conformidad · Hotel", ejecutivoDe(v), "Ejecutivo de ventas", "")}
         ${bloqueFirma(v.firmaEmpresa, "De conformidad · Empresa", (c && c.contacto) || "", "", (c && c.telefono) || "")}
       </div>`;
 }
@@ -4703,8 +4797,9 @@ function verConvenio(id, alCerrar, pedirFirma){
 
   const f1 = ov.querySelector("#bF1");
   if (f1) f1.onclick = () => padFirma("Firma del ejecutivo de ventas",
-    { nombre:(c && c.ejecutivo) || "", puesto:"Ejecutivo de ventas", celular:"" },
-    d => { firmar(v, "hotel", d); ov.remove(); verConvenio(v.id, alCerrar); });
+    { nombre:ejecutivoDe(v) || miNombre(), puesto:"Ejecutivo de ventas", celular:"" },
+    d => { firmar(v, "hotel", d); ov.remove(); verConvenio(v.id, alCerrar); },
+    { recordar:true });
 
   const f2 = ov.querySelector("#bF2");
   if (f2) f2.onclick = () => padFirma("Firma del cliente",
@@ -4752,7 +4847,7 @@ function firmar(v, quien, d){
       `Firmado por ${d.nombre}. Listo para enviarse al cliente.\nEl cliente pasó a "Cotización enviada".`, d.nombre);
   } else {
     if (!v.firmaHotel){ alert("Primero debe firmar el ejecutivo de ventas."); return; }
-    cerrarConvenio(v, f, `Firmado por ${d.nombre}, capturado por el ejecutivo.`, (c && c.ejecutivo) || "");
+    cerrarConvenio(v, f, `Firmado por ${d.nombre}, capturado por el ejecutivo.`, ejecutivoDe(v));
     v.avisado = true;          // lo capturó el propio ejecutivo: no hay nada que avisarle
     guardar(); render();
     return;
@@ -4785,7 +4880,7 @@ function subirConvenioFirmado(v, alTerminar){
               equipos en cada sincronización, así que uno pesado los hace lentos a todos.
               Si tu escáner lo saca muy grande, sube una foto del documento.</div></div>
           <div class="full"><label class="lbl">¿Quién lo recibió?</label>
-            <input class="field" id="fQuienRecibe" value="${esc(miNombre() || (c && c.ejecutivo) || "")}"></div>
+            <input class="field" id="fQuienRecibe" value="${esc(miNombre() || ejecutivoDe(v))}"></div>
         </div>
         <div id="errPdf" style="margin-top:10px"></div>
       </div>
@@ -5020,7 +5115,7 @@ function cerrarConvenio(v, firma, comoLlego, quien){
   }
   registrarAuto(v.clienteId, `Convenio ${v.folio} firmado por el cliente`,
     `${comoLlego}\nEl cliente pasó automáticamente a "Ganado".`,
-    quien || (c && c.ejecutivo) || "");
+    quien || ejecutivoDe(v));
   guardar();
 }
 
@@ -5028,8 +5123,7 @@ function cerrarConvenio(v, firma, comoLlego, quien){
 
 /** Convenios firmados por el cliente que el ejecutivo todavía no ha visto. */
 const novedadesFirma = () => state.convenios.filter(v =>
-  v.estado === "firmado_cliente" && v.firmaEmpresa && !v.avisado &&
-  (puedeVerTodo() || esMio(cliente(v.clienteId) || {})));
+  v.estado === "firmado_cliente" && v.firmaEmpresa && !v.avisado && convenioEsMio(v));
 
 function pintarAvisos(){
   const el = document.getElementById("avisos");
@@ -5061,7 +5155,7 @@ function enviarConvenio(v, c){
   const asunto = `Carta-convenio ${v.folio} · ${h.nombre}`;
   const archivo = nombrePdfConvenio(v, c);
   const conLiga = puedeMandarLiga() && !!v.tokenFirma;
-  const firmante = (v.firmaHotel && v.firmaHotel.nombre) || (c && c.ejecutivo) || "";
+  const firmante = (v.firmaHotel && v.firmaHotel.nombre) || ejecutivoDe(v);
 
   const saludo = `Estimado(a) ${(c && c.contacto) || ""}:\n\n` +
     `Adjunto la carta-convenio ${v.folio} de ${h.nombre}, vigente ` +
@@ -5087,7 +5181,7 @@ function enviarConvenio(v, c){
   const anotar = via => {
     v.enviado = { fecha: new Date().toISOString(), via, quien: correoSesion() };
     registrarAuto(v.clienteId, `Convenio ${v.folio} enviado por ${VIAS[via]}`,
-      `Enviado a ${via === "correo" ? (c && c.email) : (c && c.telefono)}.`, (c && c.ejecutivo) || "");
+      `Enviado a ${via === "correo" ? (c && c.email) : (c && c.telefono)}.`, ejecutivoDe(v));
     guardar(); render();
   };
   const abrirCorreo = cuerpo => {
@@ -5169,25 +5263,41 @@ function enviarConvenio(v, c){
 }
 
 /** Lienzo de firma: ratón, dedo o lápiz. */
-function padFirma(titulo, def, alFirmar){
+function padFirma(titulo, def, alFirmar, opciones){
+  // recordar: es la firma de quien está usando la aplicación, así que se le
+  // puede ofrecer guardarla. La del cliente no: esa es de otra persona.
+  const op = Object.assign({ recordar:false }, opciones || {});
+  const previa = op.recordar ? firmaGuardada() : null;
+
   const ov = modal(`
     <div class="modal">
       <div class="modal-head"><h2>${esc(titulo)}</h2><button class="btn" data-close>✕</button></div>
       <div class="modal-body">
         <div class="grid" style="margin-bottom:14px">
           <div class="full"><label class="lbl">Nombre</label>
-            <input class="field" id="fNombre" value="${esc(def.nombre||"")}" placeholder="Nombre completo"></div>
+            <input class="field" id="fNombre" value="${esc(def.nombre || (previa && previa.nombre) || "")}" placeholder="Nombre completo"></div>
           <div><label class="lbl">Puesto</label>
-            <input class="field" id="fPuesto" value="${esc(def.puesto||"")}"></div>
+            <input class="field" id="fPuesto" value="${esc(def.puesto || (previa && previa.puesto) || "")}"></div>
           <div><label class="lbl">Celular</label>
-            <input class="field" id="fCel" value="${esc(def.celular||"")}"></div>
+            <input class="field" id="fCel" value="${esc(def.celular || (previa && previa.celular) || "")}"></div>
         </div>
-        <label class="lbl">Firma (traza con el ratón o el dedo)</label>
-        <canvas class="sign-pad" id="pad"></canvas>
+        ${previa ? `<div id="cajaPrevia">
+          <label class="lbl">Su firma guardada</label>
+          <div class="firma-previa"><img src="${previa.img}" alt="Firma guardada"></div>
+          <p class="hint" style="margin:6px 0 0">Se traza una vez y se vuelve a usar sola.
+            <button class="btn sm" id="bOtra" type="button">Trazar otra</button>
+            <button class="btn sm danger" id="bOlvidar" type="button">Borrarla</button></p>
+        </div>` : ""}
+        <div id="cajaPad"${previa ? ` style="display:none"` : ""}>
+          <label class="lbl">Firma (traza con el ratón o el dedo)</label>
+          <canvas class="sign-pad" id="pad"></canvas>
+          ${op.recordar ? `<p style="margin:8px 0 0"><label><input type="checkbox" id="fRecordar" checked>
+            Guardar esta firma para no volver a trazarla</label></p>` : ""}
+        </div>
         <p class="hint" style="margin-top:6px">Una vez firmado, el convenio ya no se puede editar.</p>
       </div>
       <div class="modal-foot">
-        <button class="btn" id="bClear">Borrar trazo</button>
+        <button class="btn" id="bClear"${previa ? ` style="display:none"` : ""}>Borrar trazo</button>
         <div class="spacer"></div>
         <button class="btn" data-close>Cancelar</button>
         <button class="btn ok" id="bOk">Firmar</button>
@@ -5195,16 +5305,43 @@ function padFirma(titulo, def, alFirmar){
     </div>`);
 
   const cv = ov.querySelector("#pad");
-  const limpiar = prepararPad(cv);
+  const bClear = ov.querySelector("#bClear");
+  let usandoPrevia = !!previa, limpiar = null;
 
-  ov.querySelector("#bClear").onclick = limpiar;
+  /** El lienzo se prepara cuando se ve: oculto mide cero y la firma saldría vacía. */
+  function mostrarPad(){
+    usandoPrevia = false;
+    const caja = ov.querySelector("#cajaPrevia");
+    if (caja) caja.style.display = "none";
+    ov.querySelector("#cajaPad").style.display = "";
+    bClear.style.display = "";
+    if (!limpiar) limpiar = prepararPad(cv);
+  }
+  if (!previa) mostrarPad();
+
+  const bOtra = ov.querySelector("#bOtra");
+  if (bOtra) bOtra.onclick = mostrarPad;
+
+  const bOlvidar = ov.querySelector("#bOlvidar");
+  if (bOlvidar) bOlvidar.onclick = () => {
+    if (!confirm("¿Borrar la firma guardada? La próxima vez habrá que trazarla de nuevo.")) return;
+    olvidarFirmaPropia();
+    ov.querySelector("#cajaPrevia").remove();
+    mostrarPad();
+  };
+
+  bClear.onclick = () => { if (limpiar) limpiar(); };
+
   ov.querySelector("#bOk").onclick = () => {
     const nombre = ov.querySelector("#fNombre").value.trim();
     if (!nombre){ alert("Escribe el nombre de quien firma."); return; }
-    if (!cv.dataset.trazado){ alert("Falta trazar la firma."); return; }
-    const img = padAPng(cv);
+    if (!usandoPrevia && !cv.dataset.trazado){ alert("Falta trazar la firma."); return; }
+    const img = usandoPrevia ? previa.img : padAPng(cv);
     const puesto  = ov.querySelector("#fPuesto").value.trim();
     const celular = ov.querySelector("#fCel").value.trim();
+    const recordar = ov.querySelector("#fRecordar");
+    if (!usandoPrevia && recordar && recordar.checked)
+      guardarFirmaPropia({ nombre, puesto, celular, img });
     ov.remove();
     alFirmar({ nombre, puesto, celular, img });
   };

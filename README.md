@@ -131,6 +131,10 @@ Un convenio se arma eligiendo el cliente y marcando las habitaciones que entran:
 - La **tarifa convenio** se captura a mano. Al lado se calcula el descuento contra la pública.
 - Un interruptor decide si el convenio **incluye también las habitaciones Recovery**, con su
   propia tarifa pública fija y su tarifa convenio capturable.
+- El **ejecutivo de ventas** se escoge de una lista desplegable con el equipo dado de alta.
+  Toma por omisión al del cliente y lo sigue si se cambia de cliente, pero se puede cambiar:
+  a veces alguien levanta un convenio para un cliente que atiende otra persona. Es quien firma
+  por el hotel y a quien se le avisa cuando el cliente firma.
 - Hay un campo de **observaciones internas** que no se imprime en la carta.
 
 **No se puede guardar ni firmar** hasta que se cumplan las tres reglas. Lo que falte se
@@ -147,6 +151,10 @@ enumera arriba del formulario y las filas incompletas se marcan en rojo:
 2. **Firma el ejecutivo** (nombre, puesto, celular y firma trazada con el ratón o el dedo).
    → El convenio queda bloqueado, **el cliente pasa a "Cotización enviada"** y se genera la
    clave del enlace de firma.
+   La primera vez se ofrece **guardar la firma**; después basta con confirmarla, y se puede
+   reemplazar o borrar desde ahí mismo o desde el menú de la sesión. Con nube la firma va en la
+   ficha del usuario y lo acompaña a cualquier computadora; sin nube se queda en esa máquina y
+   se borra al cerrar sesión.
 3. **Se envía al cliente**, por correo o WhatsApp. La columna **Enviado** de la tabla dice
    cuándo salió y por dónde, igual que en las confirmaciones.
 4. **Firma el cliente** → **pasa automáticamente a "Ganado"** y su tarifa se actualiza con la

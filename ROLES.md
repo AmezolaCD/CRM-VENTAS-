@@ -40,6 +40,29 @@ cuántos clientes y cuántas actividades arrastra, y un botón para pasárselos 
 alguien del equipo (o dejarlos sin asignar a propósito). En los filtros esos nombres siguen
 apareciendo, pero apartados bajo *Sin dar de alta*, para que se noten en vez de esconderse.
 
+## El convenio dice de quién es
+
+Cada convenio guarda **su propio ejecutivo**, que se escoge de la misma lista al crearlo. Por
+omisión toma al del cliente, y lo sigue si se cambia de cliente, pero se puede cambiar a mano:
+pasa que alguien levanta un convenio para un cliente que atiende otra persona.
+
+Ese ejecutivo es el que firma la carta por el hotel y al que se le avisa cuando el cliente
+firma. Un convenio se le muestra a quien lo trae asignado **y** al dueño del cliente; gerencia y
+administración los ven todos. Los convenios viejos, que no traen el dato, siguen siendo del
+dueño del cliente.
+
+## La firma se traza una vez
+
+La primera vez que alguien firma un convenio se le ofrece **guardar su firma**. A partir de ahí
+sólo tiene que confirmar; el botón *Trazar otra* sirve para reemplazarla y *Borrarla* para
+quitarla. También se ve y se borra desde el menú de la sesión (el chip con su nombre, arriba a
+la derecha).
+
+La firma se guarda **en su ficha de usuario**, así que la trae consigo a cualquier computadora
+en la que entre con su correo. Eso también quiere decir que viaja al servidor junto con el resto
+de los datos, igual que las firmas que ya van estampadas en cada convenio. Sin nube se queda
+nada más en esa máquina, y se borra al cerrar sesión para no dejársela al que se siente después.
+
 ## Dar de alta a alguien son dos pasos
 
 1. **En Supabase** → *Authentication → Users → Add user*, con **Auto Confirm User** marcado.
