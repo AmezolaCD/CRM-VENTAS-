@@ -23,8 +23,22 @@ eso se compara contra el **nombre** que tiene el usuario dado de alta.
 
 Si en *Usuarios y permisos* dice `Carmen Sotelo` y en los clientes dice `C. Sotelo`, esa
 ejecutiva **no verá su propia cartera**. Es el error más fácil de cometer y el más difícil de
-ver, porque todo lo demás parece bien. El campo del nombre ofrece los que ya existen en la
-cartera; conviene elegir de ahí.
+ver, porque todo lo demás parece bien.
+
+Para que no vuelva a pasar, el ejecutivo de un cliente **ya no se escribe**: se escoge de una
+lista, y esa lista es exactamente la tabla de *Usuarios y permisos*. Lo mismo el responsable de
+una actividad y los filtros del tablero y de Actividades.
+
+### Nombres que no son de nadie
+
+Un nombre suelto todavía puede entrar por una **importación de CSV o de Excel**, donde la
+columna *Ejecutivo* es texto libre. Cuando eso pasa, ese cliente no aparece en la pantalla de
+ningún ejecutivo.
+
+El CRM los junta y los enseña en **Ajustes → Nombres que no son de nadie**: cada nombre suelto,
+cuántos clientes y cuántas actividades arrastra, y un botón para pasárselos de un jalón a
+alguien del equipo (o dejarlos sin asignar a propósito). En los filtros esos nombres siguen
+apareciendo, pero apartados bajo *Sin dar de alta*, para que se noten en vez de esconderse.
 
 ## Dar de alta a alguien son dos pasos
 

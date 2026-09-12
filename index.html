@@ -492,7 +492,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.10-27";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.12-28";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -831,6 +831,62 @@ function esMio(c){
   if (puedeVerTodo()) return true;
   const yo = miNombre().trim().toLowerCase();
   return !!yo && String(c.ejecutivo || "").trim().toLowerCase() === yo;
+}
+
+/** Los nombres del equipo dado de alta: los únicos que deben poder elegirse. */
+const nombresEquipo = () => [...new Set(state.usuarios.map(u => String(u.nombre || "").trim())
+  .filter(Boolean))].sort((a,b) => a.localeCompare(b,"es"));
+
+/**
+ * Nombres escritos en la cartera o en la bitácora que no son de nadie del
+ * equipo: quedan de una importación, de un ejemplo o de un dedazo. Importan
+ * porque esos clientes no los ve ningún ejecutivo, así que hay que enseñarlos
+ * aparte en vez de esconderlos.
+ */
+function nombresSinDuenio(){
+  const equipo = new Set(nombresEquipo().map(n => n.toLowerCase()));
+  return [...new Set([
+      ...state.clientes.map(c => c.ejecutivo),
+      ...state.actividades.map(a => a.responsable)
+    ].map(x => String(x || "").trim()).filter(Boolean)
+     .filter(n => !equipo.has(n.toLowerCase())))]
+    .sort((a,b) => a.localeCompare(b,"es"));
+}
+
+/** Cuánto arrastra un nombre suelto, para poder decírselo al administrador. */
+const cuantoTiene = nombre => {
+  const n = nombre.trim().toLowerCase();
+  const igual = x => String(x || "").trim().toLowerCase() === n;
+  return { clientes:    state.clientes.filter(c => igual(c.ejecutivo)).length,
+           actividades: state.actividades.filter(a => igual(a.responsable)).length };
+};
+
+/** Las opciones de los filtros por ejecutivo, iguales en tablero y actividades. */
+function opcionesEjecutivos(valor, todos){
+  const op = n => `<option value="${esc(n)}"${n === valor ? " selected" : ""}>${esc(n)}</option>`;
+  const cab = `<option value="">${esc(todos)}</option>`;
+  if (!puedeVerTodo()){                 // un ejecutivo sólo se tiene a sí mismo
+    const yo = miNombre().trim();
+    return cab + (yo ? op(yo) : "");
+  }
+  const sueltos = nombresSinDuenio();
+  return cab + nombresEquipo().map(op).join("") +
+    (sueltos.length ? `<optgroup label="Sin dar de alta">${sueltos.map(op).join("")}</optgroup>` : "");
+}
+
+/**
+ * El ejecutivo de un cliente se escoge de la lista, no se escribe: un nombre
+ * con una letra de más deja al cliente sin dueño y nadie lo vuelve a ver.
+ */
+function selectEjecutivo(valor, nombreCampo){
+  const v = String(valor || "").trim(), vb = v.toLowerCase();
+  const equipo = nombresEquipo();
+  const suelto = v && !equipo.some(n => n.toLowerCase() === vb);
+  return `<select class="field" name="${nombreCampo || "ejecutivo"}">
+      <option value=""${v ? "" : " selected"}>— Sin asignar —</option>
+      ${equipo.map(n => `<option value="${esc(n)}"${n.toLowerCase() === vb ? " selected" : ""}>${esc(n)}</option>`).join("")}
+      ${suelto ? `<option value="${esc(v)}" selected>${esc(v)} · sin dar de alta</option>` : ""}
+    </select>`;
 }
 
 /**
@@ -1876,10 +1932,10 @@ function clientesDemo(){
       ejecutivo:"Carmen Sotelo", estatus:"negociacion", notas:"Pidieron tarifa para 25 noches al mes." },
     { id:"c3", empresa:"Textiles Ávila", contacto:"Mónica Ávila", telefono:"8144556677",
       email:"monica@avila.mx", ubicacion:"Monterrey", tarifa:0,
-      ejecutivo:"Ana", estatus:"propuesta", notas:"Comparando con dos hoteles más." },
+      ejecutivo:"Eduardo Islas", estatus:"propuesta", notas:"Comparando con dos hoteles más." },
     { id:"c4", empresa:"Distribuidora Sur", contacto:"Jorge Rivas", telefono:"3388991122",
       email:"jrivas@dsur.com", ubicacion:"Guadalajara", tarifa:0,
-      ejecutivo:"Ana", estatus:"contactado", notas:"" }
+      ejecutivo:"Eduardo Islas", estatus:"contactado", notas:"" }
   ].map(saneaCliente);
 }
 
@@ -2360,10 +2416,7 @@ function render(){
 }
 
 function renderEjecutivos(){
-  const sel = document.getElementById("fEje");
-  const lista = [...new Set(state.clientes.map(c => c.ejecutivo).filter(Boolean))].sort();
-  sel.innerHTML = `<option value="">Todos</option>` + lista.map(o =>
-    `<option value="${esc(o)}"${o === filtros.ejecutivo ? " selected" : ""}>${esc(o)}</option>`).join("");
+  document.getElementById("fEje").innerHTML = opcionesEjecutivos(filtros.ejecutivo, "Todos");
 }
 
 function renderKpis(){
@@ -3189,6 +3242,21 @@ function editarHuesped(id){
   }
 }
 
+/** Cambia de dueño todo lo que traiga un nombre: clientes y bitácora a la vez. */
+function reasignarEjecutivo(de, a){
+  const n = String(de || "").trim().toLowerCase();
+  if (!n) return 0;
+  let tocados = 0;
+  state.clientes.forEach(c => {
+    if (String(c.ejecutivo || "").trim().toLowerCase() === n){ c.ejecutivo = a; tocados++; }
+  });
+  state.actividades.forEach(x => {
+    if (String(x.responsable || "").trim().toLowerCase() === n){ x.responsable = a; tocados++; }
+  });
+  if (tocados) guardar();
+  return tocados;
+}
+
 function renderAjustes(){
   const a = state.ajustes, t = a.textos, h = a.hotel;
   const filaHab = x => `<tr data-id="${x.id}">
@@ -3235,10 +3303,12 @@ function renderAjustes(){
         <button class="btn danger" id="bNbQuitar">Desconectar este equipo</button></p>
 
       <h3 class="sec">Usuarios y permisos</h3>
-      <div class="note"><b>El nombre tiene que estar escrito igual que en la cartera.</b>
-        Lo que amarra a una persona con sus clientes es el campo <i>Ejecutivo</i> de cada
-        cliente, no el correo. Si aquí dice “Carmen Sotelo” y en los clientes dice
-        “C. Sotelo”, esa ejecutiva no verá su propia cartera.</div>
+      <div class="note"><b>Esta tabla es la lista de ejecutivos de toda la aplicación.</b>
+        Los filtros y la ficha del cliente sólo ofrecen estos nombres, así que quien no
+        esté aquí no le puede tocar nada. Lo que amarra a una persona con sus clientes es
+        el campo <i>Ejecutivo</i> de cada cliente, no el correo: si aquí dice “Carmen Sotelo”
+        y en un cliente importado dice “C. Sotelo”, ese cliente queda sin dueño y aparece
+        más abajo, en <i>Nombres que no son de nadie</i>.</div>
       <div class="note warn"><b>Esto acomoda lo que cada quien ve en pantalla.</b>
         Los datos siguen viajando completos a cada equipo, así que alguien con conocimientos
         podría leerlos de todas formas. Para que el servidor mismo se los niegue falta un paso
@@ -3251,6 +3321,8 @@ function renderAjustes(){
         <button class="btn" id="bAddUsr">+ Agregar persona</button>
         <span class="hint">Dar de alta aquí no crea la cuenta: eso se hace en Supabase,
           en <i>Authentication → Users</i>, con el mismo correo.</span></p>
+
+      <div id="huerfanos" style="margin-top:22px"></div>
 
       <h3 class="sec">Datos del hotel</h3>
       <div class="grid">
@@ -3379,6 +3451,59 @@ function renderAjustes(){
         <div class="hint">${esc(infoRol(u.rol).ayuda)}</div></td>
       <td><button class="btn sm danger" data-delu="${u.id}">Quitar</button></td></tr>`).join("") +
     `<datalist id="listaEje">${nombresCartera.map(n => `<option value="${esc(n)}">`).join("")}</datalist>`;
+
+  /**
+   * Los nombres que quedaron escritos y no son de nadie del equipo. Salen de
+   * importaciones viejas o de los clientes de ejemplo. Mientras estén así, esos
+   * clientes no aparecen en la pantalla de ningún ejecutivo, de modo que hay
+   * que enseñarlos y dejar cambiarlos de dueño de un jalón.
+   */
+  function pintarHuerfanos(){
+    const caja = p.querySelector("#huerfanos");
+    if (!caja) return;
+    const sueltos = nombresSinDuenio();
+    if (!sueltos.length){
+      caja.innerHTML = `<div class="note"><b>Todos los clientes tienen dueño.</b>
+        Cada nombre escrito en la cartera corresponde a alguien de la tabla de arriba.</div>`;
+      return;
+    }
+    const equipo = nombresEquipo();
+    caja.innerHTML = `
+      <h3 class="sec">Nombres que no son de nadie</h3>
+      <div class="note warn"><b>Estos clientes no los ve ningún ejecutivo.</b>
+        El nombre escrito en su ficha no coincide con nadie de la tabla de arriba.
+        Escoja a quién se los pasa y guarde.</div>
+      <div style="overflow:auto"><table class="data">
+        <thead><tr><th>Nombre escrito</th><th class="num">Clientes</th>
+          <th class="num">Actividades</th><th>Pasárselos a</th><th></th></tr></thead>
+        <tbody>${sueltos.map(n => {
+          const q = cuantoTiene(n);
+          return `<tr>
+            <td><b>${esc(n)}</b></td>
+            <td class="num">${q.clientes}</td>
+            <td class="num">${q.actividades}</td>
+            <td><select class="field" data-dest="${esc(n)}" style="width:100%">
+              <option value="">— Escoja —</option>
+              ${equipo.map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join("")}
+              <option value="::nadie::">Dejarlos sin asignar</option></select></td>
+            <td><button class="btn sm primary" data-mover="${esc(n)}">Reasignar</button></td></tr>`;
+        }).join("")}</tbody></table></div>`;
+
+    caja.querySelectorAll("[data-mover]").forEach(b => b.onclick = () => {
+      const de = b.dataset.mover;
+      const sel = caja.querySelector(`[data-dest="${CSS.escape(de)}"]`);
+      const elegido = sel ? sel.value : "";
+      if (!elegido){ alert("Escoja primero a quién se le pasan."); return; }
+      const a = elegido === "::nadie::" ? "" : elegido;
+      const q = cuantoTiene(de);
+      if (!confirm(`Pasar ${q.clientes} cliente(s) y ${q.actividades} actividad(es) de ` +
+                   `“${de}” a ${a ? `“${a}”` : "nadie"}?`)) return;
+      reasignarEjecutivo(de, a);
+      pintarHuerfanos();
+      renderEjecutivos();
+    });
+  }
+  pintarHuerfanos();
 
 
   /** Vuelca el formulario al estado. Se llama también antes de agregar o
@@ -3654,7 +3779,10 @@ document.addEventListener("keydown", e => {
 
 function abrirCliente(id, estatusInicial, pane){
   const existente = id ? cliente(id) : null;
-  const c = existente || saneaCliente({ estatus: estatusInicial || "contactado" });
+  // Un cliente nuevo nace de quien lo está capturando: si naciera sin dueño,
+  // el propio ejecutivo dejaría de verlo en cuanto cerrara la ventana.
+  const c = existente || saneaCliente({ estatus: estatusInicial || "contactado",
+                                        ejecutivo: miNombre() });
 
   const campos = CAMPOS_CLIENTE.map(f => {
     const val = f.key === "tarifa" ? (Number(c.tarifa) ? c.tarifa : "") : (c[f.key] ?? "");
@@ -3664,6 +3792,7 @@ function abrirCliente(id, estatusInicial, pane){
     else if (f.type === "estatus") ctl = `<select class="field" name="estatus">${
         ESTATUS.map(e => `<option value="${e.id}"${e.id===c.estatus?" selected":""}>${esc(e.name)}</option>`).join("")}</select>`;
     else if (f.type === "money") ctl = `<input class="field" type="text" inputmode="decimal" name="tarifa" value="${esc(val)}" placeholder="0.00">`;
+    else if (f.key === "ejecutivo") ctl = selectEjecutivo(val);
     else ctl = `<input class="field" type="${f.type}" name="${f.key}" value="${esc(val)}">`;
     return `<div class="${ancho.trim()}"><label class="lbl">${esc(f.label)}</label>${ctl}</div>`;
   }).join("");
@@ -3827,7 +3956,7 @@ function modalActividad(clienteId, actId, alCerrar){
         <div class="full"><label class="lbl">Asunto</label>
           <input class="field" name="asunto" value="${esc(v.asunto)}" placeholder="Seguimiento de cotización"></div>
         <div class="full"><label class="lbl">Responsable (ejecutivo de venta)</label>
-          <input class="field" name="responsable" value="${esc(v.responsable || (cliente(clienteId)||{}).ejecutivo || "")}"></div>
+          ${selectEjecutivo(v.responsable || (cliente(clienteId)||{}).ejecutivo || miNombre(), "responsable")}</div>
         <div class="full"><label class="lbl">Notas</label>
           <textarea class="field" name="notas" style="min-height:110px">${esc(v.notas)}</textarea></div>
       </div></form></div>
@@ -3923,12 +4052,6 @@ function actividadesVisibles(){
   }).sort((x,y) => String(y.fecha).localeCompare(String(x.fecha)));
 }
 
-/** Todo el que aparezca como responsable, más los ejecutivos de la cartera. */
-const ejecutivosConocidos = () => [...new Set([
-  ...state.actividades.map(a => a.responsable),
-  ...state.clientes.map(c => c.ejecutivo)
-].map(x => String(x || "").trim()).filter(Boolean))].sort((a,b) => a.localeCompare(b,"es"));
-
 function renderActividades(){
   const cont = document.getElementById("tblAct");
   const as = actividadesVisibles();
@@ -3948,7 +4071,7 @@ function renderActividades(){
         <span class="hint">a</span>
         <input class="field" type="date" id="fHasta" value="${esc(filtroAct.hasta)}" title="Hasta">` : ""}
       <select class="field" id="fEjeAct" title="Ejecutivo">${
-        opciones(ejecutivosConocidos().map(x => [x,x]), filtroAct.ejecutivo, "Todos los ejecutivos")}</select>
+        opcionesEjecutivos(filtroAct.ejecutivo, "Todos los ejecutivos")}</select>
       <select class="field" id="fTipoAct" title="Tipo">${
         opciones(TIPOS_ACT.map(t => [t.id, t.icon + " " + t.name]), filtroAct.tipo, "Todos los tipos")}</select>
       <span style="flex:1"></span>
