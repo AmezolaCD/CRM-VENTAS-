@@ -10,6 +10,11 @@
 --  equipo en Ajustes → Usuarios y permisos: las reglas de aquí leen esa misma
 --  lista, así que si está vacía nadie vería nada.
 --
+--  Se puede volver a correr cuantas veces haga falta: reemplaza lo que ya
+--  estaba en lugar de acumularlo. Si agregaste gente o cambiaste papeles, no
+--  hace falta correrlo otra vez —las reglas leen la lista viva—; sólo cuando
+--  cambie este archivo.
+--
 --  Antes de correrlo, saca un respaldo: Exportar → Respaldo completo (JSON).
 -- ===========================================================================
 
@@ -73,9 +78,14 @@ as $$ select coalesce(public.crm_yo() ->> 'nombre', ''); $$;
 --    la lista de usuarios, que son del administrador. No se restringe más
 --    porque quien puede ver un registro necesita poder corregirlo.
 -- ---------------------------------------------------------------------------
+-- Se tiran primero las de nube.sql y también las de este archivo, para que
+-- volver a correrlo no truene con "policy already exists".
 drop policy if exists "equipo lee"     on public.crm_datos;
 drop policy if exists "equipo inserta" on public.crm_datos;
 drop policy if exists "equipo edita"   on public.crm_datos;
+drop policy if exists "lee lo suyo"    on public.crm_datos;
+drop policy if exists "inserta"        on public.crm_datos;
+drop policy if exists "edita"          on public.crm_datos;
 
 create policy "lee lo suyo" on public.crm_datos for select to authenticated
 using (
@@ -119,7 +129,8 @@ with check (
 -- ---------------------------------------------------------------------------
 -- 4. La bitácora, sólo para quien manda
 -- ---------------------------------------------------------------------------
-drop policy if exists "equipo lee bitacora" on public.crm_bitacora;
+drop policy if exists "equipo lee bitacora"   on public.crm_bitacora;
+drop policy if exists "gerencia lee bitacora" on public.crm_bitacora;
 create policy "gerencia lee bitacora" on public.crm_bitacora for select to authenticated
 using (public.crm_rol() in ('admin','gerente'));
 
