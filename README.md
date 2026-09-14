@@ -58,7 +58,7 @@ equipo donde lo abres. Trae clientes de ejemplo para que se entienda el funciona
 para empezar limpio usa *Exportar → Borrar todos los datos*, o marca **"Reemplazar la
 cartera actual"** al importar tu archivo.
 
-En operación, el CRM vive en **<https://corequartz.netlify.app>** y los datos en Supabase.
+En operación, el CRM vive en **<https://core-quartz.vercel.app>** y los datos en Supabase.
 Para montarlo desde cero —o para entender cómo está armado— sigue **[NUBE.md](NUBE.md)**: son unos 20 minutos, una sola vez, y no cuesta nada para
 este tamaño de equipo.
 

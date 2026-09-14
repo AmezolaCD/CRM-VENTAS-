@@ -72,37 +72,32 @@ solo: **Authentication** → **Sign In / Providers** → Email → apaga
 El archivo `index.html` es la aplicación entera. Sólo hay que dejarlo en un
 lugar con dirección propia.
 
-> **Cómo está montado hoy:** el repositorio de GitHub enlazado a Vercel. Cada cambio que se
-> empuja se publica solo. En el repositorio van `vercel.json` y `netlify.toml`, que no hacen
-> más que dos cosas: declarar que no hay nada que compilar y pedirle al navegador que
-> revalide el HTML en cada visita, para que nadie se quede con una copia vieja.
->
-> Netlify también sirve, pero **en su plan gratuito y con repositorio privado sólo construye
-> commits de miembros verificados de la cuenta**, y eso bloquea las publicaciones. Se puede
-> usar arrastrando la carpeta a mano (abajo), que no tiene esa restricción.
+## La dirección de hoy
 
-### Opción recomendada · Netlify Drop (dos minutos, gratis)
+> El CRM vive en **<https://core-quartz.vercel.app>**. Ésa es la que se reparte al equipo
+> y la única que se usa.
 
-1. Entra a <https://app.netlify.com/drop>.
-2. Arrastra la **carpeta** que contiene `index.html`.
-3. Te da una dirección tipo `https://algo-al-azar.netlify.app`. En
-   *Site configuration → Change site name* puedes dejarla como
-   `quartz-crm.netlify.app`.
-4. Esa dirección se comparte con el equipo y se guarda en favoritos.
+### Cómo está montado
 
-Para actualizar el CRM más adelante: vuelves a arrastrar la carpeta al mismo sitio.
-Si Netlify dice *"All files already uploaded by a previous deploy"*, no recibió nada nuevo:
-arrastraste la misma carpeta de antes. Y si el sitio se publicó bien pero sigues viendo lo
-viejo, es el navegador: recarga con **Ctrl + F5**. Hasta abajo de Ajustes está el número de
-versión, para comparar entre equipos.
+El repositorio de GitHub está enlazado a **Vercel**: cada cambio que se empuja a la rama
+principal se publica solo, sin tocar nada. El archivo `vercel.json` del repositorio no hace
+más que dos cosas — declarar que no hay nada que compilar y pedirle al navegador que revalide
+el HTML en cada visita, para que nadie se quede con una copia vieja.
+
+Si el sitio se publicó bien pero sigues viendo lo de antes, es el navegador: recarga con
+**Ctrl + F5**. Hasta abajo de Ajustes está el número de versión, para comparar entre equipos.
 
 ### Otras opciones
 
-- **Cloudflare Pages** o **Vercel**: igual de gratis, mismo procedimiento.
-- **GitHub Pages**: sirve, pero **este repositorio es privado** y GitHub Pages
-  sobre repositorios privados requiere plan de paga. Con el repositorio público
-  no hay problema — sólo que entonces cualquiera puede leer el código (los datos
-  siguen protegidos, están en Supabase).
+Ninguna hace falta hoy; se anotan por si algún día cambia el hospedaje.
+
+- **Netlify Drop** (<https://app.netlify.com/drop>): se arrastra la carpeta que contiene
+  `index.html` y da una dirección al instante. Sirve para una prueba rápida o si Vercel se
+  cae, pero hay que volver a arrastrarla en cada cambio, así que no conviene como
+  dirección de diario. *(Se usó al principio; ese sitio ya no se ocupa.)*
+- **Cloudflare Pages**: igual de gratis, mismo procedimiento que Vercel.
+- **GitHub Pages**: también sirve, ahora que el repositorio es público. Es más lento en
+  publicar que Vercel, nada más.
 - **Sin internet**, dentro del hotel: el archivo puede vivir en una carpeta
   compartida de la red. Funciona, pero cada quien tendría que abrirlo desde ahí
   y no serviría desde el celular ni desde fuera.
@@ -114,6 +109,11 @@ en blanco en todos lados: sin los datos de Supabase, sin sesión y con los clien
 ejemplo. **No se pierde nada** —todo está en la nube—, pero hay que reconectar una vez por
 equipo, con los pasos de la Parte 3. Al entrar, avisa que ese equipo *adoptará* los datos de
 la nube: es justo lo que se busca.
+
+Y hay una cosa más que se queda atrás: los **enlaces de firma** que ya se le mandaron a
+clientes llevan dentro la dirección desde la que se generaron. Si esa dirección se apaga,
+esos enlaces dejan de abrir. Los convenios no se pierden —siguen en Supabase—, pero hay que
+volver a mandarle el enlace al cliente desde la dirección nueva, o pedirle la firma en papel.
 
 Por eso conviene dejar el nombre definitivo **antes** de repartir la liga al equipo.
 
