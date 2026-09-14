@@ -1,15 +1,20 @@
 # Quién ve qué
 
-El CRM tiene tres papeles:
+El CRM tiene cuatro papeles:
 
-| Papel | Ve | Ajustes |
+| Papel | Pestañas que ve | Qué alcanza |
 |---|---|---|
-| **Administrador** | Todo | Sí — es el único |
-| **Gerencia de ventas** | La cartera, los convenios y la actividad de todo el equipo | No |
-| **Ejecutivo de ventas** | Sólo sus propios clientes, convenios y actividades | No |
+| **Administrador** | Todas, Ajustes incluido | Todo |
+| **Gerencia de ventas** | Todas menos Ajustes | La cartera, los convenios, la actividad y los prospectos de todo el equipo |
+| **Ejecutivo de ventas** | Todas menos Ajustes | Sólo sus propios clientes, convenios, actividades y prospectos |
+| **Sólo prospección** | Únicamente *Formulario* | Sólo los prospectos que esa cuenta capturó |
 
 Un ejecutivo ve además **las actividades que él mismo registró**, aunque sean de un cliente de
 otro: a veces se cubre a un compañero y esa llamada es suya de todos modos.
+
+**Sólo prospección** es el papel de la cuenta *Banquetes*: levanta contactos en eventos y nada
+más. No ve el tablero, ni la cartera, ni los convenios, y tampoco le aparecen los botones de
+*Importar* y *Exportar*, que mueven la cartera entera.
 
 Los **huéspedes** de las cartas de confirmación los ve todo el equipo. No son de nadie en
 particular: son trabajo de recepción, no cartera de ventas.
@@ -63,6 +68,20 @@ en la que entre con su correo. Eso también quiere decir que viaja al servidor j
 de los datos, igual que las firmas que ya van estampadas en cada convenio. Sin nube se queda
 nada más en esa máquina, y se borra al cerrar sesión para no dejársela al que se siente después.
 
+## El formulario de prospección
+
+La pestaña **Formulario** es para levantar contactos en una expo, una feria o un evento del
+hotel: nombre, apellido, correo y teléfono obligatorios, compañía y evento opcionales.
+
+Lo que se captura **no entra a la cartera**. Se queda en su propia lista hasta que alguien le
+da *Pasar a la cartera*, y ahí se escoge el ejecutivo que lo va a trabajar; sólo entonces se
+crea el cliente, con su nota diciendo de qué evento salió. Así un evento de cien registros no
+llena el embudo de gente que nunca contestó.
+
+Cada registro es de quien lo capturó: un ejecutivo ve los suyos, gerencia y administración los
+ven todos. El campo *Evento* se queda puesto entre un registro y el siguiente, porque en un
+stand se capturan decenas seguidos del mismo.
+
 ## Dar de alta a alguien son dos pasos
 
 1. **En Supabase** → *Authentication → Users → Add user*, con **Auto Confirm User** marcado.
@@ -99,6 +118,13 @@ nadie ande de mirón por accidente.
 Si además quieres que **el servidor mismo se niegue** a entregar la cartera ajena, corre
 `roles.sql` en el SQL Editor de Supabase. A partir de ahí, un ejecutivo ya no recibe los datos
 de otro ni sabiendo dónde buscar.
+
+Con `roles.sql` corrido, la cuenta de **Banquetes** es la más cerrada de todas: el servidor le
+entrega los ajustes, la lista de usuarios y sus propios prospectos, y nada más. Ni un cliente,
+ni un convenio, ni un huésped. Y sólo puede escribir prospectos.
+
+> Si ya corriste `roles.sql` antes de que existiera el formulario, **vuelve a correrlo**: el
+> archivo se reemplaza entero cada vez y es lo que agrega esas reglas.
 
 **Antes de correrlo:**
 

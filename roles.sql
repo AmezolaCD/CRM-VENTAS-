@@ -66,6 +66,8 @@ as $$ select coalesce(public.crm_yo() ->> 'nombre', ''); $$;
 --      mundo para poder armar un convenio: se leen siempre.
 --    · Administración y gerencia ven todo lo demás.
 --    · Un ejecutivo ve lo suyo, y lo que todavía no tiene dueño.
+--    · El papel 'captura' (Banquetes) sólo levanta prospectos en eventos: no
+--      lee ni escribe nada más, ni siquiera le baja la cartera al equipo.
 --
 --    Escribir sigue abierto a cualquiera que haya entrado, salvo los ajustes y
 --    la lista de usuarios, que son del administrador. No se restringe más
@@ -77,29 +79,40 @@ drop policy if exists "equipo edita"   on public.crm_datos;
 
 create policy "lee lo suyo" on public.crm_datos for select to authenticated
 using (
-  tipo in ('ajustes','habitaciones','usuarios')
-  or public.crm_rol() in ('admin','gerente')
-  or duenio is null
-  or lower(duenio) = lower(public.crm_nombre())
+  case when public.crm_rol() = 'captura'
+       then tipo in ('ajustes','usuarios')
+            or (tipo = 'prospectos' and lower(coalesce(duenio,'')) = lower(public.crm_nombre()))
+       else tipo in ('ajustes','habitaciones','usuarios')
+            or public.crm_rol() in ('admin','gerente')
+            or duenio is null
+            or lower(duenio) = lower(public.crm_nombre())
+  end
 );
 
 create policy "inserta" on public.crm_datos for insert to authenticated
 with check (
   case when tipo in ('ajustes','usuarios','habitaciones')
-       then public.crm_rol() = 'admin'
+            then public.crm_rol() = 'admin'
+       when public.crm_rol() = 'captura'
+            then tipo = 'prospectos'
        else true end
 );
 
 create policy "edita" on public.crm_datos for update to authenticated
 using (
-  tipo in ('ajustes','habitaciones','usuarios')
-  or public.crm_rol() in ('admin','gerente')
-  or duenio is null
-  or lower(duenio) = lower(public.crm_nombre())
+  case when public.crm_rol() = 'captura'
+       then tipo = 'prospectos' and lower(coalesce(duenio,'')) = lower(public.crm_nombre())
+       else tipo in ('ajustes','habitaciones','usuarios')
+            or public.crm_rol() in ('admin','gerente')
+            or duenio is null
+            or lower(duenio) = lower(public.crm_nombre())
+  end
 )
 with check (
   case when tipo in ('ajustes','usuarios','habitaciones')
-       then public.crm_rol() = 'admin'
+            then public.crm_rol() = 'admin'
+       when public.crm_rol() = 'captura'
+            then tipo = 'prospectos'
        else true end
 );
 

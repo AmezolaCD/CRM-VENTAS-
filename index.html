@@ -238,6 +238,8 @@
   tr.off td:not(.selcell){opacity:.45}
   .nowrap{white-space:nowrap}
   .vacio{color:var(--muted); text-align:center; padding:36px 16px}
+  .panel-form{background:var(--panel-2); border:1px solid var(--line);
+    border-radius:10px; padding:16px 18px}
 
   .overlay{position:fixed; inset:0; background:rgba(28,8,40,.6); display:flex;
     align-items:flex-start; justify-content:center; padding:24px 16px; overflow-y:auto; z-index:50}
@@ -458,6 +460,7 @@
     <button data-view="actividades">Actividades</button>
     <button data-view="convenios">Convenios</button>
     <button data-view="confirmaciones">Confirmaciones</button>
+    <button data-view="formulario">Formulario</button>
     <button data-view="ajustes">Ajustes</button>
   </nav>
   <div class="spacer"></div>
@@ -483,6 +486,7 @@
   <section class="view" id="v-actividades"><div class="table-wrap" id="tblAct"></div></section>
   <section class="view" id="v-convenios"><div class="table-wrap" id="tblConvenios"></div></section>
   <section class="view" id="v-confirmaciones"><div class="table-wrap" id="tblConfirm"></div></section>
+  <section class="view" id="v-formulario"><div class="table-wrap" id="tblFormulario"></div></section>
   <section class="view" id="v-ajustes"><div class="table-wrap" id="panelAjustes"></div></section>
 </main>
 
@@ -495,7 +499,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.12-29";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.14-30";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -786,7 +790,8 @@ const CAMPOS_CLIENTE = [
 const ROLES = [
   { id:"admin",     name:"Administrador",     ayuda:"Todo, incluidos los Ajustes." },
   { id:"gerente",   name:"Gerencia de ventas", ayuda:"Ve la cartera y la actividad de todo el equipo. Sin Ajustes." },
-  { id:"ejecutivo", name:"Ejecutivo de ventas", ayuda:"Sólo sus propios clientes, convenios y actividades." }
+  { id:"ejecutivo", name:"Ejecutivo de ventas", ayuda:"Sólo sus propios clientes, convenios y actividades." },
+  { id:"captura",   name:"Sólo prospección",  ayuda:"Únicamente el formulario de prospección y lo que esa cuenta capturó. No ve la cartera." }
 ];
 const infoRol = id => ROLES.find(r => r.id === id) || ROLES[2];
 
@@ -794,8 +799,26 @@ const USUARIOS_DEF = [
   { id:"u1", correo:"sistemas@quartzhotel.mx",   nombre:"Marco Ramírez",  rol:"admin" },
   { id:"u2", correo:"gte.ventas@quartzhotel.mx", nombre:"Alicia Rocha",   rol:"gerente" },
   { id:"u3", correo:"ventas3@quartzhotel.mx",    nombre:"Carmen Sotelo",  rol:"ejecutivo" },
-  { id:"u4", correo:"ventas2@quartzhotel.mx",    nombre:"Eduardo Islas",  rol:"ejecutivo" }
+  { id:"u4", correo:"ventas2@quartzhotel.mx",    nombre:"Eduardo Islas",  rol:"ejecutivo" },
+  { id:"u5", correo:"banquetes@quartzhotel.mx",  nombre:"Banquetes",      rol:"captura" }
 ];
+
+/**
+ * Qué pestañas ve cada papel, en el orden de la barra.
+ *
+ * Banquetes levanta prospectos en eventos y nada más: no tiene por qué ver la
+ * cartera de nadie, así que su cuenta abre directo en el formulario y no hay
+ * otra pestaña a la que pueda irse.
+ */
+const VISTAS = ["tablero","clientes","actividades","convenios","confirmaciones","formulario","ajustes"];
+const VISTAS_ROL = {
+  admin:     VISTAS,
+  gerente:   VISTAS.filter(v => v !== "ajustes"),
+  ejecutivo: VISTAS.filter(v => v !== "ajustes"),
+  captura:   ["formulario"]
+};
+const vistasDelRol = () => VISTAS_ROL[rolActual()] || VISTAS_ROL.ejecutivo;
+const puedeVer = v => vistasDelRol().includes(v);
 
 function saneaUsuario(u){
   const o = Object.assign({ id:"", correo:"", nombre:"", rol:"ejecutivo", firma:null }, u || {});
@@ -985,6 +1008,7 @@ function sanear(s){
     clientes:     Array.isArray(s.clientes) ? s.clientes.map(saneaCliente) : [],
     actividades:  Array.isArray(s.actividades) ? s.actividades.map(saneaAct) : [],
     convenios:    Array.isArray(s.convenios) ? s.convenios.map(saneaConv) : [],
+    prospectos:   Array.isArray(s.prospectos) ? s.prospectos.map(saneaProspecto) : [],
     huespedes:    Array.isArray(s.huespedes) ? s.huespedes.map(saneaHuesped) : [],
     usuarios:     Array.isArray(s.usuarios) ? s.usuarios.map(saneaUsuario) : USUARIOS_DEF.map(saneaUsuario),
     habitaciones: catalogo(s.habitaciones),
@@ -999,6 +1023,9 @@ function sanear(s){
   const ids = new Set(out.clientes.map(c => c.id));
   out.actividades = out.actividades.filter(a => ids.has(a.clienteId));
   out.convenios   = out.convenios.filter(c => ids.has(c.clienteId));
+  // Un prospecto no cuelga de ningún cliente: si al que se pasó se borró, el
+  // registro del evento se queda, nada más sin liga.
+  out.prospectos.forEach(p => { if (p.clienteId && !ids.has(p.clienteId)) p.clienteId = ""; });
   return out;
 }
 
@@ -1036,6 +1063,28 @@ function saneaFirma(f){
   if (!f || !f.img) return null;
   return { nombre:f.nombre||"", puesto:f.puesto||"", celular:f.celular||"", fecha:f.fecha||"", img:f.img };
 }
+
+/**
+ * Un prospecto levantado en un evento.
+ *
+ * No es todavía un cliente: es un nombre y un teléfono apuntados de prisa en
+ * un stand. Se guarda aparte y pasa a la cartera cuando alguien lo trabaja,
+ * para que un evento con cien registros no llene el embudo de gente que nunca
+ * contestó.
+ */
+function saneaProspecto(p){
+  const o = Object.assign({ id:"", nombre:"", apellido:"", compania:"", email:"", telefono:"",
+    evento:"", notas:"", capturadoPor:"", fecha:"", clienteId:"", createdAt:"", updatedAt:"" }, p || {});
+  o.id = o.id || nuevoId("p");
+  for (const k of ["nombre","apellido","compania","email","telefono","evento","notas","capturadoPor"])
+    o[k] = String(o[k] || "").trim();
+  o.email = o.email.toLowerCase();
+  o.clienteId = String(o.clienteId || "");
+  o.fecha = String(o.fecha || "").slice(0, 16);
+  return o;
+}
+
+const nombreProspecto = p => [p.nombre, p.apellido].filter(Boolean).join(" ").trim();
 
 function saneaConv(c){
   const o = Object.assign({ id:"", folio:"", clienteId:"", fecha:"", vigenciaDesde:"", vigenciaHasta:"",
@@ -1578,7 +1627,7 @@ function menuSesion(){
 
 /* ----- Traducción entre el estado y las filas de la tabla ----- */
 
-const COLECCIONES = ["clientes","actividades","convenios","huespedes","habitaciones","usuarios"];
+const COLECCIONES = ["clientes","actividades","convenios","prospectos","huespedes","habitaciones","usuarios"];
 
 function filasDeEstado(){
   const filas = [];
@@ -1589,7 +1638,8 @@ function filasDeEstado(){
 }
 
 function estadoDesdeFilas(filas){
-  const bruto = { clientes:[], actividades:[], convenios:[], huespedes:[], habitaciones:[], usuarios:[], ajustes:null };
+  const bruto = { clientes:[], actividades:[], convenios:[], prospectos:[],
+                  huespedes:[], habitaciones:[], usuarios:[], ajustes:null };
   for (const f of filas){
     if (f.tipo === "ajustes") bruto.ajustes = f.datos;
     else if (bruto[f.tipo]) bruto[f.tipo].push(f.datos);
@@ -1628,6 +1678,7 @@ function duenioDe(fila){
                                           String(fila.datos.responsable || "").trim() || null;
   if (fila.tipo === "convenios")   return String(fila.datos.ejecutivo || "").trim() ||
                                           deCliente(fila.datos.clienteId);
+  if (fila.tipo === "prospectos")  return String(fila.datos.capturadoPor || "").trim() || null;
   return null;
 }
 
@@ -2447,12 +2498,12 @@ function clientesVisibles(){
    ========================================================================== */
 
 function render(){
-  // Los Ajustes tocan las tarifas públicas, los textos de los convenios y la
-  // conexión de todo el equipo: son del administrador. Se esconde la pestaña
-  // y, por si alguien llegó ahí de otra manera, se desvía la vista.
-  const btnAjustes = document.querySelector('nav button[data-view="ajustes"]');
-  if (btnAjustes) btnAjustes.style.display = esAdmin() ? "" : "none";
-  if (vista === "ajustes" && !esAdmin()) vista = "tablero";
+  // Cada papel ve las suyas. Los Ajustes tocan las tarifas públicas, los textos
+  // de los convenios y la conexión de todo el equipo: son del administrador.
+  // Y si alguien llegó a una pestaña que no le toca, se le desvía.
+  document.querySelectorAll("nav button").forEach(b =>
+    b.style.display = puedeVer(b.dataset.view) ? "" : "none");
+  if (!puedeVer(vista)) vista = vistasDelRol()[0] || "formulario";
 
   document.querySelectorAll("nav button").forEach(b =>
     b.setAttribute("aria-current", String(b.dataset.view === vista)));
@@ -2464,7 +2515,11 @@ function render(){
   document.getElementById("q").style.display      = buscando ? "" : "none";
   document.getElementById("fEje").style.display   = porEjecutivo ? "" : "none";
   document.getElementById("bNuevo").style.display =
-    ["convenios","confirmaciones","ajustes","actividades"].includes(vista) ? "none" : "";
+    ["tablero","clientes"].includes(vista) ? "" : "none";
+  // Importar y Exportar mueven la cartera entera: quien no la ve, tampoco.
+  const conCartera = puedeVer("clientes") ? "" : "none";
+  document.getElementById("bImport").style.display = conCartera;
+  document.getElementById("bExport").style.display = conCartera;
 
   renderEjecutivos();
   pintarAvisos();
@@ -2473,6 +2528,7 @@ function render(){
   if (vista === "actividades") renderActividades();
   if (vista === "convenios") renderConvenios();
   if (vista === "confirmaciones") renderConfirmaciones();
+  if (vista === "formulario") renderFormulario();
   if (vista === "ajustes")   renderAjustes();
 }
 
@@ -2694,6 +2750,314 @@ function renderConvenios(){
     }));
   }
   cont.querySelector("#bNuevoConv").onclick = () => editarConvenio(null);
+}
+
+/* ==========================================================================
+   FORMULARIO DE PROSPECCIÓN
+
+   Lo que se llena en un stand, de pie y con prisa: cinco campos y listo. No
+   entra a la cartera hasta que alguien lo trabaja, para que un evento de cien
+   registros no llene el embudo de gente que nunca contestó.
+   ========================================================================== */
+
+let filtroPros = { q:"", evento:"" };
+let ultimoEvento = "";      // se repite solo: en una expo todos son del mismo
+
+const prospectosVisibles = () => {
+  const yo = miNombre().trim().toLowerCase();
+  const mios = p => puedeVerTodo() ||
+    (!!yo && String(p.capturadoPor || "").trim().toLowerCase() === yo);
+  const q = filtroPros.q.trim().toLowerCase();
+  return state.prospectos.filter(p => {
+    if (!mios(p)) return false;
+    if (filtroPros.evento && p.evento !== filtroPros.evento) return false;
+    if (!q) return true;
+    return [p.nombre, p.apellido, p.compania, p.email, p.telefono, p.evento, p.notas]
+      .join(" ").toLowerCase().includes(q);
+  }).sort((a,b) => String(b.fecha).localeCompare(String(a.fecha)));
+};
+
+const eventosConocidos = () => [...new Set(state.prospectos.map(p => p.evento).filter(Boolean))]
+  .sort((a,b) => a.localeCompare(b,"es"));
+
+/** Los mismos campos en la vista y en la ventana de edición. */
+const camposProspecto = (p, pre) => `
+  <div class="grid">
+    <div><label class="lbl">Nombre *</label>
+      <input class="field" id="${pre}Nom" value="${esc(p.nombre)}" autocomplete="off"></div>
+    <div><label class="lbl">Apellido *</label>
+      <input class="field" id="${pre}Ape" value="${esc(p.apellido)}" autocomplete="off"></div>
+    <div><label class="lbl">Compañía <span class="hint">(opcional)</span></label>
+      <input class="field" id="${pre}Emp" value="${esc(p.compania)}" autocomplete="off"></div>
+    <div><label class="lbl">Evento <span class="hint">(opcional)</span></label>
+      <input class="field" id="${pre}Evt" value="${esc(p.evento)}" list="listaEventos"
+        placeholder="Expo Salud 2026" autocomplete="off"></div>
+    <div><label class="lbl">Correo electrónico *</label>
+      <input class="field" type="email" id="${pre}Mail" value="${esc(p.email)}"
+        autocomplete="off" spellcheck="false" inputmode="email"></div>
+    <div><label class="lbl">Número de teléfono *</label>
+      <input class="field" type="tel" id="${pre}Tel" value="${esc(p.telefono)}"
+        autocomplete="off" inputmode="tel"></div>
+    <div class="full"><label class="lbl">Notas <span class="hint">(opcional)</span></label>
+      <textarea class="field" id="${pre}Notas" style="min-height:70px">${esc(p.notas)}</textarea></div>
+  </div>
+  <datalist id="listaEventos">${eventosConocidos().map(e =>
+    `<option value="${esc(e)}">`).join("")}</datalist>`;
+
+/**
+ * Lee los campos y reclama lo que falte. Devuelve el prospecto o null.
+ *
+ * Se valida de verdad el correo y el teléfono: un registro de evento sin
+ * manera de volver a contactar a la persona no sirve de nada.
+ */
+function leerProspecto(raiz, pre, cajaErr, base){
+  const val = id => raiz.querySelector("#" + pre + id).value.trim();
+  const nombre = val("Nom"), apellido = val("Ape");
+  const email = val("Mail").toLowerCase(), telefono = val("Tel");
+  const faltan = [];
+
+  if (!nombre)   faltan.push("Escribe el nombre.");
+  if (!apellido) faltan.push("Escribe el apellido.");
+  if (!email)          faltan.push("Escribe el correo electrónico.");
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email))
+    faltan.push(`"${email}" no parece un correo válido.`);
+  if (!telefono)                              faltan.push("Escribe el número de teléfono.");
+  else if (telefono.replace(/\D/g,"").length < 10)
+    faltan.push("El teléfono debe traer al menos 10 dígitos.");
+
+  cajaErr.innerHTML = faltan.length
+    ? `<div class="errbox"><b>Falta esto para guardar:</b><ul>${
+        faltan.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`
+    : "";
+  if (faltan.length) return null;
+
+  return saneaProspecto(Object.assign({}, base, {
+    nombre, apellido, email, telefono,
+    compania: val("Emp"), evento: val("Evt"), notas: val("Notas")
+  }));
+}
+
+/**
+ * La lista se repinta sola, aparte del formulario.
+ *
+ * Si buscar volviera a dibujar la pantalla entera, se borraría lo que se
+ * estuviera capturando en ese momento — que es justo lo que no puede pasar
+ * con una persona enfrente esperando.
+ */
+function renderFormulario(){
+  const cont = document.getElementById("tblFormulario");
+  const vacio = saneaProspecto({ evento: ultimoEvento });
+
+  cont.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+      <b style="font-size:15px">Prospección en eventos</b>
+      <span class="hint" id="prosCuenta"></span>
+    </div>
+
+    <div class="note">Para levantar contactos en una expo, una feria o un evento del hotel.
+      Se guarda aquí, no en la cartera: cuando alguno valga la pena trabajarlo, se le da
+      <i>Pasar a la cartera</i> y se vuelve un cliente con su ejecutivo.</div>
+
+    <div class="panel-form">
+      <h3 class="sec" style="margin-top:0">Nuevo registro</h3>
+      <div id="prosErr"></div>
+      ${camposProspecto(vacio, "np")}
+      <p style="margin:12px 0 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn primary" id="bGuardarPros">Guardar registro</button>
+        <button class="btn" id="bLimpiarPros">Limpiar</button>
+        <span class="hint" id="prosOk"></span></p>
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;margin:22px 0 12px;flex-wrap:wrap">
+      <input class="field" id="qPros" type="search" value="${esc(filtroPros.q)}"
+        placeholder="Buscar nombre, correo, teléfono…" autocomplete="off" style="min-width:240px">
+      <select class="field" id="fEvento" title="Evento"></select>
+      <span style="flex:1"></span>
+      <button class="btn" id="bExpPros">Exportar CSV</button>
+    </div>
+
+    <div id="listaPros"></div>`;
+
+  const err   = cont.querySelector("#prosErr");
+  const aviso = cont.querySelector("#prosOk");
+  const CAMPOS = ["npNom","npApe","npEmp","npEvt","npMail","npTel","npNotas"];
+
+  /** La tabla y el selector de eventos, que son lo único que cambia al filtrar. */
+  function pintarLista(){
+    const ps = prospectosVisibles();
+    const eventos = eventosConocidos();
+    cont.querySelector("#prosCuenta").textContent = `${ps.length} registro(s)`;
+
+    const sel = cont.querySelector("#fEvento");
+    sel.style.display = eventos.length ? "" : "none";
+    sel.innerHTML = `<option value="">Todos los eventos</option>` + eventos.map(e =>
+      `<option value="${esc(e)}"${e === filtroPros.evento ? " selected" : ""}>${esc(e)}</option>`).join("");
+
+    cont.querySelector("#listaPros").innerHTML = ps.length ? `<table class="data">
+      <thead><tr><th>Capturado</th><th>Nombre</th><th>Compañía</th><th>Correo</th>
+        <th>Teléfono</th><th>Evento</th>${puedeVerTodo() ? "<th>Capturó</th>" : ""}
+        <th>Estado</th><th></th></tr></thead>
+      <tbody>${ps.map(p => `<tr data-p="${p.id}">
+        <td class="nowrap">${esc(fechaCorta(String(p.fecha).slice(0,10)))}</td>
+        <td><b>${esc(nombreProspecto(p))}</b></td>
+        <td>${esc(p.compania || "—")}</td>
+        <td>${esc(p.email)}</td>
+        <td class="nowrap">${esc(p.telefono)}</td>
+        <td>${esc(p.evento || "—")}</td>
+        ${puedeVerTodo() ? `<td class="nowrap">${esc(p.capturadoPor || "—")}</td>` : ""}
+        <td class="nowrap">${p.clienteId
+          ? `<span class="pill" style="background:var(--ok-soft);color:var(--ok)">En cartera</span>`
+          : `<span class="hint">Sin trabajar</span>`}</td>
+        <td class="nowrap">
+          ${!p.clienteId && puedeVer("clientes")
+            ? `<button class="btn sm primary" data-pasar="${p.id}">Pasar a la cartera</button>` : ""}
+          ${p.clienteId && puedeVer("clientes")
+            ? `<button class="btn sm" data-vercli="${p.id}">Ver cliente</button>` : ""}
+          <button class="btn sm" data-editp="${p.id}">Editar</button>
+          <button class="btn sm danger" data-delp="${p.id}">Borrar</button></td>
+      </tr>`).join("")}</tbody></table>`
+      : `<div class="vacio">${state.prospectos.length
+          ? "Ningún registro coincide con la búsqueda."
+          : "Todavía no hay registros.<br>El primero se levanta con el formulario de arriba."}</div>`;
+
+    const pros = id => state.prospectos.find(x => x.id === id);
+    cont.querySelectorAll("[data-pasar]").forEach(b =>
+      b.onclick = () => pasarACartera(pros(b.dataset.pasar)));
+    cont.querySelectorAll("[data-vercli]").forEach(b =>
+      b.onclick = () => abrirCliente(pros(b.dataset.vercli).clienteId));
+    cont.querySelectorAll("[data-editp]").forEach(b =>
+      b.onclick = () => editarProspecto(pros(b.dataset.editp), pintarLista));
+    cont.querySelectorAll("[data-delp]").forEach(b => b.onclick = () => {
+      const p = pros(b.dataset.delp);
+      if (!confirm(`¿Borrar el registro de "${nombreProspecto(p)}"?`)) return;
+      state.prospectos = state.prospectos.filter(x => x.id !== p.id);
+      guardar(); pintarLista();
+    });
+  }
+  pintarLista();
+
+  cont.querySelector("#bGuardarPros").onclick = () => {
+    const nuevo = leerProspecto(cont, "np", err, {
+      capturadoPor: miNombre(), fecha: ahoraLocal(), createdAt: new Date().toISOString()
+    });
+    if (!nuevo) return;
+
+    // En un stand es fácil apuntar dos veces a la misma persona.
+    const repetido = state.prospectos.find(x => x.email && x.email === nuevo.email);
+    if (repetido && !confirm(
+        `Ya hay un registro con el correo ${nuevo.email} (${nombreProspecto(repetido)}).\n\n` +
+        `¿Guardar de todos modos?`)) return;
+
+    state.prospectos.push(nuevo);
+    ultimoEvento = nuevo.evento;      // en una expo se capturan decenas seguidos
+    guardar();
+
+    CAMPOS.forEach(id => {
+      const el = cont.querySelector("#" + id);
+      if (el) el.value = id === "npEvt" ? ultimoEvento : "";
+    });
+    err.innerHTML = "";
+    aviso.textContent = `Guardado: ${nombreProspecto(nuevo)}.`;
+    pintarLista();
+    cont.querySelector("#npNom").focus();
+  };
+
+  cont.querySelector("#bLimpiarPros").onclick = () => {
+    CAMPOS.forEach(id => { const el = cont.querySelector("#" + id); if (el) el.value = ""; });
+    err.innerHTML = ""; aviso.textContent = "";
+    cont.querySelector("#npNom").focus();
+  };
+
+  cont.querySelector("#qPros").oninput = e => { filtroPros.q = e.target.value; pintarLista(); };
+  cont.querySelector("#fEvento").onchange = e => { filtroPros.evento = e.target.value; pintarLista(); };
+
+  cont.querySelector("#bExpPros").onclick = () => {
+    const cab = ["Fecha","Nombre","Apellido","Compañía","Correo","Teléfono","Evento",
+                 "Capturó","En cartera","Notas"];
+    descargar(`prospectos-${hoyISO()}.csv`, toCSV([cab].concat(prospectosVisibles().map(p =>
+      [p.fecha, p.nombre, p.apellido, p.compania, p.email, p.telefono, p.evento,
+       p.capturadoPor, p.clienteId ? "Sí" : "No", p.notas]))), "text/csv");
+  };
+}
+
+function editarProspecto(pr, alGuardar){
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>Editar registro</h2><button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div id="epErr"></div>
+        ${camposProspecto(pr, "ep")}
+        <p class="hint" style="margin:10px 0 0">Capturado por ${esc(pr.capturadoPor || "—")}
+          el ${esc(fechaCorta(String(pr.fecha).slice(0,10)))}.</p>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="bOk">Guardar</button></div>
+    </div>`);
+
+  ov.querySelector("#bOk").onclick = () => {
+    const d = leerProspecto(ov, "ep", ov.querySelector("#epErr"), pr);
+    if (!d) return;
+    d.updatedAt = new Date().toISOString();
+    Object.assign(pr, d);
+    guardar(); ov.remove();
+    if (alGuardar) alGuardar(); else render();
+  };
+}
+
+/**
+ * De registro de evento a cliente de la cartera.
+ *
+ * Aquí se decide el ejecutivo, y por eso no es automático: quien capturó
+ * puede ser Banquetes, que no tiene cartera, y el prospecto quedaría en
+ * manos de nadie.
+ */
+function pasarACartera(pr){
+  const sugerido = pr.compania || nombreProspecto(pr);
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>Pasar a la cartera</h2><button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note"><b>${esc(nombreProspecto(pr))}</b>${pr.compania ? " · " + esc(pr.compania) : ""}
+          <br>${esc(pr.email)} · ${esc(pr.telefono)}</div>
+        <div id="pcErr"></div>
+        <div class="grid">
+          <div class="full"><label class="lbl">Empresa <span class="hint">(como va en la cartera)</span></label>
+            <input class="field" id="pcEmp" value="${esc(sugerido)}"></div>
+          <div class="full"><label class="lbl">Ejecutivo de ventas</label>
+            ${selectEjecutivo(miNombre(), "pcEje")}
+            <div class="hint">Quien lo va a trabajar. Sin ejecutivo, el cliente no le aparece a nadie.</div></div>
+        </div>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="bOk">Crear el cliente</button></div>
+    </div>`);
+
+  ov.querySelector("#bOk").onclick = () => {
+    const empresa = ov.querySelector("#pcEmp").value.trim();
+    if (!empresa){
+      ov.querySelector("#pcErr").innerHTML =
+        `<div class="errbox">Escribe el nombre de la empresa.</div>`;
+      return;
+    }
+    const eje = ov.querySelector('[name="pcEje"]').value.trim();
+    const c = saneaCliente({
+      empresa, contacto: nombreProspecto(pr), telefono: pr.telefono, email: pr.email,
+      ejecutivo: eje, estatus: "contactado",
+      notas: [pr.evento ? `Prospecto levantado en ${pr.evento}.` : "Prospecto de evento.",
+              pr.notas].filter(Boolean).join(" "),
+      createdAt: new Date().toISOString()
+    });
+    state.clientes.push(c);
+    registrarAuto(c.id, "Alta desde el formulario de prospección",
+      [pr.evento ? `Evento: ${pr.evento}.` : "", `Capturado por ${pr.capturadoPor || "—"}.`]
+        .filter(Boolean).join(" "), eje || pr.capturadoPor);
+    pr.clienteId = c.id;
+    pr.updatedAt = new Date().toISOString();
+    guardar(); render(); ov.remove();
+    abrirCliente(c.id);
+  };
 }
 
 /* ==========================================================================
@@ -5649,6 +6013,7 @@ function abrirExportar(){
         <p><button class="btn" id="eCli">Clientes (CSV)</button></p>
         <p><button class="btn" id="eAct">Actividades (CSV)</button></p>
         <p><button class="btn" id="eConv">Convenios (CSV)</button></p>
+        <p><button class="btn" id="ePros">Prospectos de eventos (CSV)</button></p>
         <p><button class="btn primary" id="eJson">Respaldo completo (JSON)</button>
           <span class="hint">incluye firmas y textos</span></p>
         <p><button class="btn" id="eTpl">Plantilla de clientes vacía (CSV)</button></p>
@@ -5671,6 +6036,14 @@ function abrirExportar(){
       [["Empresa","Tipo","Asunto","Fecha y hora","Responsable","Notas"]].concat(
         [...state.actividades].sort((a,b) => String(b.fecha).localeCompare(String(a.fecha)))
           .map(a => [nombreCli(a.clienteId), tipoAct(a.tipo).name, a.asunto, a.fecha, a.responsable, a.notas]))), "text/csv");
+  };
+  ov.querySelector("#ePros").onclick = () => {
+    descargar(`prospectos-${hoy}.csv`, toCSV(
+      [["Fecha","Nombre","Apellido","Compañía","Correo","Teléfono","Evento",
+        "Capturó","En cartera","Notas"]].concat(
+        [...state.prospectos].sort((a,b) => String(b.fecha).localeCompare(String(a.fecha)))
+          .map(p => [p.fecha, p.nombre, p.apellido, p.compania, p.email, p.telefono,
+                     p.evento, p.capturadoPor, p.clienteId ? "Sí" : "No", p.notas]))), "text/csv");
   };
   ov.querySelector("#eConv").onclick = () => {
     const fs = [["Folio","Empresa","Fecha","Vigencia desde","Vigencia hasta","Bloque","Clave","Tipo de habitación",

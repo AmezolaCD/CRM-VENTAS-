@@ -301,6 +301,28 @@ arrancaría pegada al borde del papel. Ahí se apaga desde el diálogo de impres
 Un convenio guarda **su propia copia** de los textos y de las tarifas al crearse, así que
 cambiar el catálogo o los textos **no altera los convenios ya emitidos**.
 
+### Formulario de prospección
+
+Pestaña **Formulario**. Para levantar contactos en una expo, una feria o un evento del hotel,
+de pie y con prisa.
+
+- Pide **nombre**, **apellido**, **correo electrónico** y **número de teléfono**. La
+  **compañía** es opcional, y hay un campo de **evento** —también opcional— que se queda
+  puesto entre un registro y el siguiente, porque en un stand se capturan decenas seguidos
+  del mismo.
+- El correo y el teléfono se validan de verdad: un registro de evento sin manera de volver a
+  contactar a la persona no sirve de nada. Si el correo ya estaba capturado, avisa antes de
+  guardar por segunda vez.
+- Lo capturado **no entra a la cartera**. Vive en su propia lista, se busca, se edita y se
+  exporta a CSV. Cuando alguno vale la pena, **Pasar a la cartera** pregunta la empresa y el
+  ejecutivo que lo va a trabajar, y ahí sí crea el cliente en *Contactado*, con su nota
+  diciendo de qué evento salió y su línea en la bitácora.
+- Cada registro es de quien lo capturó. Un ejecutivo ve los suyos; gerencia y administración
+  los ven todos, con una columna extra que dice quién capturó cada uno.
+
+Existe un papel de usuario, **Sólo prospección**, que no ve más que esta pestaña: es el de la
+cuenta de *Banquetes*. Ver **[ROLES.md](ROLES.md)**.
+
 ### Confirmaciones de hospedaje
 
 Pestaña **Confirmaciones**. Genera la carta que acredita la reservación de un huésped ante
@@ -394,9 +416,10 @@ En `plantilla.csv` está el formato exacto.
 
 ## Quién ve qué
 
-Tres papeles: **administrador** (todo, y el único con Ajustes), **gerencia de ventas** (la
-cartera y la actividad de todo el equipo, sin Ajustes) y **ejecutivo** (sólo lo suyo, más las
-actividades que él mismo hizo). Se administran en *Ajustes → Usuarios y permisos*.
+Cuatro papeles: **administrador** (todo, y el único con Ajustes), **gerencia de ventas** (la
+cartera y la actividad de todo el equipo, sin Ajustes), **ejecutivo** (sólo lo suyo, más las
+actividades que él mismo hizo) y **sólo prospección** (nada más la pestaña *Formulario* y lo
+que esa cuenta capturó). Se administran en *Ajustes → Usuarios y permisos*.
 
 Lo que amarra a una persona con su cartera es el **nombre**, no el correo: se compara contra
 el campo *Ejecutivo* de cada cliente. Escribirlos distinto es el error más fácil de cometer y
