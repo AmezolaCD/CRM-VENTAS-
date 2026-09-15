@@ -241,6 +241,63 @@
   .panel-form{background:var(--panel-2); border:1px solid var(--line);
     border-radius:10px; padding:16px 18px}
 
+  /* Modo tableta: la pantalla que se le pone enfrente al cliente en un stand.
+     No hereda nada del tema de la aplicación —siempre claro, siempre sobre
+     blanco— porque el que la va a llenar no es del equipo y no tiene por qué
+     encontrarse la aplicación en oscuro ni ver un solo dato de nadie más. */
+  /* Con la tableta entregada, el CRM no se tapa: se quita. Encima no bastaba
+     —el teclado y el lector de pantalla seguían llegando a las pestañas de
+     atrás—, y lo que no está dibujado no se alcanza de ninguna manera. */
+  body.con-kiosco > header, body.con-kiosco > main{display:none !important}
+  #kiosco{position:fixed; inset:0; z-index:9000; overflow-y:auto;
+    background:#f6f4f8; color:#241031; -webkit-overflow-scrolling:touch;
+    font-size:17px; display:flex; flex-direction:column; align-items:center}
+  #kiosco *{box-sizing:border-box}
+  .k-hoja{width:100%; max-width:760px; padding:20px 22px 40px}
+  .k-marca{text-align:center; margin-bottom:6px}
+  .k-marca .k-wordmark{width:min(260px,68vw); margin:0 auto}
+  .k-marca .k-wordmark svg{width:100%; height:auto; display:block}
+  .k-marca .k-mono{width:64px; height:64px; margin:0 auto 6px; display:block}
+  .k-titulo{text-align:center; font-size:26px; font-weight:700; margin:12px 0 4px;
+    color:#39104e; letter-spacing:.01em}
+  .k-sub{text-align:center; color:#5d4a6b; margin:0 0 14px; font-size:15px}
+  .k-evento{display:block; text-align:center; margin:0 auto 16px; font-size:14px;
+    background:#ece7f1; color:#4a3559; border-radius:999px; padding:6px 16px; width:max-content;
+    max-width:100%}
+  .k-campo{margin-bottom:13px}
+  .k-campo label{display:block; font-size:15px; font-weight:600; margin-bottom:6px; color:#3b2a49}
+  .k-campo .opc{font-weight:400; color:#7a6a87}
+  .k-campo input{width:100%; font-size:20px; padding:12px 14px; border-radius:10px;
+    border:1.5px solid #cfc6d8; background:#fff; color:#241031; -webkit-appearance:none}
+  .k-campo input:focus{outline:none; border-color:#39104e; box-shadow:0 0 0 3px #39104e22}
+  .k-campo input.err{border-color:#b3261e; background:#fdf3f2}
+  .k-fila{display:flex; gap:14px}
+  .k-fila > *{flex:1 1 0; min-width:0}
+  .k-enviar{width:100%; font-size:21px; font-weight:700; padding:16px; border:0;
+    border-radius:12px; background:#39104e; color:#fff; margin-top:8px; cursor:pointer}
+  .k-enviar:active{background:#2a0c3a}
+  .k-err{background:#fdecea; color:#8c1d18; border:1px solid #e6b4b0; border-radius:10px;
+    padding:12px 14px; margin-bottom:16px; font-size:15px}
+  .k-err ul{margin:6px 0 0; padding-left:20px}
+  .k-aviso{margin-top:18px; font-size:12.5px; line-height:1.5; color:#6b5a79; text-align:center}
+  /* La salida se esconde a plena vista y pide mantener pulsado: un visitante
+     curioso no sale por accidente, y el ejecutivo no tiene otra clave que perder. */
+  .k-salir{position:fixed; top:0; right:0; width:62px; height:62px; border:0; z-index:9001;
+    background:transparent; color:#b8abc4; font-size:17px; cursor:pointer;
+    -webkit-tap-highlight-color:transparent}
+  .k-salir:active{color:#39104e}
+  .k-saliendo{position:fixed; top:14px; right:74px; z-index:9001; font-size:13px;
+    color:#39104e; background:#fff; border:1px solid #d9d0e1; border-radius:999px;
+    padding:5px 12px}
+  .k-gracias{text-align:center; padding:40px 10px}
+  .k-gracias .k-tick{font-size:64px; line-height:1; margin-bottom:10px}
+  .k-gracias h2{font-size:28px; margin:0 0 8px; color:#39104e}
+  .k-gracias p{margin:0 0 26px; color:#5d4a6b; font-size:16px}
+  @media (max-width:560px){
+    .k-fila{display:block}
+    .k-titulo{font-size:22px}
+  }
+
   .overlay{position:fixed; inset:0; background:rgba(28,8,40,.6); display:flex;
     align-items:flex-start; justify-content:center; padding:24px 16px; overflow-y:auto; z-index:50}
   .modal{background:var(--panel); border:1px solid var(--line); border-radius:10px;
@@ -499,7 +556,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.14-31";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.15-32";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2868,6 +2925,13 @@ function renderFormulario(){
         <span class="hint" id="prosOk"></span></p>
     </div>
 
+    <div class="note" style="margin-top:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <span style="flex:1;min-width:240px"><b>¿La tableta la va a llenar el cliente?</b>
+        El <i>modo tableta</i> deja la pantalla completa con nada más el formulario:
+        sin pestañas, sin la cartera y sin los registros de los demás.</span>
+      <button class="btn primary" id="bKiosco">Abrir modo tableta</button>
+    </div>
+
     <div style="display:flex;gap:8px;align-items:center;margin:22px 0 12px;flex-wrap:wrap">
       <input class="field" id="qPros" type="search" value="${esc(filtroPros.q)}"
         placeholder="Buscar nombre, correo, teléfono…" autocomplete="off" style="min-width:240px">
@@ -2962,6 +3026,8 @@ function renderFormulario(){
     cont.querySelector("#npNom").focus();
   };
 
+  cont.querySelector("#bKiosco").onclick = abrirKiosco;
+
   cont.querySelector("#bLimpiarPros").onclick = () => {
     CAMPOS.forEach(id => { const el = cont.querySelector("#" + id); if (el) el.value = ""; });
     err.innerHTML = ""; aviso.textContent = "";
@@ -2978,6 +3044,257 @@ function renderFormulario(){
       [p.fecha, p.nombre, p.apellido, p.compania, p.email, p.telefono, p.evento,
        p.capturadoPor, p.clienteId ? "Sí" : "No", p.notas]))), "text/csv");
   };
+}
+
+/* ----- Modo tableta: la pantalla que se le pone enfrente al cliente ----- */
+
+let despierto = null;      // para que la tableta no se apague sola en el stand
+
+/**
+ * El modo tableta sobrevive a una recarga.
+ *
+ * En un stand, el cliente arrastra la pantalla hacia abajo y el navegador
+ * recarga; si al volver apareciera el CRM, quedaría la cartera del hotel a la
+ * vista de quien pasara. Por eso se apunta aquí y se vuelve a entrar solo.
+ */
+const KIOSCO_CFG = "crm-hotel-kiosco";
+
+const kioscoGuardado = () => {
+  try{
+    const c = JSON.parse(localStorage.getItem(KIOSCO_CFG) || "null");
+    return c && typeof c === "object" ? c : null;
+  }catch(e){ return null; }
+};
+
+/** Antes de entregar la tableta se confirma de qué evento es y quién la trae. */
+function abrirKiosco(){
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>Modo tableta</h2><button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note">La pantalla se llena completa con el formulario. El cliente
+          <b>no ve las pestañas, ni la cartera, ni lo que capturaron otros</b>: sólo sus
+          propios datos, y en cuanto los manda la pantalla se limpia para el que sigue.</div>
+        <div class="grid">
+          <div class="full"><label class="lbl">Evento</label>
+            <input class="field" id="kEvt" value="${esc(ultimoEvento)}" list="listaEventosK"
+              placeholder="Expo Salud 2026">
+            <div class="hint">Se le pone a todo lo que se capture en esta sesión. Se puede dejar vacío.</div></div>
+          <div class="full"><label class="lbl">Los registros quedan a nombre de</label>
+            ${selectEjecutivo(miNombre(), "kEje")}
+            <div class="hint">Quien está atendiendo el stand.</div></div>
+        </div>
+        <datalist id="listaEventosK">${eventosConocidos().map(e =>
+          `<option value="${esc(e)}">`).join("")}</datalist>
+        <div class="note warn" style="margin-top:14px"><b>Para salir</b> hay que mantener
+          pulsada la esquina de arriba a la derecha dos segundos. Así nadie se sale de
+          curioso, pero tampoco hay otra contraseña que recordar.</div>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="bOk">Entregar la tableta</button></div>
+    </div>`);
+
+  ov.querySelector("#bOk").onclick = () => {
+    ultimoEvento = ov.querySelector("#kEvt").value.trim();
+    const quien = ov.querySelector('[name="kEje"]').value.trim();
+    ov.remove();
+    entrarKiosco(ultimoEvento, quien);
+  };
+}
+
+function entrarKiosco(evento, quien){
+  // Pantalla completa de verdad donde se pueda: en una tableta quita la barra
+  // del navegador, y con ella el botón de atrás y la dirección.
+  try{
+    const el = document.documentElement;
+    const pedir = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (pedir) Promise.resolve(pedir.call(el)).catch(() => {});
+  }catch(e){}
+  try{
+    if (navigator.wakeLock && navigator.wakeLock.request)
+      navigator.wakeLock.request("screen").then(w => { despierto = w; }).catch(() => {});
+  }catch(e){}
+
+  try{ localStorage.setItem(KIOSCO_CFG, JSON.stringify({ evento, quien })); }catch(e){}
+
+  const caja = document.createElement("div");
+  caja.id = "kiosco";
+  document.body.appendChild(caja);
+  document.body.classList.add("con-kiosco");
+  document.body.style.overflow = "hidden";
+  pintarKiosco(caja, evento, quien);
+  ponerSalida(caja);
+}
+
+function salirKiosco(){
+  try{ localStorage.removeItem(KIOSCO_CFG); }catch(e){}
+  const caja = document.getElementById("kiosco");
+  if (caja) caja.remove();
+  document.querySelectorAll(".k-salir,.k-saliendo").forEach(x => x.remove());
+  document.body.classList.remove("con-kiosco");
+  document.body.style.overflow = "";
+  try{ if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); }catch(e){}
+  try{ if (despierto){ despierto.release(); despierto = null; } }catch(e){}
+  render();
+}
+
+/** El botón de salida: hay que mantenerlo pulsado, no basta con tocarlo. */
+function ponerSalida(caja){
+  const b = document.createElement("button");
+  b.className = "k-salir";
+  b.type = "button";
+  b.textContent = "✕";
+  b.title = "Mantén pulsado para salir";
+  b.setAttribute("aria-label", "Mantener pulsado para salir del modo tableta");
+  document.body.appendChild(b);
+
+  let reloj = null, pista = null;
+  const suelta = () => {
+    clearTimeout(reloj); reloj = null;
+    if (pista){ pista.remove(); pista = null; }
+  };
+  b.addEventListener("pointerdown", ev => {
+    ev.preventDefault();
+    pista = document.createElement("div");
+    pista.className = "k-saliendo";
+    pista.textContent = "Sigue pulsando para salir…";
+    document.body.appendChild(pista);
+    reloj = setTimeout(() => { suelta(); salirKiosco(); }, 2000);
+  });
+  ["pointerup","pointercancel","pointerleave"].forEach(e => b.addEventListener(e, suelta));
+  caja.dataset.conSalida = "sí";
+}
+
+const membreteKiosco = h => h.logo
+  ? `<img src="${esc(h.logo)}" alt="${esc(h.nombre)}" style="max-height:74px;max-width:80%">`
+  : esQuartz(h.nombre)
+    ? `<div class="k-wordmark">${logoQuartz(MORADO_QUARTZ)}</div>`
+    : `<div class="k-mono">${monogramaQ(MORADO_QUARTZ)}</div>
+       <div style="font-weight:700;font-size:19px">${esc(h.nombre)}</div>`;
+
+function pintarKiosco(caja, evento, quien){
+  const h = state.ajustes.hotel;
+  caja.innerHTML = `
+    <div class="k-hoja">
+      <div class="k-marca">${membreteKiosco(h)}</div>
+      <h1 class="k-titulo">Déjenos sus datos</h1>
+      <p class="k-sub">Con gusto le hacemos llegar nuestras tarifas y promociones.</p>
+      ${evento ? `<span class="k-evento">${esc(evento)}</span>` : ""}
+
+      <div id="kErr"></div>
+
+      <div class="k-fila">
+        <div class="k-campo"><label for="kNom">Nombre</label>
+          <input id="kNom" type="text" autocomplete="given-name" autocapitalize="words"
+            enterkeyhint="next" autocorrect="off"></div>
+        <div class="k-campo"><label for="kApe">Apellido</label>
+          <input id="kApe" type="text" autocomplete="family-name" autocapitalize="words"
+            enterkeyhint="next" autocorrect="off"></div>
+      </div>
+
+      <div class="k-campo"><label for="kEmp">Compañía <span class="opc">(opcional)</span></label>
+        <input id="kEmp" type="text" autocomplete="organization" autocapitalize="words"
+          enterkeyhint="next"></div>
+
+      <div class="k-campo"><label for="kMail">Correo electrónico</label>
+        <input id="kMail" type="email" inputmode="email" autocomplete="email"
+          autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="next"></div>
+
+      <div class="k-campo"><label for="kTel">Número de teléfono</label>
+        <input id="kTel" type="tel" inputmode="tel" autocomplete="tel" enterkeyhint="done"></div>
+
+      <button class="k-enviar" id="kEnviar" type="button">Enviar mis datos</button>
+
+      <p class="k-aviso">Sus datos los usa ${esc(h.nombre)} únicamente para contactarle con
+        información de tarifas, promociones y servicios. No se comparten con terceros, y puede
+        pedir que los demos de baja cuando quiera${h.emailReservaciones
+          ? ` escribiendo a ${esc(h.emailReservaciones)}` : ""}.</p>
+    </div>`;
+
+  const err = caja.querySelector("#kErr");
+  const campos = ["kNom","kApe","kEmp","kMail","kTel"];
+  const enviar = () => mandarKiosco(caja, err, evento, quien);
+
+  campos.forEach((id, i) => {
+    const el = caja.querySelector("#" + id);
+    el.addEventListener("input", () => el.classList.remove("err"));
+    el.addEventListener("keydown", ev => {
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      if (i === campos.length - 1) enviar();
+      else caja.querySelector("#" + campos[i+1]).focus();
+    });
+  });
+  caja.querySelector("#kEnviar").onclick = enviar;
+  caja.querySelector("#kNom").focus();
+}
+
+/**
+ * Guarda lo que llenó el cliente.
+ *
+ * Los reclamos van en grande y en su idioma, no en el del sistema. Y un correo
+ * repetido aquí NO se pregunta: la pregunta diría el nombre de quien lo capturó
+ * antes, y eso es un dato de otra persona en una pantalla que cualquiera está
+ * mirando. Se guarda y el equipo lo depura después.
+ */
+function mandarKiosco(caja, err, evento, quien){
+  const val = id => caja.querySelector("#" + id).value.trim();
+  const marca = id => caja.querySelector("#" + id).classList.add("err");
+  const nombre = val("kNom"), apellido = val("kApe");
+  const email = val("kMail").toLowerCase(), telefono = val("kTel");
+  const faltan = [];
+
+  caja.querySelectorAll("input").forEach(i => i.classList.remove("err"));
+  if (!nombre){   faltan.push("Falta su nombre.");   marca("kNom"); }
+  if (!apellido){ faltan.push("Falta su apellido."); marca("kApe"); }
+  if (!email){ faltan.push("Falta su correo electrónico."); marca("kMail"); }
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){
+    faltan.push("Revise el correo electrónico, parece que le falta algo."); marca("kMail");
+  }
+  if (!telefono){ faltan.push("Falta su número de teléfono."); marca("kTel"); }
+  else if (telefono.replace(/\D/g,"").length < 10){
+    faltan.push("El teléfono debe llevar 10 dígitos."); marca("kTel");
+  }
+
+  if (faltan.length){
+    err.innerHTML = `<div class="k-err"><b>Nos falta un dato:</b>
+      <ul>${faltan.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
+    const primero = caja.querySelector("input.err");
+    if (primero) primero.focus();
+    err.scrollIntoView({ block:"center", behavior:"smooth" });
+    return;
+  }
+
+  state.prospectos.push(saneaProspecto({
+    nombre, apellido, email, telefono, compania: val("kEmp"),
+    evento, capturadoPor: quien, fecha: ahoraLocal(),
+    notas: "Lo llenó el cliente en la tableta.",
+    createdAt: new Date().toISOString()
+  }));
+  guardar();
+  graciasKiosco(caja, nombre, evento, quien);
+}
+
+function graciasKiosco(caja, nombre, evento, quien){
+  const h = state.ajustes.hotel;
+  caja.innerHTML = `
+    <div class="k-hoja">
+      <div class="k-marca">${membreteKiosco(h)}</div>
+      <div class="k-gracias">
+        <div class="k-tick" aria-hidden="true">✓</div>
+        <h2>¡Gracias, ${esc(nombre)}!</h2>
+        <p>Sus datos quedaron registrados. En breve nos ponemos en contacto.</p>
+        <button class="k-enviar" id="kOtro" type="button" style="max-width:340px;margin:0 auto">
+          Registrar a otra persona</button>
+      </div>
+    </div>`;
+
+  const seguir = () => { clearTimeout(reloj); pintarKiosco(caja, evento, quien); };
+  caja.querySelector("#kOtro").onclick = seguir;
+  // Si nadie toca nada, la pantalla vuelve sola: en un stand la tableta se
+  // queda abandonada con el "gracias" de la persona anterior.
+  const reloj = setTimeout(seguir, 9000);
 }
 
 function editarProspecto(pr, alGuardar){
@@ -6163,7 +6480,15 @@ render();
 // convierte en su documento y no arranca nada del CRM.
 const _firma = enlaceDeFirma();
 if (_firma){ terminarEntrada(); pantallaFirmaCliente(_firma); }
-else arrancarNube();
+else {
+  arrancarNube();
+  // Si la tableta venía en modo cliente, vuelve a él antes de que se alcance a
+  // ver nada del CRM. Se espera a la animación nada más para no cortarla.
+  const _k = kioscoGuardado();
+  if (_k) entradaLista.then(() => {
+    if (!document.getElementById("kiosco")) entrarKiosco(_k.evento || "", _k.quien || "");
+  });
+}
 </script>
 </body>
 </html>

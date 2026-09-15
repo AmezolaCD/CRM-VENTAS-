@@ -82,6 +82,18 @@ Cada registro es de quien lo capturó: un ejecutivo ve los suyos, gerencia y adm
 ven todos. El campo *Evento* se queda puesto entre un registro y el siguiente, porque en un
 stand se capturan decenas seguidos del mismo.
 
+### Modo tableta
+
+*Abrir modo tableta* deja la pantalla completa con nada más el formulario, para entregarle el
+aparato al cliente. Primero se fija el evento y a nombre de quién quedan los registros; a
+partir de ahí el cliente sólo ve el membrete del hotel, cinco campos y un botón.
+
+Mientras está puesto, **el CRM no está tapado: está quitado de la página**, de modo que no se
+alcanza ni con el teclado ni con un lector de pantalla. Tampoco aparece un solo dato de otra
+persona, ni siquiera al repetirse un correo. Aguanta una recarga —si no, un tirón de pantalla
+dejaría la cartera a la vista— y para salir hay que **mantener pulsada la esquina de arriba a
+la derecha dos segundos**.
+
 ## Dar de alta a alguien son dos pasos
 
 1. **En Supabase** → *Authentication → Users → Add user*, con **Auto Confirm User** marcado.

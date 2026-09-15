@@ -323,6 +323,28 @@ de pie y con prisa.
 Existe un papel de usuario, **Sólo prospección**, que no ve más que esta pestaña: es el de la
 cuenta de *Banquetes*. Ver **[ROLES.md](ROLES.md)**.
 
+#### Modo tableta
+
+El botón **Abrir modo tableta** deja la pantalla completa con nada más el formulario, para
+entregarle el aparato al cliente y que se registre él mismo.
+
+- Antes de entregarla se fija **de qué evento es** y **a nombre de quién** quedan los
+  registros. Eso ya no se le pregunta al cliente.
+- La pantalla se llena de blanco con el membrete del hotel y **cinco campos**. El CRM no se
+  tapa: se quita de la página, así que no se alcanza ni con el teclado ni con el lector de
+  pantalla. No hay pestañas, ni cartera, ni un solo dato de otra persona.
+- Al enviar da las gracias por su nombre y **se limpia sola** —a los nueve segundos o en
+  cuanto alguien toque *Registrar a otra persona*—, de modo que el siguiente no se encuentra
+  los datos del anterior.
+- Si el correo ya estaba capturado **no pregunta nada**: la pregunta diría el nombre de quien
+  lo dejó antes, y eso es un dato ajeno en una pantalla que cualquiera está viendo. Se guarda
+  y se depura después.
+- **Aguanta una recarga.** Si el cliente jala la pantalla hacia abajo y el navegador recarga,
+  la tableta vuelve al modo cliente sola; si no, quedaría el CRM a la vista de quien pasara.
+- Pide **pantalla completa** al navegador y, donde se puede, evita que la tableta se apague.
+- **Para salir** hay que mantener pulsada la esquina de arriba a la derecha dos segundos. Un
+  toque no basta: así nadie se sale de curioso y no hay otra contraseña que recordar.
+
 ### Confirmaciones de hospedaje
 
 Pestaña **Confirmaciones**. Genera la carta que acredita la reservación de un huésped ante
