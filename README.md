@@ -452,6 +452,11 @@ Los permisos van en dos niveles y conviene no confundirlos: lo configurado en Aj
 Para que el servidor mismo niegue la cartera ajena hay que correr `roles.sql`. Todo el
 detalle, los pasos y cómo deshacerlo están en **[ROLES.md](ROLES.md)**.
 
+Si alguien deja de ver algo que le tocaba, el chip con su nombre —arriba a la derecha— abre
+**¿Por qué no veo algo?**: dice cuántos registros de cada tipo le está entregando el servidor,
+nombra la causa cuando la hay y trae un *Volver a bajar todo*. Lo alcanza cualquiera, no sólo
+el administrador.
+
 ## La misma cartera en todos los equipos
 
 Sin configurar nada, cada computadora guarda lo suyo. En **Ajustes → Nube y equipo** se pega

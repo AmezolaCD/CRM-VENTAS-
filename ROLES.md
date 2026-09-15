@@ -138,6 +138,21 @@ ni un convenio, ni un huésped. Y sólo puede escribir prospectos.
 > Si ya corriste `roles.sql` antes de que existiera el formulario, **vuelve a correrlo**: el
 > archivo se reemplaza entero cada vez y es lo que agrega esas reglas.
 
+### La lista de usuarios tiene que estar en la nube
+
+Las reglas de `roles.sql` leen quién es quién de las mismas filas de usuarios que administra
+el CRM. **Si esa lista no llegó a la nube, el servidor no reconoce a nadie**: trata a todos
+como ejecutivos sin nombre y deja de entregar todo lo que tenga dueño marcado. Se nota porque
+alguien —gerencia, típicamente— deja de ver los convenios de un día para otro, aunque la
+cartera se siga viendo.
+
+Para saber si es eso, cualquiera puede abrir **el chip con su nombre (arriba a la derecha) →
+*¿Por qué no veo algo?***. Esa pantalla dice cuántos registros de cada tipo le está entregando
+el servidor y, si el problema es éste, lo nombra y le ofrece al administrador el botón para
+subir la lista de una vez.
+
+También trae **Volver a bajar todo**, por si a un equipo se le quedó algo sin llegar.
+
 **Antes de correrlo:**
 
 1. Saca un respaldo: **Exportar → Respaldo completo (JSON)**.

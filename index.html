@@ -556,7 +556,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.15-32";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.15-33";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1650,6 +1650,8 @@ function menuSesion(){
         <div class="note" style="text-align:left">Al cerrar la sesión, los datos de esta
           computadora se borran y el siguiente que entre baja los suyos de la nube.
           <b>Nada se pierde:</b> todo vive en el servidor.</div>
+        <p style="margin-bottom:8px"><button class="btn" id="bPerm"
+          style="width:100%;padding:10px">¿Por qué no veo algo?</button></p>
         <p><button class="btn danger" id="bSalirYa" style="width:100%;padding:10px;font-size:15px">
           Cerrar sesión</button></p>
       </div>
@@ -1674,6 +1676,8 @@ function menuSesion(){
     };
   })();
 
+  ov.querySelector("#bPerm").onclick = () => { ov.remove(); pantallaPermisos(); };
+
   ov.querySelector("#bSalirYa").onclick = async e => {
     const b = e.currentTarget;
     b.disabled = true; b.textContent = "Cerrando…";
@@ -1685,6 +1689,8 @@ function menuSesion(){
 /* ----- Traducción entre el estado y las filas de la tabla ----- */
 
 const COLECCIONES = ["clientes","actividades","convenios","prospectos","huespedes","habitaciones","usuarios"];
+/** Lo que roles.sql sólo deja escribir al administrador. */
+const SOLO_ADMIN = ["ajustes","usuarios","habitaciones"];
 
 function filasDeEstado(){
   const filas = [];
@@ -1972,13 +1978,174 @@ async function primeraSincronizacion(){
   }
   state = estadoDesdeFilas(remotas);
   try{ localStorage.setItem(STORE, JSON.stringify(state)); }catch(e){}
-  marcarSincronizado(filasDeEstado());
+
+  // Se dan por sincronizadas SÓLO las filas que de verdad llegaron. Marcarlo
+  // todo dejaba fuera para siempre lo que este equipo puso de su cosecha —el
+  // catálogo y, sobre todo, la lista de usuarios— y una nube sin esa lista no
+  // sabe quién es quién: con roles.sql corrido trata a todos como ejecutivos
+  // sin nombre, y entonces nadie ve un solo convenio.
+  marcarSincronizado(remotas);
+  // Salvo para quien no tiene permiso de escribir esas tablas: a un ejecutivo
+  // el servidor le rebotaría el intento y le tumbaría la subida entera.
+  if (!esAdmin())
+    for (const f of filasDeEstado())
+      if (SOLO_ADMIN.includes(f.tipo)) sincronizado.set(f.id, JSON.stringify(f.datos));
   for (const r of remotas)
     nube.ultimo = !nube.ultimo || r.actualizado > nube.ultimo ? r.actualizado : nube.ultimo;
   nube.enlazado = true;
   guardarNubeCfg();
   render();
 }
+
+/**
+ * Qué me está entregando el servidor a mí, ahora mismo.
+ *
+ * Cuando alguien dice "no veo los convenios", la pregunta de fondo siempre es
+ * la misma: ¿el servidor no se los manda, o sí llegaron y la pantalla los
+ * esconde? Esto lo contesta sin tener que abrirle la consola a nadie.
+ */
+async function revisarPermisos(){
+  const yo = correoSesion().trim().toLowerCase();
+  let filas, conDuenio = true;
+  try{
+    filas = await api("/rest/v1/crm_datos?select=id,tipo,duenio,datos&borrado=is.false");
+  }catch(e){
+    if (!/duenio/i.test(e.message)) throw e;
+    conDuenio = false;   // no han corrido roles.sql: no existe la columna
+    filas = await api("/rest/v1/crm_datos?select=id,tipo,datos&borrado=is.false");
+  }
+
+  const conteo = {};
+  for (const f of filas) conteo[f.tipo] = (conteo[f.tipo] || 0) + 1;
+
+  const usuarios = filas.filter(f => f.tipo === "usuarios");
+  const mio = usuarios.find(f =>
+    String((f.datos || {}).correo || "").trim().toLowerCase() === yo);
+
+  return {
+    correo: correoSesion(),
+    conDuenio,
+    conteo,
+    total: filas.length,
+    conDuenioN: conDuenio ? filas.filter(f => f.duenio).length : 0,
+    usuariosNube: usuarios.length,
+    meReconoce: !!mio,
+    rolNube: mio ? (mio.datos.rol || "") : "",
+    nombreNube: mio ? (mio.datos.nombre || "") : "",
+    rolLocal: rolActual(),
+    nombreLocal: miNombre()
+  };
+}
+
+/** Sube la lista de usuarios aunque no haya cambiado. Sólo puede el administrador. */
+async function empujarUsuarios(){
+  for (const u of state.usuarios) sincronizado.delete("usuarios:" + u.id);
+  await sincronizar();
+  if (nube.estado === "error") throw new Error(nube.error || "sin detalle");
+}
+
+/** Vuelve a traerlo todo desde cero, sin el corte de "sólo lo nuevo". */
+async function bajarTodo(){
+  nube.ultimo = "";
+  await sincronizar();
+  if (nube.estado === "error") throw new Error(nube.error || "sin detalle");
+}
+
+const NOMBRE_TIPO = { clientes:"clientes", actividades:"actividades", convenios:"convenios",
+  prospectos:"prospectos", huespedes:"huéspedes", habitaciones:"tipos de habitación",
+  usuarios:"usuarios", ajustes:"ajustes" };
+
+function pantallaPermisos(){
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>Qué me manda el servidor</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body" id="permCuerpo">
+        <div class="note">Preguntando…</div>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cerrar</button></div>
+    </div>`);
+
+  const cuerpo = ov.querySelector("#permCuerpo");
+
+  revisarPermisos().then(r => {
+    const problemas = [];
+    if (r.conDuenio && !r.usuariosNube)
+      problemas.push(`<b>La nube no tiene la lista de usuarios.</b> Corrieron
+        <code>roles.sql</code>, y esas reglas leen de esa lista para saber quién es quién.
+        Sin ella el servidor trata a todos como ejecutivos sin nombre, y por eso no
+        entrega los convenios ni los clientes que tengan dueño.
+        ${esAdmin() ? `<br><button class="btn primary sm" id="bSubirUsr"
+            style="margin-top:8px">Subir la lista de usuarios ahora</button>`
+          : `<br>Pídele a ${esc(nombresDeRol("admin") || "el administrador")} que entre y
+             lo haga desde aquí mismo.`}`);
+    else if (r.conDuenio && !r.meReconoce)
+      problemas.push(`<b>Tu correo no está en la lista de usuarios de la nube.</b>
+        Está ${esc(r.correo)}, y en la nube hay ${r.usuariosNube}. Hay que agregarlo en
+        <i>Ajustes → Usuarios y permisos</i> escrito igual, y volver a guardar.`);
+    else if (r.conDuenio && r.rolNube !== r.rolLocal)
+      problemas.push(`<b>El servidor te tiene con otro papel.</b> Él dice
+        <b>${esc(infoRol(r.rolNube).name)}</b> y este equipo cree que eres
+        <b>${esc(infoRol(r.rolLocal).name)}</b>. Manda el del servidor.`);
+
+    cuerpo.innerHTML = `
+      ${problemas.length
+        ? problemas.map(x => `<div class="note warn">${x}</div>`).join("")
+        : `<div class="note" style="border-left:3px solid var(--ok)">
+             <b>Todo en orden.</b> El servidor te reconoce y te está mandando lo que te toca.</div>`}
+
+      <div style="overflow:auto"><table class="data">
+        <thead><tr><th>Lo que el servidor me entrega</th><th class="num">Registros</th></tr></thead>
+        <tbody>${Object.keys(NOMBRE_TIPO).map(t => `<tr>
+            <td>${esc(NOMBRE_TIPO[t])}</td>
+            <td class="num"><b>${r.conteo[t] || 0}</b></td></tr>`).join("")}
+          <tr><td><b>Total</b></td><td class="num"><b>${r.total}</b></td></tr></tbody></table></div>
+
+      <div class="note" style="margin-top:14px">
+        Entraste como <b>${esc(r.correo)}</b>.
+        ${r.conDuenio
+          ? `El servidor te tiene como <b>${esc(r.meReconoce ? infoRol(r.rolNube).name : "no registrado")}</b>${
+              r.nombreNube ? `, a nombre de <b>${esc(r.nombreNube)}</b>` : ""}.
+             Hay ${r.conDuenioN} registro(s) con dueño marcado.`
+          : `Todavía no han corrido <code>roles.sql</code>: el servidor le entrega
+             todo a cualquiera que entre, y lo que cada quien ve lo decide nada más
+             esta pantalla.`}
+      </div>
+
+      <p style="margin:14px 0 0"><button class="btn" id="bBajarTodo">Volver a bajar todo</button>
+        <span class="hint">Por si algo se quedó sin llegar a este equipo.</span></p>`;
+
+    const bu = cuerpo.querySelector("#bSubirUsr");
+    if (bu) bu.onclick = async e => {
+      const b = e.currentTarget, antes = b.textContent;
+      b.disabled = true; b.textContent = "Subiendo…";
+      try{
+        await empujarUsuarios();
+        alert("Listo: la nube ya tiene la lista de usuarios.\n\n" +
+              "Dile al equipo que recargue con Ctrl+F5 y ya verán lo que les toca.");
+        ov.remove(); pantallaPermisos();
+      }catch(ex){ alert("No se pudo subir: " + ex.message); }
+      finally{ b.disabled = false; b.textContent = antes; }
+    };
+
+    cuerpo.querySelector("#bBajarTodo").onclick = async e => {
+      const b = e.currentTarget, antes = b.textContent;
+      b.disabled = true; b.textContent = "Bajando…";
+      try{
+        await bajarTodo();
+        ov.remove(); pantallaPermisos();
+      }catch(ex){ alert("No se pudo bajar: " + ex.message); }
+      finally{ b.disabled = false; b.textContent = antes; }
+    };
+  }).catch(e => {
+    cuerpo.innerHTML = `<div class="errbox">No se pudo preguntar: ${esc(e.message)}</div>`;
+  });
+}
+
+/** Los nombres de quienes tienen cierto papel, para poder decir a quién acudir. */
+const nombresDeRol = rol => state.usuarios.filter(u => u.rol === rol && u.nombre)
+  .map(u => u.nombre).join(" o ");
 
 /* ----- Interfaz ----- */
 
@@ -4039,6 +4206,7 @@ function renderAjustes(){
       <p style="margin:6px 0 0">
         <button class="btn primary" id="bNbGuardar">Guardar y conectar</button>
         <button class="btn" id="bNbProbar">Probar conexión</button>
+        <button class="btn" id="bNbPerm">¿Por qué no veo algo?</button>
         <button class="btn" id="bNbFirmas">Buscar firmas de clientes</button>
         <button class="btn" id="bNbLiga">Copiar liga para otro equipo</button>
         <button class="btn" id="bNbTodo">Volver a subir todo</button>
@@ -4426,6 +4594,10 @@ function renderAjustes(){
       }finally{ b.disabled = false; b.textContent = antes; }
     };
 
+    p.querySelector("#bNbPerm").onclick = () => {
+      if (!nubeActiva()){ alert("Primero hay que entrar a la nube."); return; }
+      pantallaPermisos();
+    };
     p.querySelector("#bNbFirmas").onclick = buscarFirmasAhora;
     p.querySelector("#bNbLiga").onclick = copiarInvitacion;
 
