@@ -556,7 +556,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.15-33";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.15-34";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2152,8 +2152,20 @@ const nombresDeRol = rol => state.usuarios.filter(u => u.rol === rol && u.nombre
 function pintarNube(){
   const el = document.getElementById("estadoNube");
   if (!el) return;
-  if (!nube.url || !nube.anon){ el.style.display = "none"; return; }
   el.style.display = "";
+
+  // Un equipo sin nube se veía exactamente igual que uno conectado, nada más
+  // que vacío: no había cómo distinguir "no hay convenios" de "este aparato no
+  // está hablando con el hotel". Y como la configuración va por navegador y por
+  // dirección, basta abrir la aplicación en otro navegador para caer aquí sin
+  // enterarse. Ahora lo dice.
+  if (!nube.url || !nube.anon){
+    el.innerHTML = `<span class="punto-nube" style="background:var(--warn)"></span>Sólo este equipo`;
+    el.title = "Este aparato no está conectado a la nube del hotel.\nClic para saber qué hacer.";
+    el.classList.add("conSesion");
+    el.onclick = menuSinNube;
+    return;
+  }
   const mapa = {
     local:          ["Sin conectar", "var(--muted)", "Configurada la nube, falta entrar"],
     sincronizando:  ["Sincronizando…", "var(--accent)", "Enviando y trayendo cambios"],
@@ -2174,6 +2186,40 @@ function pintarNube(){
   el.title = (quien ? txt + " · " : "") + ayuda + (nube.sesion ? "\nClic para cerrar sesión" : "");
   el.classList.toggle("conSesion", !!nube.sesion);
   el.onclick = nube.sesion ? menuSesion : null;
+}
+
+/** Lo que hay que hacer cuando este aparato no está hablando con el hotel. */
+function menuSinNube(){
+  const ov = modal(`
+    <div class="modal" style="max-width:420px">
+      <div class="modal-head"><h2>Sólo este equipo</h2><button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note warn"><b>Este aparato no está conectado a la nube del hotel.</b>
+          Lo que aparece aquí es únicamente lo que se haya capturado en <b>este navegador</b>,
+          y nada de lo que se capture aquí le llega a nadie más.</div>
+        <p style="margin:0 0 10px">Pasa sin que uno se dé cuenta, porque la conexión se guarda
+          <b>por navegador y por dirección</b>: abrir la aplicación en otro navegador del mismo
+          aparato —o en modo privado— es empezar de cero.</p>
+        <p style="margin:0 0 6px"><b>Cómo se arregla:</b></p>
+        <ul style="margin:0 0 14px;padding-left:20px">
+          <li>Pídele al administrador la <b>liga de configuración</b> y ábrela en
+            <b>este mismo navegador</b>. Con eso queda conectado y sólo hay que entrar
+            con el correo y la contraseña.</li>
+          <li>Revisa que la dirección sea la de siempre: <b>core-quartz.vercel.app</b>.
+            Una dirección distinta es, para el navegador, otra aplicación.</li>
+        </ul>
+        ${esAdmin() ? `<p style="margin:0"><button class="btn primary" id="bIrAjustes"
+          style="width:100%;padding:10px">Ir a Nube y equipo</button></p>` : ""}
+      </div>
+    </div>`);
+
+  const ir = ov.querySelector("#bIrAjustes");
+  if (ir) ir.onclick = () => {
+    ov.remove();
+    vista = "ajustes"; render();
+    const n = document.getElementById("nbUrl");
+    if (n) n.scrollIntoView({ block:"center", behavior:"smooth" });
+  };
 }
 
 function pantallaEntrada(){
@@ -2746,6 +2792,7 @@ function render(){
   document.getElementById("bExport").style.display = conCartera;
 
   renderEjecutivos();
+  pintarNube();
   pintarAvisos();
   if (vista === "tablero")   { renderKpis(); renderTablero(); }
   if (vista === "clientes")  renderClientes();

@@ -457,6 +457,12 @@ Si alguien deja de ver algo que le tocaba, el chip con su nombre —arriba a la 
 nombra la causa cuando la hay y trae un *Volver a bajar todo*. Lo alcanza cualquiera, no sólo
 el administrador.
 
+Ese mismo chip dice siempre en qué estado está el aparato. Cuando marca **Sólo este equipo**
+es que ese navegador **no está conectado a la nube**: lo que muestra es nada más lo capturado
+ahí, y nada de lo que se capture le llega al resto. Pasa sin querer, porque la conexión se
+guarda **por navegador y por dirección** —otro navegador del mismo aparato, o el modo privado,
+empiezan de cero—, y antes se veía igual que un equipo conectado pero vacío.
+
 ## La misma cartera en todos los equipos
 
 Sin configurar nada, cada computadora guarda lo suyo. En **Ajustes → Nube y equipo** se pega
