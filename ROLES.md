@@ -45,6 +45,13 @@ cuántos clientes y cuántas actividades arrastra, y un botón para pasárselos 
 alguien del equipo (o dejarlos sin asignar a propósito). En los filtros esos nombres siguen
 apareciendo, pero apartados bajo *Sin dar de alta*, para que se noten en vez de esconderse.
 
+## El contrato y el convenio son cosas distintas
+
+El **convenio** fija las tarifas de empresa de todo el año. El **contrato** —pestaña
+*Contratos*— cotiza una estancia concreta: estas fechas, estas habitaciones, este salón. Los
+dos se firman y los dos se reparten igual: cada uno guarda su propio ejecutivo, se le muestra a
+quien lo trae asignado y al dueño del cliente, y gerencia y administración los ven todos.
+
 ## El convenio dice de quién es
 
 Cada convenio guarda **su propio ejecutivo**, que se escoge de la misma lista al crearlo. Por

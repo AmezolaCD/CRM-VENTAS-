@@ -301,6 +301,32 @@ arrancaría pegada al borde del papel. Ahí se apaga desde el diálogo de impres
 Un convenio guarda **su propia copia** de los textos y de las tarifas al crearse, así que
 cambiar el catálogo o los textos **no altera los convenios ya emitidos**.
 
+### Contratos
+
+Pestaña **Contratos**. Cotiza una **estancia concreta**: estas fechas, estas habitaciones y, si
+lo hay, el salón del evento. No hay que confundirla con *Convenios*, que fija las tarifas de
+empresa de todo el año; son dos documentos distintos y cada uno vive en su pestaña.
+
+El machote sale del que ventas traía en Word, sección por sección y en el mismo orden:
+membrete, fecha, título, destinatario, saludo, **servicios cotizados**, **propuesta económica ·
+hospedaje**, **salones y eventos**, **costos adicionales no incluidos**, vigencia, forma de
+pago y el bloque de firmas.
+
+- **Hospedaje**: una línea por tipo de habitación, con noches y precio unitario. El subtotal y
+  el total con impuestos se calculan solos, con el **13%** por omisión (8% de IVA más 5% sobre
+  hospedaje), editable por documento.
+- **Salones y eventos** es opcional: fecha, horario, evento, pax, montaje, salón y renta.
+- **Costos adicionales** arranca con el estacionamiento ya puesto, como en el machote.
+- Folio propio: `CT-2026-001`, que sigue al año de la fecha del documento.
+- **Tipo de documento**: *Cotización* o *Contrato*. Cambia el título y el párrafo legal del
+  cierre — la cotización dice que no compromete al hotel; el contrato, que los servicios quedan
+  confirmados al firmar.
+- Se firma igual que el convenio: el ejecutivo primero —con su firma guardada, si ya la tiene—
+  y luego la **firma de aceptación** del cliente, que lo deja en *Aceptado*. Cada paso queda en
+  la bitácora del cliente.
+- Se imprime, se descarga en PDF y se manda por correo o WhatsApp, con la columna **Enviado**
+  como en todo lo demás.
+
 ### Formulario de prospección
 
 Pestaña **Formulario**. Para levantar contactos en una expo, una feria o un evento del hotel,
