@@ -562,7 +562,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.15-35";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.16-36";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1225,7 +1225,9 @@ function saneaContrato(k){
     titulo:"", fecha:"", vigencia:"", moneda:"MXN", tipoCambio:"", impuestos:IMPUESTOS_DEF,
     hospedaje:[], eventos:[], adicionales:[], notas:"",
     estado:"borrador", firmaHotel:null, firmaCliente:null, enviado:null, destinatario:null,
-    createdAt:"", updatedAt:"" }, k || {});
+    firmaManual:null, externo:false, createdAt:"", updatedAt:"" }, k || {});
+  o.externo = !!o.externo;
+  o.firmaManual = saneaManual(o.firmaManual);
   o.id = o.id || nuevoId("k");
   if (!TIPOS_CONTRATO.some(t => t.id === o.tipo)) o.tipo = "cotizacion";
   if (!ESTADOS_CT[o.estado]) o.estado = "borrador";
@@ -1268,7 +1270,8 @@ function saneaConv(c){
     habitaciones:[], incluyeRecovery:false, notas:"", textos:null, grupos:null,
     estado:"borrador", firmaHotel:null, firmaEmpresa:null, createdAt:"", updatedAt:"",
     tokenFirma:"", enviado:null, firmaManual:null, avisado:false, destinatario:null,
-    folioRepetido:"", ejecutivo:"" }, c || {});
+    folioRepetido:"", ejecutivo:"", externo:false }, c || {});
+  o.externo = !!o.externo;
   o.ejecutivo = String(o.ejecutivo || "").trim();
   o.id = o.id || nuevoId("v");
   if (!ESTADOS_CONV[o.estado]) o.estado = "borrador";
@@ -3115,6 +3118,7 @@ function renderConvenios(){
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
       <b style="font-size:15px">Convenios</b><span class="hint">${vs.length} en total</span>
       <span style="flex:1"></span>
+      <button class="btn" id="bSubirExtConv">Subir uno firmado</button>
       <button class="btn primary" id="bNuevoConv">+ Nuevo convenio</button></div>`;
 
   if (!vs.length){
@@ -3127,7 +3131,8 @@ function renderConvenios(){
       <tbody>${vs.map(v => {
         const ec = ESTADOS_CONV[v.estado];
         return `<tr class="row-link" data-id="${v.id}">
-          <td><b>${esc(v.folio || "—")}</b>${v.folioRepetido
+          <td><b>${esc(v.folio || "—")}</b>${v.externo
+            ? ` <span class="pill" title="Se subió escaneado; no se armó aquí">externo</span>` : ""}${v.folioRepetido
             ? ` <span class="pill" style="background:var(--bad-soft);color:var(--bad)"
                  title="Otro convenio tiene este mismo folio">repetido</span>` : ""}</td>
           <td>${esc(nombreCli(v.clienteId))}</td>
@@ -3139,7 +3144,8 @@ function renderConvenios(){
           <td class="nowrap">${selloEnvio(v)}</td>
           <td class="nowrap">${v.firmaHotel ? "✍️ Hotel" : "—"}${
             v.firmaEmpresa ? " · ✍️ Empresa" : v.firmaManual ? " · 📄 En papel" : ""}</td>
-          <td class="nowrap"><button class="btn sm" data-doc="${v.id}">Ver carta</button></td>
+          <td class="nowrap"><button class="btn sm" data-doc="${v.id}">${
+            v.externo ? "Ver documento" : "Ver carta"}</button></td>
         </tr>`;
       }).join("")}</tbody></table>`;
 
@@ -3150,6 +3156,7 @@ function renderConvenios(){
     }));
   }
   cont.querySelector("#bNuevoConv").onclick = () => editarConvenio(null);
+  cont.querySelector("#bSubirExtConv").onclick = () => subirDocumentoExterno("convenio");
 }
 
 /* ==========================================================================
@@ -5372,6 +5379,7 @@ function resolverFoliosRepetidos(){
 function editarConvenio(id, clientePre, alCerrar){
   const existente = id ? state.convenios.find(v => v.id === id) : null;
 
+  if (existente && existente.externo){ verConvenioExterno(existente, alCerrar); return; }
   if (existente && existente.estado !== "borrador"){
     alert("Este convenio ya está firmado y no se puede editar.\n\nSe abrirá la carta en modo lectura.");
     verConvenio(existente.id, alCerrar);
@@ -5953,6 +5961,7 @@ function renderContratos(){
       <b style="font-size:15px">Contratos y cotizaciones</b>
       <span class="hint">${ks.length} en total</span>
       <span style="flex:1"></span>
+      <button class="btn" id="bSubirExtCt">Subir uno firmado</button>
       <button class="btn primary" id="bNuevoCt">+ Nuevo contrato</button></div>
     <div class="note">Para cotizar una estancia concreta: estas fechas, estas habitaciones y,
       si lo hay, el salón del evento. El <i>convenio</i> es otra cosa —fija las tarifas de
@@ -5969,7 +5978,8 @@ function renderContratos(){
       <tbody>${ks.map(k => {
         const ec = ESTADOS_CT[k.estado], cu = cuentasContrato(k);
         return `<tr class="row-link" data-id="${k.id}">
-          <td><b>${esc(k.folio || "—")}</b></td>
+          <td><b>${esc(k.folio || "—")}</b>${k.externo
+            ? ` <span class="pill" title="Se subió escaneado; no se armó aquí">externo</span>` : ""}</td>
           <td>${esc(nombreCli(k.clienteId))}${k.titulo
             ? `<div class="hint">${esc(k.titulo)}</div>` : ""}</td>
           ${conEje ? `<td class="nowrap">${esc(ejecutivoDeCt(k) || "—")}</td>` : ""}
@@ -5991,11 +6001,13 @@ function renderContratos(){
     }));
   }
   cont.querySelector("#bNuevoCt").onclick = () => editarContrato(null);
+  cont.querySelector("#bSubirExtCt").onclick = () => subirDocumentoExterno("cotizacion");
 }
 
 function editarContrato(id, clientePre, alCerrar){
   const existente = id ? state.contratos.find(k => k.id === id) : null;
 
+  if (existente && existente.externo){ verContratoExterno(existente, alCerrar); return; }
   if (existente && existente.estado !== "borrador"){
     alert("Este documento ya está firmado y no se puede editar.\n\nSe abrirá en modo lectura.");
     verContrato(existente.id, alCerrar);
@@ -6267,6 +6279,7 @@ const nombrePdfContrato = (k, c) =>
 function verContrato(id, alCerrar, pedirFirma){
   const k = state.contratos.find(x => x.id === id);
   if (!k) return;
+  if (k.externo){ verContratoExterno(k, alCerrar); return; }
   const c = cliente(k.clienteId);
   const h = state.ajustes.hotel;
   const ec = ESTADOS_CT[k.estado];
@@ -6447,6 +6460,8 @@ function enviarContrato(k, c){
 function verConvenio(id, alCerrar, pedirFirma){
   const v = state.convenios.find(x => x.id === id);
   if (!v) return;
+  // Un convenio de fuera no tiene carta que armar: lo que hay es el escaneado.
+  if (v.externo){ verConvenioExterno(v, alCerrar); return; }
   const c = cliente(v.clienteId);
   const h = state.ajustes.hotel;
   const ec = ESTADOS_CONV[v.estado];
@@ -6527,12 +6542,7 @@ function verConvenio(id, alCerrar, pedirFirma){
   if (bs) bs.onclick = () => subirConvenioFirmado(v, () => { ov.remove(); verConvenio(v.id, alCerrar); });
 
   const bve = ov.querySelector("#bVerEscaneo");
-  if (bve) bve.onclick = () => {
-    const w = window.open("", "_blank", "noopener");
-    if (!w){ alert("El navegador bloqueó la ventana. Permite las ventanas emergentes."); return; }
-    w.document.write(`<title>${esc(v.firmaManual.archivo)}</title>` +
-      `<iframe src="${esc(v.firmaManual.pdf)}" style="border:0;width:100%;height:100vh"></iframe>`);
-  };
+  if (bve) bve.onclick = () => verEscaneado(v.firmaManual, `Convenio ${v.folio} · escaneado`);
 
   marcarVisto(v);
 
@@ -6624,6 +6634,246 @@ function subirConvenioFirmado(v, alTerminar){
     r.onerror = () => { err.innerHTML = `<div class="errbox">No se pudo leer el archivo.</div>`; };
     r.readAsDataURL(f);
   };
+}
+
+/* ----- Documentos que no se hicieron aquí ----- */
+
+/**
+ * Registrar un convenio, una cotización o un contrato que ya andaba firmado
+ * antes de que existiera el CRM —o que se hizo en Word, como siempre.
+ *
+ * No se inventa el documento: se guarda el escaneado tal cual y la ficha
+ * queda marcada como externa, para que nadie espere ver la carta armada por
+ * la aplicación cuando lo abra.
+ */
+const TIPOS_EXTERNO = [
+  { id:"convenio",   name:"Convenio",   donde:"convenios" },
+  { id:"cotizacion", name:"Cotización", donde:"contratos" },
+  { id:"contrato",   name:"Contrato",   donde:"contratos" }
+];
+
+/** Cuánto ocupa hoy la cartera en este navegador, para no pasarnos del tope. */
+function pesoGuardado(){
+  try{ return (localStorage.getItem(STORE) || "").length; }catch(e){ return 0; }
+}
+const MAX_ARCHIVO = 2 * 1024 * 1024;      // por documento
+const TOPE_TOTAL  = 4.2 * 1024 * 1024;    // el navegador corta cerca de 5 MB
+
+function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
+  const hoy = hoyISO();
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>Registrar documento firmado</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note">Para lo que <b>ya andaba firmado</b> antes de usar el CRM, o lo
+          que se hizo en Word. Se guarda el escaneado tal cual —no se vuelve a armar el
+          documento— y queda en la lista que le toca, marcado como <b>externo</b>.</div>
+        <div id="exErr"></div>
+        <div class="grid">
+          <div><label class="lbl">¿Qué es?</label>
+            <select class="field" id="exTipo">${TIPOS_EXTERNO.map(t =>
+              `<option value="${t.id}"${t.id === tipoInicial ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select></div>
+          <div><label class="lbl">Folio <span class="hint">(el que traiga el papel)</span></label>
+            <input class="field" id="exFolio" placeholder="CV-2025-014"></div>
+          <div class="full"><label class="lbl">Cliente</label>
+            <select class="field" id="exCli">
+              <option value="">— Selecciona un cliente —</option>
+              ${[...state.clientes].sort((a,b)=>a.empresa.localeCompare(b.empresa,"es")).map(x =>
+                `<option value="${x.id}"${x.id === clientePre ? " selected" : ""}>${esc(x.empresa)}${
+                  x.contacto ? " · " + esc(x.contacto) : ""}</option>`).join("")}
+            </select></div>
+          <div class="full"><label class="lbl">Ejecutivo de ventas</label>
+            ${selectEjecutivo(miNombre(), "exEje")}</div>
+          <div><label class="lbl">Fecha del documento</label>
+            <input class="field" type="date" id="exFecha" value="${esc(hoy)}"></div>
+          <div><label class="lbl">Vigencia hasta <span class="hint">(opcional)</span></label>
+            <input class="field" type="date" id="exVig"></div>
+          <div class="full"><label class="lbl">El archivo escaneado</label>
+            <input type="file" class="field" id="exArchivo" accept="application/pdf,image/*">
+            <div class="hint">PDF o foto, <b>máximo 2 MB</b>. El archivo viaja a todos los
+              equipos en cada sincronización: uno pesado los vuelve lentos a todos. Si el
+              escáner lo saca grande, escanéalo en blanco y negro o toma una foto.</div></div>
+          <div class="full"><label class="lbl">Observaciones <span class="hint">(opcional)</span></label>
+            <textarea class="field" id="exNotas" style="min-height:60px"
+              placeholder="Convenio 2025 que venía en Word, firmado en papel."></textarea></div>
+        </div>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="bOkEx">Registrar</button></div>
+    </div>`);
+
+  {
+    const fCli = ov.querySelector("#exCli"), fEje = ov.querySelector('[name="exEje"]');
+    let auto = fEje.value;
+    fEje.addEventListener("change", () => { if (fEje.value !== auto) auto = null; });
+    fCli.addEventListener("change", () => {
+      if (auto === null || fEje.value !== auto) return;
+      const e = String((cliente(fCli.value) || {}).ejecutivo || "").trim();
+      if (e && [...fEje.options].some(o => o.value === e)) fEje.value = auto = e;
+    });
+    fCli.dispatchEvent(new Event("change"));   // por si ya venía un cliente escogido
+  }
+
+  const err = ov.querySelector("#exErr");
+  const falla = html => { err.innerHTML = `<div class="errbox">${html}</div>`;
+                          err.scrollIntoView({ block:"center", behavior:"smooth" }); };
+
+  ov.querySelector("#bOkEx").onclick = () => {
+    const tipo = ov.querySelector("#exTipo").value;
+    const cid  = ov.querySelector("#exCli").value;
+    const f    = ov.querySelector("#exArchivo").files[0];
+
+    if (!cid) return falla("Selecciona el cliente.");
+    if (!f)   return falla("Elige el archivo escaneado.");
+    if (f.size > MAX_ARCHIVO)
+      return falla(`El archivo pesa ${(f.size/1024/1024).toFixed(1)} MB y el límite son 2 MB.
+        Vuelve a escanearlo en blanco y negro o a menor resolución, o toma una foto.`);
+    if (pesoGuardado() + f.size * 1.4 > TOPE_TOTAL)
+      return falla(`<b>Ya casi no cabe en este navegador.</b> Los archivos escaneados se
+        guardan junto con la cartera y el navegador corta cerca de los 5 MB.
+        Saca un respaldo (Exportar → Respaldo completo) y avísale a sistemas antes de
+        seguir subiendo escaneados.`);
+
+    const r = new FileReader();
+    r.onerror = () => falla("No se pudo leer el archivo.");
+    r.onload = () => {
+      const c = cliente(cid);
+      const quien = ov.querySelector('[name="exEje"]').value.trim() || miNombre();
+      const folio = ov.querySelector("#exFolio").value.trim();
+      const fecha = ov.querySelector("#exFecha").value || hoy;
+      const vig   = ov.querySelector("#exVig").value;
+      const notas = ov.querySelector("#exNotas").value.trim();
+      const manual = saneaManual({ fecha:new Date().toISOString(), quien,
+                                   archivo:f.name, pdf:String(r.result) });
+      const dest = c ? { empresa:c.empresa, contacto:c.contacto, ubicacion:c.ubicacion,
+                         telefono:c.telefono, email:c.email } : null;
+      const nombre = TIPOS_EXTERNO.find(t => t.id === tipo).name;
+
+      if (tipo === "convenio"){
+        const v = saneaConv({
+          clienteId:cid, ejecutivo:quien, externo:true,
+          folio: folio || folioLibre(String(fecha).slice(0,4)),
+          fecha, vigenciaDesde:fecha, vigenciaHasta:vig, notas,
+          firmaManual: manual, createdAt:new Date().toISOString()
+        });
+        state.convenios.push(v);
+        cerrarConvenio(v, null, `Documento externo. Se subió el archivo "${f.name}".`, quien);
+        v.avisado = true;     // lo registró el propio equipo: no hay novedad que avisar
+      } else {
+        const k = saneaContrato({
+          clienteId:cid, ejecutivo:quien, externo:true, tipo,
+          folio: folio || folioContrato(String(fecha).slice(0,4)),
+          fecha, vigencia:vig, notas, estado:"aceptado",
+          firmaManual: manual, destinatario: dest, createdAt:new Date().toISOString()
+        });
+        state.contratos.push(k);
+        registrarAuto(cid, `${nombre} ${k.folio} registrada desde un documento externo`,
+          `Se subió el archivo "${f.name}".`, quien);
+      }
+
+      guardar(); render();
+      ov.remove();
+      vista = TIPOS_EXTERNO.find(t => t.id === tipo).donde;
+      render();
+      if (alTerminar) alTerminar();
+    };
+    r.readAsDataURL(f);
+  };
+}
+
+/**
+ * La ficha de un documento que vino de fuera.
+ *
+ * No se dibuja una carta: no hay de dónde. Se enseñan los datos que se
+ * capturaron y el archivo tal cual lo subieron.
+ */
+function fichaExterna(titulo, etiqueta, filas, manual, alBorrar){
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>${esc(titulo)}</h2>
+        <span class="estado-chip" style="background:var(--ok-soft);color:var(--ok)">${esc(etiqueta)}</span>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note">Este documento <b>no se armó en el CRM</b>: se subió ya firmado.
+          Lo que vale es el archivo escaneado.</div>
+        <div style="overflow:auto"><table class="data"><tbody>${filas.map(([a,b]) => `<tr>
+          <td style="width:190px;color:var(--muted)">${esc(a)}</td>
+          <td><b>${esc(b || "—")}</b></td></tr>`).join("")}</tbody></table></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn danger" id="bDelEx">Eliminar</button>
+        <div class="spacer"></div>
+        <button class="btn primary" id="bVerEsc">Ver el documento</button>
+        <button class="btn" data-close>Cerrar</button></div>
+    </div>`);
+  ov.querySelector("#bVerEsc").onclick = () => verEscaneado(manual, titulo);
+  ov.querySelector("#bDelEx").onclick = () => {
+    if (!confirm("¿Eliminar este documento del CRM?\n\nSe borra también el archivo subido.")) return;
+    alBorrar(); ov.remove();
+  };
+  return ov;
+}
+
+function verConvenioExterno(v, alCerrar){
+  const c = cliente(v.clienteId);
+  fichaExterna(`Convenio ${v.folio || ""}`, "Externo · firmado", [
+    ["Cliente", (c && c.empresa) || nombreCli(v.clienteId)],
+    ["Ejecutivo", ejecutivoDe(v)],
+    ["Fecha del documento", fechaCorta(v.fecha)],
+    ["Vigencia hasta", v.vigenciaHasta ? fechaCorta(v.vigenciaHasta) : ""],
+    ["Archivo", v.firmaManual && v.firmaManual.archivo],
+    ["Lo registró", v.firmaManual && v.firmaManual.quien],
+    ["Observaciones", v.notas]
+  ], v.firmaManual, () => {
+    state.convenios = state.convenios.filter(x => x.id !== v.id);
+    guardar(); render(); if (alCerrar) alCerrar();
+  });
+}
+
+function verContratoExterno(k, alCerrar){
+  const c = cliente(k.clienteId);
+  fichaExterna(`${infoTipoCt(k.tipo).name} ${k.folio || ""}`, "Externo · firmado", [
+    ["Cliente", (c && c.empresa) || nombreCli(k.clienteId)],
+    ["Ejecutivo", ejecutivoDeCt(k)],
+    ["Fecha del documento", fechaCorta(k.fecha)],
+    ["Vigencia hasta", k.vigencia ? fechaCorta(k.vigencia) : ""],
+    ["Archivo", k.firmaManual && k.firmaManual.archivo],
+    ["Lo registró", k.firmaManual && k.firmaManual.quien],
+    ["Observaciones", k.notas]
+  ], k.firmaManual, () => {
+    state.contratos = state.contratos.filter(x => x.id !== k.id);
+    guardar(); render(); if (alCerrar) alCerrar();
+  });
+}
+
+/** Enseña el escaneado que se subió, sin sacarlo de la aplicación. */
+function verEscaneado(manual, titulo){
+  if (!manual || !manual.pdf){ alert("Este documento no trae archivo."); return; }
+  const esImagen = /^data:image\//.test(manual.pdf);
+  modal(`
+    <div class="modal wide">
+      <div class="modal-head"><h2>${esc(titulo || manual.archivo || "Documento")}</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body" style="background:#f2f0f5">
+        ${esImagen
+          ? `<img src="${esc(manual.pdf)}" alt="${esc(manual.archivo)}"
+               style="max-width:100%;display:block;margin:0 auto;background:#fff">`
+          : `<iframe src="${esc(manual.pdf)}" title="${esc(manual.archivo)}"
+               style="border:0;width:100%;height:70vh;background:#fff"></iframe>`}
+      </div>
+      <div class="modal-foot">
+        <span class="hint">${esc(manual.archivo || "")}${manual.quien
+          ? " · lo subió " + esc(manual.quien) : ""}</span>
+        <div class="spacer"></div>
+        <button class="btn" id="bBajarEsc">Descargar</button>
+        <button class="btn" data-close>Cerrar</button></div>
+    </div>`).querySelector("#bBajarEsc").onclick = () => {
+      const a = document.createElement("a");
+      a.href = manual.pdf; a.download = manual.archivo || "documento";
+      document.body.appendChild(a); a.click(); a.remove();
+    };
 }
 
 /* ==========================================================================

@@ -327,6 +327,27 @@ pago y el bloque de firmas.
 - Se imprime, se descarga en PDF y se manda por correo o WhatsApp, con la columna **Enviado**
   como en todo lo demás.
 
+### Documentos que no se hicieron aquí
+
+En *Convenios* y en *Contratos* hay un botón **Subir uno firmado**: registra un convenio, una
+cotización o un contrato que **ya andaba firmado** antes de usar el CRM, o que se hizo en Word
+como siempre.
+
+Se pide el cliente, el ejecutivo —que sigue al del cliente—, el folio que traiga el papel, la
+fecha y el **archivo escaneado** (PDF o foto). No se vuelve a armar el documento: lo que vale
+es el escaneado, y por eso la ficha queda marcada como **externa** y al abrirla enseña el
+archivo en vez de una carta en blanco. En la lista lleva su etiqueta, para que nadie se
+pregunte por qué no tiene carta.
+
+Un convenio externo cierra igual que uno firmado en pantalla: el cliente pasa a **Ganado** y
+queda su línea en la bitácora. Una cotización o un contrato externo caen en *Contratos* como
+**Aceptados**.
+
+> **Sobre el tamaño.** Cada archivo puede pesar hasta **2 MB** y se guarda junto con la
+> cartera, que en el navegador tiene un tope cercano a los 5 MB. Al acercarse, la aplicación
+> avisa y no deja seguir subiendo. Para archivar muchos escaneados de años pasados hace falta
+> guardarlos fuera de la fila —Supabase Storage—, que todavía no está montado.
+
 ### Formulario de prospección
 
 Pestaña **Formulario**. Para levantar contactos en una expo, una feria o un evento del hotel,
