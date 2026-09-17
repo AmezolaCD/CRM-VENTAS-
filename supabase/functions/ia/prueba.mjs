@@ -96,17 +96,5 @@ const errG = 'data: ' + JSON.stringify({ error:{ message:'Quota exceeded' } }) +
 ok('pasa tal cual el error de Google',
    desarma(errG)[0].error === 'Quota exceeded');
 
-console.log('\n== Qué motor escoge la función ==');
-const motorDe = (g, c, pedido) => {
-  const m2 = pedido === 'claude' ? 'claude' : pedido === 'gemini' ? 'gemini'
-           : g ? 'gemini' : c ? 'claude' : '';
-  return m2;
-};
-ok('con sólo Gemini, Gemini', motorDe('g', '', '') === 'gemini');
-ok('con sólo Claude, Claude', motorDe('', 'c', '') === 'claude');
-ok('CON LAS DOS GANA EL GRATIS', motorDe('g', 'c', '') === 'gemini');
-ok('salvo que lo fuercen', motorDe('g', 'c', 'claude') === 'claude');
-ok('sin llaves, ninguno', motorDe('', '', '') === '');
-
 console.log(`\n${pass} pasaron, ${fail} fallaron`);
 process.exit(fail ? 1 : 0);

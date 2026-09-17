@@ -611,7 +611,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.17-38";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.17-39";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -6935,15 +6935,15 @@ function verEscaneado(manual, titulo){
    atiende a quien ya entró al CRM. Sin esa función montada, el botón lo
    explica en vez de fallar.
 
-   El motor da igual de este lado: la función sirve con Gemini o con Claude
-   según la llave que le hayan puesto, y contesta siempre en el mismo formato.
+   El motor vive del otro lado: hoy es Google Gemini, y si algún día se cambia
+   por otro, aquí no hay nada que tocar mientras conteste en el mismo formato.
    ========================================================================== */
 
 let charlaIA = [];          // la conversación de esta sesión, no se guarda
 let pensandoIA = false;
 let motorIA = "";           // lo dice la función al terminar, para saber quién contestó
 
-const NOMBRE_MOTOR = { gemini:"Google Gemini", claude:"Claude" };
+const NOMBRE_MOTOR = { gemini:"Google Gemini" };
 
 const IDEAS_IA = [
   "¿Qué clientes llevan más de un mes sin que nadie los toque?",

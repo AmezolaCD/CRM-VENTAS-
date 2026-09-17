@@ -1,25 +1,17 @@
 // ===========================================================================
-//  CRM CORE · La función que le pregunta a la IA
+//  CRM CORE · La función que le pregunta a Gemini
 //
-//  Sirve con dos motores y se escoge solo según la llave que esté puesta:
-//
-//    GEMINI_API_KEY     → Google Gemini (tiene capa gratuita)
-//    ANTHROPIC_API_KEY  → Claude (siempre de paga, por uso)
-//
-//  Si están las dos, manda MOTOR_IA ("gemini" o "claude"); sin eso, gana
-//  Gemini por ser el que no cobra.
-//
-//  La llave NO puede vivir en index.html: esa página es pública y cualquiera
-//  podría sacarla y gastar con ella. Vive aquí, como secreto del proyecto, y
-//  esta función es la única que la usa. Antes de contestar comprueba que quien
-//  pregunta traiga una sesión válida del CRM.
+//  La llave de Google NO puede vivir en index.html: esa página es pública y
+//  cualquiera podría sacarla y gastar con ella. Vive aquí, como secreto del
+//  proyecto, y esta función es la única que la usa. Antes de contestar
+//  comprueba que quien pregunta traiga una sesión válida del CRM.
 //
 //  Cómo se sube (una vez, desde la computadora de sistemas):
 //
 //    npm install -g supabase
 //    supabase login
 //    supabase link --project-ref <el-ref-del-proyecto>
-//    supabase secrets set GEMINI_API_KEY=...        # o ANTHROPIC_API_KEY=sk-ant-...
+//    supabase secrets set GEMINI_API_KEY=...
 //    supabase functions deploy ia
 //
 //  Todo el detalle, en IA.md.
@@ -38,11 +30,8 @@ const linea = (o: unknown) => new TextEncoder().encode(JSON.stringify(o) + "\n")
 
 type Mensaje = { role: "user" | "assistant"; content: string };
 
-// ---------------------------------------------------------------------------
-//  Gemini
-// ---------------------------------------------------------------------------
 const GEMINI = "https://generativelanguage.googleapis.com/v1beta";
-let modeloGeminiCache = "";
+let modeloCache = "";
 
 /**
  * Qué modelo usar.
@@ -50,17 +39,20 @@ let modeloGeminiCache = "";
  * Google renombra sus modelos cada pocos meses, así que en vez de dejar un
  * nombre escrito a mano que algún día deje de existir, se le pregunta a Google
  * cuáles tiene y se escoge. Se prefiere un "flash" —el barato, el que entra en
- * la capa gratuita— y de ésos, el de versión más alta.
+ * la capa gratuita— y de ésos, el de versión más alta que sea estable.
  */
-async function modeloGemini(key: string): Promise<string> {
+async function escogerModelo(key: string): Promise<string> {
   const forzado = Deno.env.get("GEMINI_MODEL");
   if (forzado) return forzado;
-  if (modeloGeminiCache) return modeloGeminiCache;
+  if (modeloCache) return modeloCache;
 
   const r = await fetch(`${GEMINI}/models?key=${encodeURIComponent(key)}&pageSize=200`);
   if (!r.ok) {
     const t = await r.text().catch(() => "");
-    throw new Error(`Google no aceptó la llave al listar modelos (${r.status}). ${t.slice(0, 200)}`);
+    throw new Error(
+      `Google no aceptó la llave al listar sus modelos (${r.status}). ` +
+      `Revise que GEMINI_API_KEY esté bien puesta. ${t.slice(0, 200)}`,
+    );
   }
   const { models = [] } = await r.json();
 
@@ -82,15 +74,15 @@ async function modeloGemini(key: string): Promise<string> {
 
   if (!candidatos.length)
     throw new Error("Google no devolvió ningún modelo de texto para esta llave.");
-  modeloGeminiCache = candidatos[0].id;
-  return modeloGeminiCache;
+  modeloCache = candidatos[0].id;
+  return modeloCache;
 }
 
-async function conGemini(
+async function preguntar(
   key: string, sistema: string, mensajes: Mensaje[],
   emite: (o: unknown) => void,
-){
-  const modelo = await modeloGemini(key);
+): Promise<string> {
+  const modelo = await escogerModelo(key);
   const r = await fetch(
     `${GEMINI}/models/${modelo}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`,
     {
@@ -109,6 +101,12 @@ async function conGemini(
 
   if (!r.ok || !r.body) {
     const t = await r.text().catch(() => "");
+    // 429 es el caso de todos los días: se acabó la cuota gratuita del rato.
+    if (r.status === 429)
+      throw new Error(
+        "Se acabó por ahora la cuota gratuita de Google. Espere unos minutos y " +
+        "vuelva a preguntar, o revise los límites en aistudio.google.com.",
+      );
     throw new Error(`Google contestó ${r.status}. ${t.slice(0, 300)}`);
   }
 
@@ -132,49 +130,14 @@ async function conGemini(
       for (const p of d.candidates?.[0]?.content?.parts ?? [])
         if (p.text) emite({ t: p.text });
       const fin = d.candidates?.[0]?.finishReason;
-      if (fin && fin !== "STOP" && fin !== "MAX_TOKENS")
-        emite({ error: `Google cortó la respuesta (${fin}). Pruebe a preguntarlo de otra manera.` });
       if (fin === "MAX_TOKENS") emite({ t: "\n\n[La respuesta se cortó por larga.]" });
+      else if (fin && fin !== "STOP")
+        emite({ error: `Google cortó la respuesta (${fin}). Pruebe a preguntarlo de otra manera.` });
     }
   }
   return modelo;
 }
 
-// ---------------------------------------------------------------------------
-//  Claude
-// ---------------------------------------------------------------------------
-async function conClaude(
-  key: string, sistema: string, mensajes: Mensaje[],
-  emite: (o: unknown) => void,
-){
-  const { default: Anthropic } = await import("npm:@anthropic-ai/sdk@0.71.0");
-  const modelo = Deno.env.get("CLAUDE_MODEL") ?? "claude-opus-5";
-  const anthropic = new Anthropic({ apiKey: key });
-
-  const stream = anthropic.beta.messages.stream({
-    model: modelo,
-    max_tokens: 4096,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
-    thinking: { type: "adaptive" },
-    output_config: { effort: "medium" },
-    system: [{ type: "text", text: sistema }],
-    messages: mensajes,
-  });
-
-  for await (const ev of stream)
-    if (ev.type === "content_block_delta" && ev.delta.type === "text_delta")
-      emite({ t: ev.delta.text });
-
-  const final = await stream.finalMessage();
-  if (final.stop_reason === "refusal")
-    emite({ error: "El servicio no quiso contestar esta petición. Pruebe a preguntarlo de otra manera." });
-  else if (final.stop_reason === "max_tokens")
-    emite({ t: "\n\n[La respuesta se cortó por larga.]" });
-  return modelo;
-}
-
-// ---------------------------------------------------------------------------
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
@@ -197,20 +160,12 @@ Deno.serve(async (req) => {
     const { data: { user }, error: errUser } = await supabase.auth.getUser();
     if (errUser || !user) return responde(401, { error: "La sesión no es válida." });
 
-    // ---- 2. Qué motor y con qué llave ------------------------------------
-    const llaveG = Deno.env.get("GEMINI_API_KEY");
-    const llaveC = Deno.env.get("ANTHROPIC_API_KEY");
-    const pedido = (Deno.env.get("MOTOR_IA") ?? "").toLowerCase();
-    // Sin preferencia gana Gemini: es el que tiene capa gratuita.
-    const motor = pedido === "claude" ? "claude"
-                : pedido === "gemini" ? "gemini"
-                : llaveG ? "gemini" : llaveC ? "claude" : "";
-
-    if (!motor || (motor === "gemini" && !llaveG) || (motor === "claude" && !llaveC))
+    // ---- 2. La llave -----------------------------------------------------
+    const key = Deno.env.get("GEMINI_API_KEY");
+    if (!key)
       return responde(500, {
-        error: "Falta la llave de la IA en Supabase. Sistemas la pone con uno de estos:\n" +
-               "  supabase secrets set GEMINI_API_KEY=...        (gratis hasta cierto uso)\n" +
-               "  supabase secrets set ANTHROPIC_API_KEY=sk-ant-...  (de paga, por uso)",
+        error: "Falta la llave de Google en Supabase. Sistemas la pone con:\n" +
+               "  supabase secrets set GEMINI_API_KEY=...",
       });
 
     // ---- 3. Lo que viene del CRM ----------------------------------------
@@ -233,10 +188,8 @@ Deno.serve(async (req) => {
       async start(controller) {
         const emite = (o: unknown) => controller.enqueue(linea(o));
         try {
-          const modelo = motor === "gemini"
-            ? await conGemini(llaveG!, sistema, mensajes, emite)
-            : await conClaude(llaveC!, sistema, mensajes, emite);
-          emite({ motor, modelo });
+          const modelo = await preguntar(key, sistema, mensajes, emite);
+          emite({ motor: "gemini", modelo });
         } catch (e) {
           emite({ error: (e as Error).message ?? "falló la consulta" });
         } finally {
