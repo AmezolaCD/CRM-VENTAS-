@@ -611,7 +611,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.17-37";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.17-38";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -6929,15 +6929,21 @@ function verEscaneado(manual, titulo){
 /* ==========================================================================
    PREGUNTARLE A LA IA
 
-   La llave de Anthropic NO puede vivir aquí: esta página es pública y
-   cualquiera podría sacarla y gastar con ella. La llave se queda en Supabase,
-   en una función (supabase/functions/ia) que es la única que habla con la API
-   y que sólo atiende a quien ya entró al CRM. Sin esa función montada, el
-   botón lo explica en vez de fallar.
+   La llave de la IA NO puede vivir aquí: esta página es pública y cualquiera
+   podría sacarla y gastar con ella. Se queda en Supabase, en una función
+   (supabase/functions/ia) que es la única que habla con el motor y que sólo
+   atiende a quien ya entró al CRM. Sin esa función montada, el botón lo
+   explica en vez de fallar.
+
+   El motor da igual de este lado: la función sirve con Gemini o con Claude
+   según la llave que le hayan puesto, y contesta siempre en el mismo formato.
    ========================================================================== */
 
 let charlaIA = [];          // la conversación de esta sesión, no se guarda
 let pensandoIA = false;
+let motorIA = "";           // lo dice la función al terminar, para saber quién contestó
+
+const NOMBRE_MOTOR = { gemini:"Google Gemini", claude:"Claude" };
 
 const IDEAS_IA = [
   "¿Qué clientes llevan más de un mes sin que nadie los toque?",
@@ -7054,7 +7060,8 @@ function abrirIA(){
       <p class="ia-nota"><label>
         <input type="checkbox" id="iaConDatos" checked>
         <span>Dejar que vea mis datos del CRM. Se manda un resumen de lo que usted ya ve
-          —sin firmas ni archivos— al servicio de inteligencia artificial.</span></label></p>
+          —sin firmas ni archivos— al servicio de inteligencia artificial.</span></label>
+        <span id="iaMotor"></span></p>
     </div>`;
   document.body.appendChild(caja);
 
@@ -7075,6 +7082,8 @@ function abrirIA(){
     msgs.innerHTML = charlaIA.map(m =>
       `<div class="ia-b ${m.rol}">${esc(m.texto) || "…"}</div>`).join("");
     msgs.scrollTop = msgs.scrollHeight;
+    const mt = caja.querySelector("#iaMotor");
+    if (mt) mt.textContent = motorIA ? `Contesta ${motorIA}.` : "";
   }
   pintar();
 
@@ -7190,6 +7199,7 @@ async function preguntarIA(mensajes, conDatos, alLlegar){
       try{ d = JSON.parse(l); }catch(e){ continue; }
       if (d.error) throw new Error(d.error);
       if (d.t) alLlegar(d.t);
+      if (d.motor) motorIA = NOMBRE_MOTOR[d.motor] || d.motor;
     }
   }
 }

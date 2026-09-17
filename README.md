@@ -490,11 +490,14 @@ español sobre la cartera —*a quién le hablo primero hoy*, *qué convenios es
 firmar*, *escríbeme un correo de seguimiento*— y contesta sobre **lo que esa persona ya ve**:
 a un ejecutivo, con su cartera; a gerencia, con la de todo el equipo.
 
-Hace falta montarlo una vez: la llave de Anthropic **no puede vivir en `index.html`**, que es
-una página pública, así que se queda en Supabase y ahí corre la función
-`supabase/functions/ia`, la única que habla con la API. Mientras no esté montada, el botón lo
-explica en vez de fallar. Los pasos, lo que se manda y lo que no, y cómo apagarlo están en
-**[IA.md](IA.md)**.
+Hace falta montarlo una vez: la llave **no puede vivir en `index.html`**, que es una página
+pública, así que se queda en Supabase y ahí corre la función `supabase/functions/ia`, la única
+que habla con el motor. Mientras no esté montada, el botón lo explica en vez de fallar.
+
+Sirve con **Google Gemini** —que tiene capa gratuita, y es por donde conviene empezar— o con
+**Claude**, de paga por uso. Se escoge solo según la llave que se le ponga, así que cambiar de
+uno a otro es cambiar una llave, sin tocar el CRM. Los pasos, los costos, lo que se manda y lo
+que no, y cómo apagarlo están en **[IA.md](IA.md)**.
 
 ## Quién ve qué
 
