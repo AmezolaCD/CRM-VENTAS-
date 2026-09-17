@@ -240,6 +240,46 @@
   .vacio{color:var(--muted); text-align:center; padding:36px 16px}
   .panel-form{background:var(--panel-2); border:1px solid var(--line);
     border-radius:10px; padding:16px 18px}
+  /* Preguntarle a la IA: botón flotante y su panel */
+  #bIA{position:fixed; right:20px; bottom:20px; z-index:400; width:56px; height:56px;
+    border-radius:50%; border:0; cursor:pointer; background:var(--accent); color:#fff;
+    box-shadow:0 6px 22px rgba(57,16,78,.34); display:flex; align-items:center;
+    justify-content:center; transition:transform .12s ease, box-shadow .12s ease}
+  #bIA:hover{transform:translateY(-2px); box-shadow:0 9px 26px rgba(57,16,78,.42)}
+  #bIA svg{width:26px; height:26px; display:block}
+  #panelIA{position:fixed; right:20px; bottom:20px; z-index:401; width:400px;
+    max-width:calc(100vw - 32px); height:min(620px, calc(100vh - 40px));
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    box-shadow:0 18px 50px rgba(0,0,0,.28); display:flex; flex-direction:column; overflow:hidden}
+  #panelIA .ia-head{display:flex; align-items:center; gap:8px; padding:12px 14px;
+    border-bottom:1px solid var(--line); background:var(--panel-2)}
+  #panelIA .ia-head b{font-size:14px}
+  #panelIA .ia-msgs{flex:1; overflow-y:auto; padding:14px; display:flex;
+    flex-direction:column; gap:10px}
+  .ia-b{max-width:88%; padding:9px 12px; border-radius:12px; font-size:13.5px; line-height:1.5;
+    white-space:pre-wrap; word-wrap:break-word}
+  .ia-b.yo{align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:4px}
+  .ia-b.ia{align-self:flex-start; background:var(--panel-2); border:1px solid var(--line);
+    border-bottom-left-radius:4px}
+  .ia-b.err{align-self:stretch; background:var(--bad-soft); color:var(--bad);
+    border:1px solid var(--bad); max-width:100%}
+  .ia-b b{font-weight:700}
+  .ia-vacio{color:var(--muted); font-size:13px; text-align:center; padding:18px 6px}
+  .ia-idea{display:block; width:100%; text-align:left; margin-top:6px; font-size:12.5px;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:9px;
+    padding:8px 10px; cursor:pointer; color:var(--text)}
+  .ia-idea:hover{border-color:var(--accent)}
+  #panelIA .ia-pie{border-top:1px solid var(--line); padding:10px 12px; background:var(--panel-2)}
+  #panelIA .ia-fila{display:flex; gap:8px; align-items:flex-end}
+  #panelIA textarea{flex:1; resize:none; min-height:38px; max-height:120px; font-size:13.5px}
+  .ia-nota{font-size:11px; color:var(--muted); margin:7px 0 0; line-height:1.4}
+  .ia-nota label{display:flex; gap:6px; align-items:flex-start; cursor:pointer}
+  @media (max-width:560px){
+    #panelIA{right:0; bottom:0; width:100vw; max-width:100vw; height:100dvh;
+      border-radius:0; border:0}
+    #bIA{right:14px; bottom:14px}
+  }
+  body.con-kiosco #bIA, body.con-kiosco #panelIA{display:none !important}
   .ct-serv{margin:6px 0 10px; padding-left:20px}
   .ct-serv li{margin-top:3px; font-weight:600}
   .ct-mon{font-weight:700; font-size:11.5px; letter-spacing:.02em; margin:8px 0}
@@ -553,6 +593,15 @@
   <section class="view" id="v-ajustes"><div class="table-wrap" id="panelAjustes"></div></section>
 </main>
 
+<button id="bIA" type="button" title="Preguntarle a la IA"
+  aria-label="Preguntarle a la IA" style="display:none">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 3v3M12 18v3M4.2 7.5l2.6 1.5M17.2 15l2.6 1.5M4.2 16.5l2.6-1.5M17.2 9l2.6-1.5"/>
+    <circle cx="12" cy="12" r="3.6"/>
+  </svg>
+</button>
+
 <script>
 "use strict";
 
@@ -562,7 +611,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.16-36";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.17-37";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2924,6 +2973,7 @@ function render(){
 
   renderEjecutivos();
   pintarNube();
+  pintarBotonIA();
   pintarAvisos();
   if (vista === "tablero")   { renderKpis(); renderTablero(); }
   if (vista === "clientes")  renderClientes();
@@ -6874,6 +6924,282 @@ function verEscaneado(manual, titulo){
       a.href = manual.pdf; a.download = manual.archivo || "documento";
       document.body.appendChild(a); a.click(); a.remove();
     };
+}
+
+/* ==========================================================================
+   PREGUNTARLE A LA IA
+
+   La llave de Anthropic NO puede vivir aquí: esta página es pública y
+   cualquiera podría sacarla y gastar con ella. La llave se queda en Supabase,
+   en una función (supabase/functions/ia) que es la única que habla con la API
+   y que sólo atiende a quien ya entró al CRM. Sin esa función montada, el
+   botón lo explica en vez de fallar.
+   ========================================================================== */
+
+let charlaIA = [];          // la conversación de esta sesión, no se guarda
+let pensandoIA = false;
+
+const IDEAS_IA = [
+  "¿Qué clientes llevan más de un mes sin que nadie los toque?",
+  "Resume en qué va mi cartera y qué debería atender primero.",
+  "¿Qué convenios están firmados por el hotel y siguen sin firmar por el cliente?",
+  "Escríbeme un correo de seguimiento para el cliente que lleva más tiempo en propuesta."
+];
+
+const ligaFuncionIA = () => nube.url ? nube.url.replace(/\/+$/, "") + "/functions/v1/ia" : "";
+
+/**
+ * Lo que la IA alcanza a ver: exactamente lo mismo que quien pregunta.
+ *
+ * Se manda un resumen en texto, no la base entera: pesa menos, se lee mejor y
+ * —sobre todo— no salen de aquí las firmas ni los PDF escaneados.
+ */
+function contextoIA(){
+  const h = state.ajustes.hotel;
+  const u = usuarioActual();
+  const cs = state.clientes.filter(esMio);
+  const ids = new Set(cs.map(c => c.id));
+  const corta = (t, n) => String(t || "").replace(/\s+/g, " ").trim().slice(0, n);
+  const lim = (arr, n) => arr.length > n
+    ? arr.slice(0, n).concat([`… y ${arr.length - n} más que no caben aquí`]) : arr;
+
+  const desde = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);
+  const acts = state.actividades
+    .filter(a => ids.has(a.clienteId) && String(a.fecha) >= desde)
+    .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+
+  const ultima = {};
+  for (const a of state.actividades)
+    if (!ultima[a.clienteId] || a.fecha > ultima[a.clienteId]) ultima[a.clienteId] = a.fecha;
+
+  return [
+`HOTEL: ${h.nombre} · ${h.ciudad} · tel ${h.telefono}`,
+`HOY: ${hoyISO()}`,
+`QUIEN PREGUNTA: ${(u && u.nombre) || correoSesion()} · ${u ? infoRol(u.rol).name : "sin papel"}`,
+`ALCANCE: ${puedeVerTodo() ? "ve la cartera de todo el equipo" : "ve sólo su propia cartera"}`,
+"",
+`TIPOS DE HABITACIÓN Y TARIFA PÚBLICA (${state.habitaciones.length}):`,
+...state.habitaciones.map(x =>
+  `- ${x.codigo || "—"} ${x.nombre} · ${x.publica === null ? "N/A" : moneyMN(x.publica)}`),
+"",
+`CLIENTES (${cs.length}):`,
+...lim(cs.map(c =>
+  `- ${c.empresa} · contacto ${c.contacto || "—"} · ${est(c.estatus).name}` +
+  ` · ejecutivo ${c.ejecutivo || "sin asignar"}` +
+  (c.tarifa ? ` · tarifa ${moneyMN(c.tarifa)}` : "") +
+  (c.ubicacion ? ` · ${c.ubicacion}` : "") +
+  ` · última actividad ${ultima[c.id] ? String(ultima[c.id]).slice(0,10) : "nunca"}` +
+  (c.notas ? ` · notas: ${corta(c.notas, 160)}` : "")), 120),
+"",
+`CONVENIOS (${state.convenios.filter(convenioEsMio).length}):`,
+...lim(state.convenios.filter(convenioEsMio).map(v =>
+  `- ${v.folio} · ${nombreCli(v.clienteId)} · ${ESTADOS_CONV[v.estado].name}` +
+  ` · del ${v.vigenciaDesde || "?"} al ${v.vigenciaHasta || "?"}` +
+  (v.externo ? " · registrado desde un documento externo" : "") +
+  (v.habitaciones.length
+    ? ` · ${v.habitaciones.map(x => `${x.codigo || x.nombre} ${moneyMN(x.convenio)}`).join(", ")}`
+    : "")), 60),
+"",
+`CONTRATOS Y COTIZACIONES (${state.contratos.filter(contratoEsMio).length}):`,
+...lim(state.contratos.filter(contratoEsMio).map(k =>
+  `- ${k.folio} · ${infoTipoCt(k.tipo).name} · ${nombreCli(k.clienteId)} · ${ESTADOS_CT[k.estado].name}` +
+  ` · fecha ${k.fecha} · total ${money(cuentasContrato(k).total, k.moneda)}` +
+  (k.titulo ? ` · ${k.titulo}` : "")), 60),
+"",
+`ACTIVIDAD DE LOS ÚLTIMOS 60 DÍAS (${acts.length}):`,
+...lim(acts.map(a =>
+  `- ${String(a.fecha).slice(0,10)} · ${tipoAct(a.tipo).name} · ${nombreCli(a.clienteId)}` +
+  ` · ${a.responsable || "—"} · ${corta(a.asunto, 90)}` +
+  (a.notas ? ` · ${corta(a.notas, 120)}` : "")), 150),
+"",
+`PROSPECTOS DE EVENTOS (${prospectosVisibles().length}):`,
+...lim(prospectosVisibles().map(x =>
+  `- ${nombreProspecto(x)} · ${x.compania || "sin compañía"} · ${x.email} · ${x.telefono}` +
+  (x.evento ? ` · ${x.evento}` : "") + (x.clienteId ? " · ya en cartera" : "")), 60)
+  ].join("\n");
+}
+
+const INSTRUCCIONES_IA =
+  "Eres el asistente del CRM de ventas de un hotel. Contestas en español de México, " +
+  "de usted, con frases cortas y sin tecnicismos: quien te lee es personal de ventas, " +
+  "no gente de sistemas.\n\n" +
+  "Te dan un resumen de lo que esa persona alcanza a ver en el CRM. Contesta apoyándote " +
+  "en esos datos y cita nombres y folios concretos cuando existan. Si algo no está en el " +
+  "resumen, dilo claramente en vez de inventarlo, y di dónde se captura. No inventes " +
+  "tarifas, fechas ni nombres.\n\n" +
+  "Cuando te pidan redactar un correo o un mensaje, entrégalo listo para copiar y pegar. " +
+  "Cuando te pregunten qué atender primero, da una lista corta y priorizada con el porqué " +
+  "de cada punto. No uses tablas ni encabezados de markdown: la respuesta se ve en un " +
+  "recuadro chico de texto simple.";
+
+function abrirIA(){
+  if (document.getElementById("panelIA")){ cerrarIA(); return; }
+
+  const caja = document.createElement("div");
+  caja.id = "panelIA";
+  caja.innerHTML = `
+    <div class="ia-head">
+      <b>Preguntarle a la IA</b>
+      <span style="flex:1"></span>
+      <button class="btn sm" id="iaLimpiar" title="Empezar de nuevo">Limpiar</button>
+      <button class="btn sm" id="iaCerrar" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="ia-msgs" id="iaMsgs"></div>
+    <div class="ia-pie">
+      <div class="ia-fila">
+        <textarea class="field" id="iaTexto" rows="1"
+          placeholder="Pregunte lo que sea sobre su cartera…"></textarea>
+        <button class="btn primary" id="iaMandar">Enviar</button>
+      </div>
+      <p class="ia-nota"><label>
+        <input type="checkbox" id="iaConDatos" checked>
+        <span>Dejar que vea mis datos del CRM. Se manda un resumen de lo que usted ya ve
+          —sin firmas ni archivos— al servicio de inteligencia artificial.</span></label></p>
+    </div>`;
+  document.body.appendChild(caja);
+
+  const msgs  = caja.querySelector("#iaMsgs");
+  const texto = caja.querySelector("#iaTexto");
+
+  function pintar(){
+    if (!charlaIA.length){
+      msgs.innerHTML = `<div class="ia-vacio">
+        Pregúntele lo que quiera sobre su cartera. Por ejemplo:
+        ${IDEAS_IA.map(x => `<button class="ia-idea" data-idea="${esc(x)}">${esc(x)}</button>`).join("")}
+      </div>`;
+      msgs.querySelectorAll("[data-idea]").forEach(b => b.onclick = () => {
+        texto.value = b.dataset.idea; mandar();
+      });
+      return;
+    }
+    msgs.innerHTML = charlaIA.map(m =>
+      `<div class="ia-b ${m.rol}">${esc(m.texto) || "…"}</div>`).join("");
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+  pintar();
+
+  const crece = () => {
+    texto.style.height = "auto";
+    texto.style.height = Math.min(texto.scrollHeight, 120) + "px";
+  };
+  texto.addEventListener("input", crece);
+  texto.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); mandar(); }
+  });
+
+  caja.querySelector("#iaCerrar").onclick = cerrarIA;
+  caja.querySelector("#iaLimpiar").onclick = () => { charlaIA = []; pintar(); texto.focus(); };
+  caja.querySelector("#iaMandar").onclick = mandar;
+  texto.focus();
+
+  async function mandar(){
+    const q = texto.value.trim();
+    if (!q || pensandoIA) return;
+
+    const falta = porQueNoHayIA();
+    if (falta){
+      charlaIA.push({ rol:"yo", texto:q }, { rol:"err", texto:falta });
+      texto.value = ""; crece(); pintar();
+      return;
+    }
+
+    charlaIA.push({ rol:"yo", texto:q });
+    const respuesta = { rol:"ia", texto:"" };
+    charlaIA.push(respuesta);
+    texto.value = ""; crece(); pintar();
+
+    pensandoIA = true;
+    caja.querySelector("#iaMandar").disabled = true;
+    try{
+      await preguntarIA(
+        charlaIA.filter(m => m.rol !== "err").map(m =>
+          ({ role: m.rol === "yo" ? "user" : "assistant", content: m.texto })).slice(0, -1),
+        caja.querySelector("#iaConDatos").checked,
+        trozo => { respuesta.texto += trozo; pintar(); });
+      if (!respuesta.texto) respuesta.texto = "No me llegó respuesta. Vuelva a intentar.";
+    }catch(e){
+      charlaIA[charlaIA.length - 1] = { rol:"err", texto:"No se pudo preguntar: " + e.message };
+    }finally{
+      pensandoIA = false;
+      const b = caja.querySelector("#iaMandar");
+      if (b) b.disabled = false;
+      pintar();
+    }
+  }
+}
+
+function cerrarIA(){
+  const c = document.getElementById("panelIA");
+  if (c) c.remove();
+}
+
+/** Si algo falta, se dice con todas sus letras en vez de fallar callado. */
+function porQueNoHayIA(){
+  if (!nube.url || !nube.anon)
+    return "Este equipo no está conectado a la nube del hotel, y la IA vive ahí. " +
+           "Toque el chip de arriba a la derecha para conectarlo.";
+  if (!nube.sesion || !nube.sesion.access_token)
+    return "Hay que entrar con su correo y contraseña para poder preguntar.";
+  return "";
+}
+
+/**
+ * Le pregunta a la función de Supabase, que es la que tiene la llave.
+ *
+ * La respuesta llega por pedazos para que el texto aparezca conforme se
+ * escribe, en vez de dejar el recuadro en blanco medio minuto.
+ */
+async function preguntarIA(mensajes, conDatos, alLlegar){
+  const r = await fetch(ligaFuncionIA(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + nube.sesion.access_token,
+      "apikey": nube.anon
+    },
+    body: JSON.stringify({
+      mensajes,
+      instrucciones: INSTRUCCIONES_IA,
+      contexto: conDatos ? contextoIA() : ""
+    })
+  });
+
+  if (!r.ok){
+    const t = await r.text().catch(() => "");
+    if (r.status === 404)
+      throw new Error("la función de IA no está montada en Supabase todavía. " +
+        "Sistemas tiene que subir supabase/functions/ia (viene explicado en IA.md).");
+    if (r.status === 401 || r.status === 403)
+      throw new Error("la nube no aceptó la sesión. Cierre sesión y vuelva a entrar.");
+    throw new Error(`${r.status} · ${String(t).slice(0, 300) || "sin detalle"}`);
+  }
+  if (!r.body) throw new Error("este navegador no puede leer la respuesta por pedazos.");
+
+  const lector = r.body.getReader();
+  const deco = new TextDecoder();
+  let resto = "";
+  for (;;){
+    const { value, done } = await lector.read();
+    if (done) break;
+    resto += deco.decode(value, { stream:true });
+    const lineas = resto.split("\n");
+    resto = lineas.pop();
+    for (const l of lineas){
+      if (!l.trim()) continue;
+      let d;
+      try{ d = JSON.parse(l); }catch(e){ continue; }
+      if (d.error) throw new Error(d.error);
+      if (d.t) alLlegar(d.t);
+    }
+  }
+}
+
+function pintarBotonIA(){
+  const b = document.getElementById("bIA");
+  if (!b) return;
+  // Se enseña siempre que haya sesión: si algo falta, el propio panel lo explica.
+  b.style.display = nube.sesion ? "flex" : "none";
+  b.onclick = abrirIA;
 }
 
 /* ==========================================================================

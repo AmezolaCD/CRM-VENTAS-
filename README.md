@@ -483,6 +483,19 @@ Google Sheets, guárdalos como CSV (*Archivo → Descargar → CSV*).
 
 En `plantilla.csv` está el formato exacto.
 
+## Preguntarle a la IA
+
+Abajo a la derecha hay un botón redondo. Abre un recuadro donde se le puede preguntar en
+español sobre la cartera —*a quién le hablo primero hoy*, *qué convenios están a medio
+firmar*, *escríbeme un correo de seguimiento*— y contesta sobre **lo que esa persona ya ve**:
+a un ejecutivo, con su cartera; a gerencia, con la de todo el equipo.
+
+Hace falta montarlo una vez: la llave de Anthropic **no puede vivir en `index.html`**, que es
+una página pública, así que se queda en Supabase y ahí corre la función
+`supabase/functions/ia`, la única que habla con la API. Mientras no esté montada, el botón lo
+explica en vez de fallar. Los pasos, lo que se manda y lo que no, y cómo apagarlo están en
+**[IA.md](IA.md)**.
+
 ## Quién ve qué
 
 Cuatro papeles: **administrador** (todo, y el único con Ajustes), **gerencia de ventas** (la
