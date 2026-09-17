@@ -13,7 +13,7 @@ const trozo = src.slice(src.indexOf('const candidatos = models'),
                         src.indexOf('if (!candidatos.length)'));
 const escoge = new Function('models', `
   ${trozo.replace(/: any/g, '').replace(/const id: string/, 'const id')}
-  return candidatos.length ? candidatos[0].id : null;
+  return candidatos.length ? candidatos[0] : null;
 `);
 
 const m = (name, metodos = ['generateContent']) =>
@@ -95,6 +95,47 @@ ok('y cuando Google la corta por otra razón',
 const errG = 'data: ' + JSON.stringify({ error:{ message:'Quota exceeded' } }) + '\n';
 ok('pasa tal cual el error de Google',
    desarma(errG)[0].error === 'Quota exceeded');
+
+console.log('\n== Insistir cuando Google anda ocupado ==');
+// Se copia el mismo lazo de preguntar(): dos intentos por modelo, hasta tres
+// modelos, y nada de reintentos una vez que ya empezó a escribir.
+class Pasajero extends Error {}
+async function conLazo(modelos, plan){
+  let escribio = false, llamadas = [];
+  for (let i = 0; i < modelos.length; i++){
+    for (let intento = 0; intento < 2; intento++){
+      llamadas.push(modelos[i]);
+      const r = plan(modelos[i], llamadas.length, () => { escribio = true; });
+      if (r === 'ok') return { modelo: modelos[i], llamadas, escribio };
+      if (escribio || r !== 'ocupado') throw new Error(r);
+    }
+  }
+  throw new Error('saturado');
+}
+const tres = ['a-flash','b-flash','c-pro'];
+
+let r1 = await conLazo(tres, (m, n) => n === 1 ? 'ocupado' : 'ok');
+ok('un 503 suelto se reintenta solo sobre el mismo modelo',
+   r1.modelo === 'a-flash' && r1.llamadas.join() === 'a-flash,a-flash', r1.llamadas.join());
+
+let r2 = await conLazo(tres, (m) => m === 'a-flash' ? 'ocupado' : 'ok');
+ok('SI UN MODELO SIGUE SATURADO, SE BAJA AL SIGUIENTE',
+   r2.modelo === 'b-flash' && r2.llamadas.length === 3, r2.llamadas.join());
+
+let falla = null;
+try { await conLazo(tres, () => 'ocupado'); } catch(e){ falla = e.message; }
+ok('si todos están saturados, lo dice en vez de colgarse', falla === 'saturado', String(falla));
+
+let r3 = null;
+try {
+  await conLazo(tres, (m, n, marca) => { if (n === 1){ marca(); return 'ocupado'; } return 'ok'; });
+} catch(e){ r3 = e.message; }
+ok('YA EMPEZADA LA RESPUESTA NO SE REINTENTA, PARA NO REPETIRLA',
+   r3 === 'ocupado', String(r3));
+
+let r4 = null;
+try { await conLazo(tres, () => 'llave mala'); } catch(e){ r4 = e.message; }
+ok('un error de verdad no se reintenta', r4 === 'llave mala', String(r4));
 
 console.log(`\n${pass} pasaron, ${fail} fallaron`);
 process.exit(fail ? 1 : 0);

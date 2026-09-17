@@ -6,13 +6,10 @@
 //  proyecto, y esta función es la única que la usa. Antes de contestar
 //  comprueba que quien pregunta traiga una sesión válida del CRM.
 //
-//  Cómo se sube (una vez, desde la computadora de sistemas):
-//
-//    npm install -g supabase
-//    supabase login
-//    supabase link --project-ref <el-ref-del-proyecto>
-//    supabase secrets set GEMINI_API_KEY=...
-//    supabase functions deploy ia
+//  Cómo se sube, sin terminal: en supabase.com → Edge Functions →
+//  "Deploy a new function" → "Via Editor", con el nombre exacto "ia", y se
+//  pega este archivo completo. La llave se guarda ahí mismo, en Secrets,
+//  con el nombre GEMINI_API_KEY.
 //
 //  Todo el detalle, en IA.md.
 // ===========================================================================
@@ -31,20 +28,29 @@ const linea = (o: unknown) => new TextEncoder().encode(JSON.stringify(o) + "\n")
 type Mensaje = { role: "user" | "assistant"; content: string };
 
 const GEMINI = "https://generativelanguage.googleapis.com/v1beta";
-let modeloCache = "";
+let modelosCache: string[] = [];
+
+/** Google anda ocupado o nos pasamos de cuota: se puede reintentar. */
+class Pasajero extends Error {}
+
+const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Qué modelo usar.
+ * Qué modelos usar, en orden de preferencia.
  *
  * Google renombra sus modelos cada pocos meses, así que en vez de dejar un
  * nombre escrito a mano que algún día deje de existir, se le pregunta a Google
- * cuáles tiene y se escoge. Se prefiere un "flash" —el barato, el que entra en
- * la capa gratuita— y de ésos, el de versión más alta que sea estable.
+ * cuáles tiene. Se prefieren los "flash" —los baratos, los de la capa
+ * gratuita— y de ésos, los de versión más alta que sean estables.
+ *
+ * Se devuelve la lista entera y no sólo el primero porque en la capa gratuita
+ * es común que el modelo de moda esté saturado: si pasa, se baja al siguiente
+ * en vez de dejar al usuario con un error.
  */
-async function escogerModelo(key: string): Promise<string> {
+async function escogerModelos(key: string): Promise<string[]> {
   const forzado = Deno.env.get("GEMINI_MODEL");
-  if (forzado) return forzado;
-  if (modeloCache) return modeloCache;
+  if (forzado) return [forzado];
+  if (modelosCache.length) return modelosCache;
 
   const r = await fetch(`${GEMINI}/models?key=${encodeURIComponent(key)}&pageSize=200`);
   if (!r.ok) {
@@ -70,19 +76,20 @@ async function escogerModelo(key: string): Promise<string> {
       const estable = /(exp|preview|latest)/i.test(id) ? 0 : 1;
       return { id, puntos: familia * 1000 + v * 10 + estable };
     })
-    .sort((a: any, b: any) => b.puntos - a.puntos);
+    .sort((a: any, b: any) => b.puntos - a.puntos)
+    .map((x: any) => x.id);
 
   if (!candidatos.length)
     throw new Error("Google no devolvió ningún modelo de texto para esta llave.");
-  modeloCache = candidatos[0].id;
-  return modeloCache;
+  modelosCache = candidatos;
+  return modelosCache;
 }
 
-async function preguntar(
-  key: string, sistema: string, mensajes: Mensaje[],
-  emite: (o: unknown) => void,
-): Promise<string> {
-  const modelo = await escogerModelo(key);
+/** Una pasada contra un modelo. Devuelve true si alcanzó a escribir algo. */
+async function unIntento(
+  key: string, modelo: string, sistema: string, mensajes: Mensaje[],
+  emite: (o: unknown) => void, marcaEscrito: () => void,
+){
   const r = await fetch(
     `${GEMINI}/models/${modelo}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`,
     {
@@ -101,12 +108,10 @@ async function preguntar(
 
   if (!r.ok || !r.body) {
     const t = await r.text().catch(() => "");
-    // 429 es el caso de todos los días: se acabó la cuota gratuita del rato.
-    if (r.status === 429)
-      throw new Error(
-        "Se acabó por ahora la cuota gratuita de Google. Espere unos minutos y " +
-        "vuelva a preguntar, o revise los límites en aistudio.google.com.",
-      );
+    // 429: se acabó la cuota del rato. 503/500: Google anda saturado.
+    // Los dos se arreglan solos esperando o cambiando de modelo.
+    if (r.status === 429 || r.status === 503 || r.status === 500)
+      throw new Pasajero(String(r.status));
     throw new Error(`Google contestó ${r.status}. ${t.slice(0, 300)}`);
   }
 
@@ -128,14 +133,49 @@ async function preguntar(
       try { d = JSON.parse(crudo); } catch { continue; }
       if (d.error) throw new Error(d.error.message ?? "error de Google");
       for (const p of d.candidates?.[0]?.content?.parts ?? [])
-        if (p.text) emite({ t: p.text });
+        if (p.text) { marcaEscrito(); emite({ t: p.text }); }
       const fin = d.candidates?.[0]?.finishReason;
       if (fin === "MAX_TOKENS") emite({ t: "\n\n[La respuesta se cortó por larga.]" });
       else if (fin && fin !== "STOP")
         emite({ error: `Google cortó la respuesta (${fin}). Pruebe a preguntarlo de otra manera.` });
     }
   }
-  return modelo;
+}
+
+/**
+ * Pregunta, insistiendo cuando Google anda ocupado.
+ *
+ * En la capa gratuita el 503 es pan de cada día: el modelo de moda se satura
+ * a ratos. Se reintenta una vez sobre el mismo modelo y, si sigue, se baja al
+ * siguiente de la lista. Eso sí, en cuanto empezó a escribir ya no se
+ * reintenta nada: se vería la respuesta repetida a medias.
+ */
+async function preguntar(
+  key: string, sistema: string, mensajes: Mensaje[],
+  emite: (o: unknown) => void,
+): Promise<string> {
+  const modelos = (await escogerModelos(key)).slice(0, 3);
+  let escribio = false;
+  const marca = () => { escribio = true; };
+
+  for (let i = 0; i < modelos.length; i++) {
+    for (let intento = 0; intento < 2; intento++) {
+      try {
+        await unIntento(key, modelos[i], sistema, mensajes, emite, marca);
+        return modelos[i];
+      } catch (e) {
+        if (escribio || !(e instanceof Pasajero)) throw e;
+        // Un respiro antes de volver a tocar el mismo modelo.
+        if (intento === 0) await espera(1500);
+      }
+    }
+  }
+
+  throw new Error(
+    "Google está saturado en este momento y ya probamos con " +
+    `${modelos.length} de sus modelos. Espere un par de minutos y vuelva a preguntar; ` +
+    "no es nada del CRM.",
+  );
 }
 
 Deno.serve(async (req) => {

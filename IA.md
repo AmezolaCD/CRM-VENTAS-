@@ -35,33 +35,43 @@ de fallar callado.
 
 ## Los tres pasos
 
+**Todo se hace con el ratón, desde el navegador. No hace falta terminal.**
+
 ### 1. Sacar la llave de Google
 
 Entrar a **<https://aistudio.google.com/apikey>** con una cuenta de Google —la del hotel, no
-la personal de alguien que un día se vaya— y darle a **Create API key**.
+la personal de alguien que un día se vaya— y darle a **Create API key**. No pide tarjeta.
 
-No pide tarjeta. Sale una cadena larga que empieza con `AIza…`: ésa es la llave.
+> Ojo: en esa página también hay una ventana de *Detalles del proyecto*, con el nombre y el
+> número del proyecto. **Eso no es la llave** y no sirve aquí. La llave es la cadena larga que
+> se copia desde el renglón de la propia llave.
 
-### 2. Guardarla en Supabase y subir la función
+### 2. Guardar la llave en Supabase
 
-Desde la computadora de sistemas, una sola vez:
+En **supabase.com** → el proyecto → **Edge Functions** → sección **Secrets** →
+*Add new secret*:
 
-```bash
-npm install -g supabase          # la herramienta de Supabase
-supabase login                   # abre el navegador para autorizar
-supabase link --project-ref <el-ref-del-proyecto>
+- Name: `GEMINI_API_KEY` (así, en mayúsculas y con guiones bajos)
+- Value: la llave
 
-supabase secrets set GEMINI_API_KEY=AIza...
-supabase functions deploy ia
-```
+### 3. Subir la función
 
-El *ref del proyecto* es la parte que va antes de `.supabase.co` en la dirección de la nube
-que está en *Ajustes → Nube y equipo*.
+En esa misma pantalla de **Edge Functions** → **Deploy a new function** → **Via Editor**.
 
-### 3. Probar
+- El nombre tiene que ser exactamente **`ia`**, en minúsculas. El CRM la busca así.
+- Borrar el código de ejemplo que trae y pegar completo
+  `supabase/functions/ia/index.ts` de este repositorio.
+- Desplegar.
 
-Entrar al CRM, tocar el botón redondo y preguntar cualquier cosa. Abajo del recuadro debe
-aparecer **“Contesta Google Gemini.”**
+### Y probar
+
+Entrar al CRM, recargar con Ctrl+F5, tocar el botón redondo y preguntar cualquier cosa. Abajo
+del recuadro debe aparecer **“Contesta Google Gemini.”**
+
+> **Los comandos `npm` y `supabase` no van en el editor SQL de Supabase.** Ésa es otra
+> pantalla, y sólo entiende SQL —es donde se corrieron `nube.sql` y `roles.sql`—. Quien
+> prefiera la terminal puede usar `supabase secrets set` y `supabase functions deploy ia`,
+> pero desde la terminal de su computadora, no desde el navegador.
 
 > **La llave no se pega en el CRM ni se manda por WhatsApp.** Sólo se escribe en ese comando
 > `supabase secrets set`. Si alguna vez se filtra, se borra desde
