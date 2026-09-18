@@ -181,10 +181,10 @@ y por eso está cubierto con pruebas.
 ### La lista de usuarios tiene que estar en la nube
 
 Las reglas de `roles.sql` leen quién es quién de las mismas filas de usuarios que administra
-el CRM. **Si esa lista no llegó a la nube, el servidor no reconoce a nadie**: trata a todos
-como ejecutivos sin nombre y deja de entregar todo lo que tenga dueño marcado. Se nota porque
-alguien —gerencia, típicamente— deja de ver los convenios de un día para otro, aunque la
-cartera se siga viendo.
+el CRM. **Si esa lista no llegó a la nube, el servidor no reconoce a nadie**: todos caen en el
+mismo saco que una cuenta ajena —ver *Cuentas que no son de ventas*, aquí abajo— y deja de
+entregar absolutamente todo. Se nota de golpe: al equipo entero se le queda la pantalla vacía de
+un día para otro, aunque nadie haya tocado nada.
 
 Para saber si es eso, cualquiera puede abrir **el chip con su nombre (arriba a la derecha) →
 *¿Por qué no veo algo?***. Esa pantalla dice cuántos registros de cada tipo le está entregando
@@ -201,7 +201,63 @@ También trae **Volver a bajar todo**, por si a un equipo se le quedó algo sin 
 3. Desde un equipo conectado, dale a **Volver a subir todo**. Eso marca cada registro con su
    dueño; las filas que se queden sin marcar las sigue viendo todo el mundo.
 
-Si algo sale mal, al final de `roles.sql` están las cuatro líneas para volver a como estaba.
+Si algo sale mal, al final de `roles.sql` está el **Para deshacer**: unas cuantas líneas que se
+copian tal cual al SQL Editor y devuelven el CRM a como estaba —todos ven todo—, incluido el
+buzón de firmas. Córrelas enteras, no sólo las de arriba: las que sueltan las funciones son las
+que vuelven a abrir el buzón. Después, `nube.sql` otra vez.
+
+### Cuentas que no son de ventas
+
+En el servidor hay cuentas que no son del equipo: recepción, operación, alguien que entra a otro
+módulo con el mismo correo, una cuenta vieja que nadie dio de baja. Antes, una cuenta así abría el
+CRM y el servidor la trataba como **un ejecutivo más al que todavía no le habían marcado la
+cartera**: le entregaba los ajustes, el catálogo de habitaciones, la lista completa del equipo y
+todos los registros que no tuvieran dueño puesto. Nadie se lo había dado; lo tenía de todos modos.
+
+Con `roles.sql` corrido eso se acabó. Quien entra con un correo que **no está** en *Ajustes →
+Usuarios y permisos* queda en un papel aparte, que no alcanza la cartera: ni un cliente, ni un
+convenio, ni un prospecto, ni el catálogo, ni la lista de usuarios. Cero registros de cualquier
+tipo. Y tampoco escribe: el servidor le rechaza cualquier alta y cualquier corrección, incluso
+sobre lo que no tiene dueño.
+
+Se ve como una pantalla vacía, sin aviso ni error, y es la respuesta correcta: quien no es de
+ventas no tiene por qué llevarse la cartera.
+
+**Son dos archivos, no uno.** `roles.sql` cierra la cartera; el **buzón de firmas** —la tabla
+donde el cliente deja su firma al abrir su enlace— lo cierra `firmas.sql`, y no se cierra solo.
+Importa porque en el buzón, junto a la firma, viaja la **clave del convenio**: quien lo leyera
+podría abrir ese convenio entero desde el enlace, sustituir la firma del cliente antes de que el
+CRM la recoja, o marcarla como atendida para que se pierda. Corriendo los dos, una cuenta que no
+es de ventas tampoco lee ni corrige una sola firma; corriendo sólo `roles.sql`, el buzón se queda
+abierto a cualquiera que haya entrado al servidor.
+
+Así que **vuelve a correr `firmas.sql`** después de `roles.sql`. Es el orden de siempre —`nube.sql`
+→ `roles.sql` → `firmas.sql`—, se puede repetir y no borra nada. Si un día se corre `firmas.sql`
+antes que `roles.sql`, o sin él, no truena: el buzón se queda como estaba y la guarda empieza a
+valer sola en cuanto `roles.sql` esté puesto. Lo que **no** cambia en ningún caso es el cliente:
+sigue depositando su firma con la clave de su enlace, sin cuenta y sin ver nada más.
+
+Lo que sí hay que cuidar es que **los dos archivos sean de la misma tanda**. Con un `roles.sql`
+de los de antes —los que trataban a cualquier cuenta como ejecutiva— el buzón se queda abierto
+igual que siempre, sin avisar, porque la guarda pregunta por un papel que ese archivo viejo nunca
+reparte. Si hay duda, bajen los dos de la misma versión del CRM y córranlos en orden.
+
+**El precio es que la lista manda.** Si alguien del equipo tiene su cuenta para entrar pero nadie
+lo agregó a *Usuarios y permisos*, no es que vea poco: no ve **nada**. Y si la lista completa
+todavía no ha llegado a la nube, le pasa a todo el mundo a la vez —ahí es donde se nota que el
+paso 2 de *Antes de correrlo* no era opcional—.
+
+Se arregla en un minuto y **no hay que volver a correr `roles.sql`**: las reglas leen la lista
+viva.
+
+1. Un **administrador** lo agrega en *Ajustes → Usuarios y permisos → + Agregar persona*: el mismo
+   correo con el que entra y su nombre tal como aparece en la cartera.
+2. Desde ese equipo, **Volver a subir todo**, para que la lista llegue a la nube.
+3. La persona recarga y ya está.
+
+Para saber si es eso, cualquiera puede abrir el chip con su nombre (arriba a la derecha) →
+***¿Por qué no veo algo?***: esa pantalla dice cuántos registros de cada tipo le está entregando
+el servidor. Todo en cero es esto, y no otra cosa.
 
 No hay prisa por correrlo, y tampoco pasa nada por no hacerlo: la aplicación funciona igual
 con la columna del dueño y sin ella. Si el servidor le dice que esa columna no existe, vuelve
@@ -221,6 +277,9 @@ Está pensado para no abrir de más:
   ve nada, y con una clave no puede ver otros.
 - **No escribe sobre el convenio.** Deja su firma en un buzón aparte donde puede depositar
   pero no leer ni corregir. El CRM la recoge de ahí y la aplica.
+- **Del buzón recoge el equipo de ventas**, no cualquiera que haya entrado al servidor: quien
+  no está en la lista de *Usuarios y permisos* no lee ni corrige una sola firma. Ver *Cuentas
+  que no son de ventas*, más arriba.
 - La clave deja de servir en cuanto se firma.
 
 Se corre igual que los demás, en el SQL Editor, y se puede repetir. Al final del archivo están
@@ -249,8 +308,9 @@ cliente—.
 - **No impide editar.** Quien puede ver un registro puede corregirlo, que es lo que se espera
   de un equipo de ventas. Lo único reservado al administrador son los ajustes, el catálogo de
   tarifas y la lista de usuarios.
-- **No hay ejecutivo sin cartera.** Un correo que entra sin estar dado de alta en la lista se
-  trata como ejecutivo sin clientes: no ve nada. Es a propósito — más vale que alguien se
-  queje de que no ve nada, a que vea lo que no debía.
+- **No hay ejecutivo sin cartera.** Un correo que entra sin estar dado de alta en la lista no
+  ve nada: ni su cartera, ni la de nadie, ni el catálogo, ni el buzón de firmas —esto último,
+  con `firmas.sql` vuelto a correr—. Es a propósito — más vale que alguien se queje de que no
+  ve nada, a que vea lo que no debía.
 - **Sin nube no hay papeles.** Quien abre el archivo en su equipo, sin conectar, es dueño de
   sus propios datos y ve todo. No hay nadie de quien protegerlo.
