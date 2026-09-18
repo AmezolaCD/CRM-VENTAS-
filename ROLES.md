@@ -1,10 +1,11 @@
 # Quién ve qué
 
-El CRM tiene seis papeles:
+El CRM tiene siete papeles:
 
 | Papel | Pestañas que ve | Qué alcanza |
 |---|---|---|
-| **Administrador** | Todas, Ajustes incluido | Todo |
+| **Administrador** | Todas, Ajustes incluido | Todo. Escoge departamento al entrar |
+| **Dirección** | Todas menos Ajustes | Todo el hotel, de todo el equipo. Escoge departamento al entrar |
 | **Gerencia de ventas** | Las de hospedaje, menos Ajustes | La cartera, los convenios, la actividad y los prospectos de todo el equipo |
 | **Ejecutivo de ventas** | Las de hospedaje, menos Ajustes | Sólo sus propios clientes, convenios, actividades y prospectos |
 | **Gerencia de banquetes** | Tablero, Clientes, Actividades, Eventos, Contratos banquetes, Calendario, Reportes y Formulario | Los eventos y contratos de **todo el equipo de banquetes**; la cartera la comparte con ventas |
@@ -13,6 +14,28 @@ El CRM tiene seis papeles:
 
 Un ejecutivo ve además **las actividades que él mismo registró**, aunque sean de un cliente de
 otro: a veces se cubre a un compañero y esa llamada es suya de todos modos.
+
+## La pantalla de departamento
+
+Quien alcanza **más de un departamento** —hoy la dirección y la administración— escoge en cuál
+entra, en una pantalla que sale al abrir el CRM. A partir de ahí la aplicación se comporta como
+si fuera de ese departamento: las pestañas, el tablero, el calendario y los reportes. El botón
+con el nombre del departamento, arriba a la derecha, cambia de uno a otro **sin volver a
+entrar**.
+
+Al resto del equipo no se le pregunta: su departamento es el único que tiene y el CRM abre
+directo. Sin nube tampoco, porque sin sesión no hay papeles que separar.
+
+El departamento **acota la pantalla, no el permiso**. La dirección alcanza los dos de todos
+modos; escoger uno es para no trabajar entre pestañas que en ese momento no le tocan —y de
+paso, los reportes salen del departamento en el que esté, en vez de mezclar los dos—.
+
+### Agregar un departamento más adelante
+
+Está previsto. En `index.html` hay una lista llamada `DEPARTAMENTOS` con un renglón por
+departamento —su nombre, una línea de descripción y qué pestañas le tocan— y otra llamada
+`DEPTOS_ROL` que dice qué papeles lo alcanzan. Un departamento nuevo son esos dos renglones: la
+pantalla de escoger, el botón del encabezado y el filtrado salen solos.
 
 ## Ventas y banquetes no se ven los papeles
 
@@ -116,6 +139,17 @@ alcanza ni con el teclado ni con un lector de pantalla. Tampoco aparece un solo 
 persona, ni siquiera al repetirse un correo. Aguanta una recarga —si no, un tirón de pantalla
 dejaría la cartera a la vista— y para salir hay que **mantener pulsada la esquina de arriba a
 la derecha dos segundos**.
+
+## La cuenta de dirección
+
+`direccion@quartzhotel.mx` entra con el papel **Dirección**: ve la cartera, los convenios, los
+contratos, los eventos y los reportes de **todo el equipo**, en los dos departamentos, y escoge
+en cuál entra. Lo único que no alcanza son los **Ajustes** —tarifas, textos, usuarios y la
+conexión del equipo—, que se quedan con la administración.
+
+Viene con el nombre «Dirección» porque es el de la cuenta, no el de una persona. Si se quiere
+que los documentos y la bitácora salgan a nombre propio, se cambia en *Ajustes → Usuarios y
+permisos*.
 
 ## Dar de alta a alguien son dos pasos
 

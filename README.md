@@ -517,7 +517,8 @@ lo que no, y cómo apagarlo están en **[IA.md](IA.md)**.
 
 ## Quién ve qué
 
-Seis papeles: **administrador** (todo, y el único con Ajustes), **gerencia de ventas** (la
+Siete papeles: **administrador** (todo, y el único con Ajustes), **dirección** (todo el hotel,
+de todo el equipo, sin Ajustes), **gerencia de ventas** (la
 cartera y la actividad de todo el equipo, sin Ajustes), **ejecutivo de ventas** (sólo lo suyo,
 más las actividades que él mismo hizo), **gerencia de banquetes** (los eventos y contratos de
 todo su equipo), **ejecutivo de banquetes** (nada más los suyos) y **sólo prospección** (nada
@@ -527,6 +528,11 @@ y permisos*.
 Ventas y banquetes no se ven los papeles del otro: ventas no alcanza los eventos ni los
 contratos de banquetes —ni en el calendario ni en los reportes—, y banquetes no alcanza los
 convenios ni los contratos de hospedaje. La cartera de clientes sí es una sola.
+
+Quien alcanza los dos departamentos —la dirección y la administración— **escoge en cuál entra**
+en una pantalla que sale al abrir, y se cambia de uno a otro con el botón del encabezado, sin
+volver a entrar. Agregar un departamento más adelante son dos renglones de configuración; el
+detalle está en **[ROLES.md](ROLES.md)**.
 
 Lo que amarra a una persona con su cartera es el **nombre**, no el correo: se compara contra
 el campo *Ejecutivo* de cada cliente. Escribirlos distinto es el error más fácil de cometer y

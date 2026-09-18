@@ -89,7 +89,7 @@ as $$ select coalesce(public.crm_yo() ->> 'nombre', ''); $$;
 --
 --    · El catálogo, los textos y la lista de usuarios los necesita todo el
 --      mundo para poder armar un convenio: se leen siempre.
---    · Administración ve todo lo demás.
+--    · Administración y dirección ven todo lo demás.
 --    · Cada gerencia ve el trabajo de todo su equipo; un ejecutivo ve lo suyo
 --      y lo que todavía no tiene dueño.
 --    · Ventas y banquetes comparten la cartera de clientes y la bitácora, pero
@@ -123,8 +123,9 @@ using (
     -- Quien no está en la lista de usuarios no alcanza nada.
     when public.crm_rol() = 'ninguno' then false
 
-    -- La administración lo ve todo.
-    when public.crm_rol() = 'admin' then true
+    -- La administración y la dirección lo ven todo. El departamento que
+    -- escogen al entrar acota la pantalla, no el permiso: alcanzan los dos.
+    when public.crm_rol() in ('admin','direccion') then true
 
     -- La tableta del lobby: los ajustes, la lista de usuarios y lo que ella
     -- misma capturó. Nada más.
@@ -173,7 +174,7 @@ using (
        when public.crm_rol() = 'captura'
        then tipo = 'prospectos' and lower(coalesce(duenio,'')) = lower(public.crm_nombre())
        else tipo in ('ajustes','habitaciones','usuarios')
-            or public.crm_rol() in ('admin','gerente','gte_banquetes')
+            or public.crm_rol() in ('admin','direccion','gerente','gte_banquetes')
             or duenio is null
             or lower(duenio) = lower(public.crm_nombre())
   end

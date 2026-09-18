@@ -343,6 +343,17 @@
      —el teclado y el lector de pantalla seguían llegando a las pestañas de
      atrás—, y lo que no está dibujado no se alcanza de ninguna manera. */
   body.con-kiosco > header, body.con-kiosco > main{display:none !important}
+  /* La pantalla de departamento: pocas cosas y grandes, que es lo único que
+     hay que hacer en ella. */
+  .dep-grid{display:grid; gap:12px; grid-template-columns:1fr 1fr; margin-top:20px}
+  @media(max-width:560px){ .dep-grid{grid-template-columns:1fr} }
+  .dep-card{display:block; width:100%; text-align:left; cursor:pointer;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:18px 16px; color:inherit; font:inherit; transition:border-color .15s, transform .15s}
+  .dep-card:hover, .dep-card:focus-visible{border-color:var(--oro); transform:translateY(-2px)}
+  .dep-card .dep-ico{font-size:26px; line-height:1}
+  .dep-card b{display:block; margin:8px 0 4px; font-size:16px}
+  .dep-card small{color:var(--muted); display:block; line-height:1.45}
   #kiosco{position:fixed; inset:0; z-index:9000; overflow-y:auto;
     background:#f6f4f8; color:#241031; -webkit-overflow-scrolling:touch;
     font-size:17px; display:flex; flex-direction:column; align-items:center}
@@ -628,6 +639,8 @@
     <button class="btn" id="bExport">Exportar</button>
     <button id="avisos" class="pill aviso" type="button" style="display:none"
       title="Convenios firmados por el cliente"></button>
+    <button id="chipDepto" class="pill conSesion" type="button" style="display:none"
+      title="Cambiar de departamento"></button>
     <button id="estadoNube" class="pill" type="button" style="display:none"></button>
     <button class="btn" id="bTema" title="Cambiar tema">◐</button>
   </div>
@@ -669,7 +682,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.18-43";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.18-44";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1039,14 +1052,17 @@ const CAMPOS_CLIENTE = [
    ========================================================================== */
 
 const ROLES = [
-  { id:"admin",     name:"Administrador",     ayuda:"Todo, incluidos los Ajustes." },
+  { id:"admin",     name:"Administrador",     ayuda:"Todo, incluidos los Ajustes. Escoge departamento al entrar." },
+  { id:"direccion", name:"Dirección",          ayuda:"Todo el hotel —ventas y banquetes—, de todo el equipo. Escoge departamento al entrar. Sin Ajustes: eso es de sistemas." },
   { id:"gerente",   name:"Gerencia de ventas", ayuda:"Ve la cartera y la actividad de todo el equipo. Sin Ajustes." },
   { id:"ejecutivo", name:"Ejecutivo de ventas", ayuda:"Sólo sus propios clientes, convenios y actividades." },
   { id:"captura",   name:"Sólo prospección",  ayuda:"Únicamente el formulario de prospección y lo que esa cuenta capturó. No ve la cartera." },
   { id:"gte_banquetes", name:"Gerencia de banquetes", ayuda:"Todo lo de banquetes, de todo su equipo. Comparte la cartera con ventas. Sin hospedaje y sin Ajustes." },
   { id:"banquetes", name:"Ejecutivo de banquetes", ayuda:"Sólo sus propios eventos y contratos de banquetes. Comparte la cartera de clientes con ventas." }
 ];
-const infoRol = id => ROLES.find(r => r.id === id) || ROLES[2];
+/* Un papel que no se reconoce cae en el más prudente, no en el primero de la
+   lista: más vale que alguien se queje de que no ve nada. */
+const infoRol = id => ROLES.find(r => r.id === id) || ROLES.find(r => r.id === "ejecutivo");
 
 const USUARIOS_DEF = [
   // Ventas
@@ -1058,7 +1074,9 @@ const USUARIOS_DEF = [
   { id:"u5", correo:"gte.banquetes@quartzhotel.mx",   nombre:"Michelle Velazco Gonzalez",    rol:"gte_banquetes" },
   { id:"u6", correo:"coord.banquetes@quartzhotel.mx", nombre:"Martha Ascencio Salas",        rol:"banquetes" },
   { id:"u7", correo:"banquetes4@quartzhotel.mx",      nombre:"Gloria Falcón Sosa",           rol:"banquetes" },
-  { id:"u8", correo:"banquetes5@quartzhotel.mx",      nombre:"Vanesa Yoselin Hernández Arriaga", rol:"banquetes" }
+  { id:"u8", correo:"banquetes5@quartzhotel.mx",      nombre:"Vanesa Yoselin Hernández Arriaga", rol:"banquetes" },
+  // Dirección
+  { id:"u9", correo:"direccion@quartzhotel.mx",       nombre:"Dirección",                   rol:"direccion" }
 ];
 
 /**
@@ -1077,8 +1095,46 @@ const VISTAS = ["tablero","clientes","actividades","convenios","contratos",
    administración sí ve todo, que para eso es la administración. */
 const SOLO_BANQUETES = ["eventos","contratosbq"];
 
+/**
+ * Los departamentos del hotel.
+ *
+ * Quien alcanza más de uno —dirección y administración— escoge al entrar, y a
+ * partir de ahí el CRM se comporta como si fuera de ese departamento: las
+ * pestañas, el tablero, el calendario y los reportes. Se cambia de uno a otro
+ * con el botón del encabezado, sin volver a entrar.
+ *
+ * Para agregar un departamento nuevo basta con un renglón aquí y ponerlo en
+ * DEPTOS_ROL: no hay que tocar nada más.
+ */
+const DEPARTAMENTOS = [
+  { id:"ventas", name:"Ventas", icono:"🛏️",
+    sub:"Convenios de tarifas, contratos de estancia y confirmaciones de hospedaje",
+    vistas:["tablero","clientes","actividades","convenios","contratos",
+            "confirmaciones","calendario","reportes","formulario"] },
+  { id:"banquetes", name:"Banquetes", icono:"🍽️",
+    sub:"Cotizaciones y contratos de eventos, con su calendario y sus reportes",
+    vistas:["tablero","clientes","actividades","eventos","contratosbq",
+            "calendario","reportes","formulario"] }
+];
+
+/** Qué departamentos alcanza cada papel. Vacío = no aplica, no se le pregunta. */
+const DEPTOS_ROL = {
+  admin:         ["ventas","banquetes"],
+  direccion:     ["ventas","banquetes"],
+  gerente:       ["ventas"],
+  ejecutivo:     ["ventas"],
+  gte_banquetes: ["banquetes"],
+  banquetes:     ["banquetes"],
+  captura:       []
+};
+
+/* El departamento escogido en esta sesión. No se guarda a propósito: la
+   pantalla es lo primero que ve quien alcanza los dos, cada vez que entra. */
+let depto = "";
+
 const VISTAS_ROL = {
   admin:     VISTAS,
+  direccion: VISTAS.filter(v => v !== "ajustes"),
   gerente:   VISTAS.filter(v => !["ajustes", ...SOLO_BANQUETES].includes(v)),
   ejecutivo: VISTAS.filter(v => !["ajustes", ...SOLO_BANQUETES].includes(v)),
   captura:   ["formulario"],
@@ -1095,7 +1151,29 @@ const veBanquetes = () => puedeVer("eventos");
    lado: ni la pestaña de convenios, ni la ficha del cliente, ni el tablero,
    ni los avisos, ni lo que se le cuenta a la IA. */
 const veHospedaje = () => puedeVer("convenios");
-const vistasDelRol = () => VISTAS_ROL[rolActual()] || VISTAS_ROL.ejecutivo;
+/** Los departamentos que alcanza quien está viendo la pantalla. */
+const misDepartamentos = () =>
+  DEPARTAMENTOS.filter(d => (DEPTOS_ROL[rolActual()] || []).includes(d.id));
+/**
+ * ¿Hay que preguntarle a esta persona en cuál quiere entrar?
+ *
+ * Sin nube no hay sesión ni papeles: quien abre el archivo en su equipo es
+ * dueño de todo y no hay departamentos que separar, así que no se le pregunta.
+ */
+const escogeDepto = () => nubeActiva() && misDepartamentos().length > 1;
+const deptoActual = () => DEPARTAMENTOS.find(d => d.id === depto) || null;
+
+/**
+ * Las pestañas de esta persona, ya acotadas al departamento en el que está.
+ *
+ * Los Ajustes no son de ningún departamento —son del administrador—, así que
+ * no se le quitan por haber escogido uno.
+ */
+function vistasDelRol(){
+  const base = VISTAS_ROL[rolActual()] || VISTAS_ROL.ejecutivo;
+  const d = escogeDepto() ? deptoActual() : null;
+  return d ? base.filter(v => v === "ajustes" || d.vistas.includes(v)) : base;
+}
 const puedeVer = v => vistasDelRol().includes(v);
 
 function saneaUsuario(u){
@@ -1164,7 +1242,7 @@ const miNombre    = () => { const u = usuarioActual(); return u ? u.nombre : "";
 const esAdmin     = () => rolActual() === "admin";
 /* Las dos gerencias ven el trabajo de todo el equipo; lo que cambia entre
    ellas es qué pestañas alcanzan, no cuánto ven dentro de ellas. */
-const puedeVerTodo = () => ["admin","gerente","gte_banquetes"].includes(rolActual());
+const puedeVerTodo = () => ["admin","direccion","gerente","gte_banquetes"].includes(rolActual());
 
 /** ¿Este cliente es de quien está viendo la pantalla? */
 function esMio(c){
@@ -2682,6 +2760,88 @@ function menuSinNube(){
   };
 }
 
+/**
+ * ¿En qué departamento entra hoy?
+ *
+ * Sólo se le pregunta a quien alcanza más de uno. Al resto no se le estorba:
+ * su departamento es el único que tiene, y el CRM abre directo.
+ */
+function pantallaDepto(){
+  if (!escogeDepto() || depto) return;
+  // No se pone encima de nada: ni de la animación, ni de la entrada, ni de la
+  // tableta entregada al cliente, ni de un formulario a medio capturar.
+  if (document.getElementById("depto") || document.getElementById("entrada")) return;
+  if (document.getElementById("intro") || document.getElementById("kiosco")) return;
+  if (document.body.classList.contains("con-kiosco")) return;
+
+  const u = usuarioActual();
+  const ov = document.createElement("div");
+  ov.id = "depto";
+  ov.className = "overlay";
+  ov.style.alignItems = "center";
+  ov.innerHTML = `
+    <div class="modal" style="max-width:560px">
+      <div class="modal-body" style="padding:30px 26px">
+        <div style="width:64px;margin:0 auto 14px">${logoCore()}</div>
+        <h2 style="margin:0 0 4px;font-size:19px;text-align:center;letter-spacing:.06em">CORE</h2>
+        <p class="hint" style="margin:0;text-align:center">${(() => {
+          const quien = (u && u.nombre) || correoSesion();
+          const papel = u ? infoRol(u.rol).name : "";
+          // Mientras nadie le ponga nombre propio a la cuenta de dirección, el
+          // nombre y el papel son la misma palabra: no se repite.
+          return esc(papel && papel !== quien ? quien + " · " + papel : quien);
+        })()}</p>
+        <p style="margin:18px 0 0;text-align:center"><b>¿Con qué departamento quiere trabajar?</b></p>
+        <div class="dep-grid">
+          ${misDepartamentos().map(d => `
+            <button class="dep-card" type="button" data-dep="${esc(d.id)}">
+              <span class="dep-ico">${d.icono}</span>
+              <b>${esc(d.name)}</b>
+              <small>${esc(d.sub)}</small>
+            </button>`).join("")}
+        </div>
+        <p class="hint" style="margin:18px 0 0;text-align:center">
+          Se cambia cuando quiera, con el botón del departamento que queda arriba
+          a la derecha. No hay que volver a entrar.</p>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+
+  ov.querySelectorAll("[data-dep]").forEach(b => b.onclick = () => {
+    depto = b.dataset.dep;
+    // Se entra siempre por la primera pestaña del departamento, no por donde
+    // se hubiera quedado en el anterior.
+    vista = "tablero";
+    ov.remove();
+    render();
+  });
+  ov.querySelector("[data-dep]").focus();
+}
+
+/**
+ * Pone el departamento al día antes de dibujar nada.
+ *
+ * Dos cosas que se ven feo si no: que al cambiar de persona la nueva herede el
+ * departamento de la anterior —o uno que ni siquiera alcanza—, y que la
+ * pantalla de escoger se quede colgada después de cerrar la sesión.
+ */
+function ajustarDepto(){
+  if (depto && !misDepartamentos().some(d => d.id === depto)) depto = "";
+  const ov = document.getElementById("depto");
+  if (ov && (!escogeDepto() || depto)) ov.remove();
+}
+
+/** El botón del encabezado: dice en cuál está y sirve para cambiarse. */
+function pintarDepto(){
+  const el = document.getElementById("chipDepto");
+  if (!el) return;
+  const d = escogeDepto() ? deptoActual() : null;
+  if (!d){ el.style.display = "none"; return; }
+  el.style.display = "";
+  el.innerHTML = `<span>${d.icono}</span> ${esc(d.name)}`;
+  el.onclick = () => { depto = ""; pintarDepto(); pantallaDepto(); };
+}
+
 function pantallaEntrada(){
   if (document.getElementById("entrada")) return;
   const ov = document.createElement("div");
@@ -3233,6 +3393,7 @@ function clientesVisibles(){
    ========================================================================== */
 
 function render(){
+  ajustarDepto();
   // Cada papel ve las suyas. Los Ajustes tocan las tarifas públicas, los textos
   // de los convenios y la conexión de todo el equipo: son del administrador.
   // Y si alguien llegó a una pestaña que no le toca, se le desvía.
@@ -3258,6 +3419,7 @@ function render(){
 
   renderEjecutivos();
   pintarNube();
+  pintarDepto();
   pintarBotonIA();
   pintarAvisos();
   if (vista === "tablero")   { renderKpis(); renderTablero(); }
@@ -3272,6 +3434,9 @@ function render(){
   if (vista === "confirmaciones") renderConfirmaciones();
   if (vista === "formulario") renderFormulario();
   if (vista === "ajustes")   renderAjustes();
+
+  // Al final, para que no salga encima de una pantalla a medio dibujar.
+  pantallaDepto();
 }
 
 function renderEjecutivos(){
@@ -9846,6 +10011,9 @@ const _firma = enlaceDeFirma();
 if (_firma){ terminarEntrada(); pantallaFirmaCliente(_firma); }
 else {
   arrancarNube();
+  // A quien alcanza más de un departamento se le pregunta en cuanto se puede
+  // ver la pantalla; antes se quedaría detrás de la animación de entrada.
+  entradaLista.then(() => pantallaDepto());
   // Si la tableta venía en modo cliente, vuelve a él antes de que se alcance a
   // ver nada del CRM. Se espera a la animación nada más para no cortarla.
   const _k = kioscoGuardado();
