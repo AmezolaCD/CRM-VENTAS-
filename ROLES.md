@@ -1,19 +1,32 @@
 # Quién ve qué
 
-El CRM tiene cuatro papeles:
+El CRM tiene seis papeles:
 
 | Papel | Pestañas que ve | Qué alcanza |
 |---|---|---|
 | **Administrador** | Todas, Ajustes incluido | Todo |
-| **Gerencia de ventas** | Todas menos Ajustes | La cartera, los convenios, la actividad y los prospectos de todo el equipo |
-| **Ejecutivo de ventas** | Todas menos Ajustes | Sólo sus propios clientes, convenios, actividades y prospectos |
-| **Banquetes** | Tablero, Clientes, Actividades, Eventos, Contratos banquetes, Calendario, Reportes y Formulario | Sus eventos y contratos de banquetes; la cartera de clientes la comparte con ventas |
+| **Gerencia de ventas** | Las de hospedaje, menos Ajustes | La cartera, los convenios, la actividad y los prospectos de todo el equipo |
+| **Ejecutivo de ventas** | Las de hospedaje, menos Ajustes | Sólo sus propios clientes, convenios, actividades y prospectos |
+| **Gerencia de banquetes** | Tablero, Clientes, Actividades, Eventos, Contratos banquetes, Calendario, Reportes y Formulario | Los eventos y contratos de **todo el equipo de banquetes**; la cartera la comparte con ventas |
+| **Ejecutivo de banquetes** | Las mismas que su gerencia | Sólo sus propios eventos y contratos de banquetes |
 | **Sólo prospección** | Únicamente *Formulario* | Sólo los prospectos que esa cuenta capturó |
 
 Un ejecutivo ve además **las actividades que él mismo registró**, aunque sean de un cliente de
 otro: a veces se cubre a un compañero y esa llamada es suya de todos modos.
 
-**Sólo prospección** es el papel de la cuenta *Banquetes*: levanta contactos en eventos y nada
+## Ventas y banquetes no se ven los papeles
+
+Son dos negocios distintos y cada uno ve el suyo:
+
+- Banquetes **no ve** convenios, contratos de hospedaje ni confirmaciones.
+- Ventas **no ve** las pestañas *Eventos* ni *Contratos banquetes* —tampoco la gerencia de
+  ventas—, ni los eventos en el calendario, ni el dinero de banquetes en los reportes.
+
+Lo único que comparten es **la cartera de clientes, la bitácora y los prospectos**: una empresa
+que hace su convención en el hotel y además renta salón para la cena es un solo cliente, no
+dos fichas. Quién entra a banquetes y cómo se dan de alta esas cuentas está en `BANQUETES.md`.
+
+**Sólo prospección** es el papel de la tableta del lobby: levanta contactos en eventos y nada
 más. No ve el tablero, ni la cartera, ni los convenios, y tampoco le aparecen los botones de
 *Importar* y *Exportar*, que mueven la cartera entera.
 
@@ -139,12 +152,31 @@ Si además quieres que **el servidor mismo se niegue** a entregar la cartera aje
 `roles.sql` en el SQL Editor de Supabase. A partir de ahí, un ejecutivo ya no recibe los datos
 de otro ni sabiendo dónde buscar.
 
-Con `roles.sql` corrido, la cuenta de **Banquetes** es la más cerrada de todas: el servidor le
+Con `roles.sql` corrido, el reparto del servidor es el mismo que el de la pantalla: a
+banquetes no le baja un solo convenio, contrato de hospedaje ni huésped, y a ventas no le baja
+un solo evento. La cartera de clientes sí le baja entera a banquetes, porque sus eventos
+cuelgan de ella y sin el cliente el evento no se puede ni abrir; en pantalla le siguen
+saliendo nada más los suyos.
+
+La cuenta de **Sólo prospección** —la tableta— es la más cerrada de todas: el servidor le
 entrega los ajustes, la lista de usuarios y sus propios prospectos, y nada más. Ni un cliente,
 ni un convenio, ni un huésped. Y sólo puede escribir prospectos.
 
-> Si ya corriste `roles.sql` antes de que existiera el formulario, **vuelve a correrlo**: el
-> archivo se reemplaza entero cada vez y es lo que agrega esas reglas.
+Escribir se deja más suelto que leer a propósito. Un renglón que el servidor no entrega es un
+renglón que ese equipo nunca va a mandar, y una regla de más al escribir le tumbaría la subida
+entera por una fila que ni siquiera tiene.
+
+> Si ya corriste `roles.sql` antes —antes del formulario, o antes de que existiera
+> banquetes—, **vuelve a correrlo**: el archivo se reemplaza entero cada vez y es lo que trae
+> las reglas nuevas.
+
+### Un registro sin su cliente no es un registro borrado
+
+Con el servidor repartiendo, a alguien le puede llegar una actividad o un evento **suyo**
+colgando de un cliente que no alcanza a ver. Ese renglón se aparta —sin su cliente no hay nada
+que abrir—, pero el CRM **no lo confunde con un borrado**: no manda la baja, así que el
+registro sigue entero para quien sí lo ve. Es la clase de error que se paga caro y en silencio,
+y por eso está cubierto con pruebas.
 
 ### La lista de usuarios tiene que estar en la nube
 

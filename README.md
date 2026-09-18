@@ -359,9 +359,13 @@ El **Calendario** muestra el mes con los eventos y las actividades agendadas del
 **Reportes** dan el ingreso cerrado y el que sigue en la mesa, por área, por ejecutivo y por
 mes, contando cada documento en el mes en que ocurre el evento.
 
-Hay un papel de usuario **Banquetes** que ve todo eso y comparte la cartera de clientes con
-ventas, pero no los convenios ni los contratos de hospedaje. El detalle, y los datos legales
-que hay que capturar antes del primer contrato, en **[BANQUETES.md](BANQUETES.md)**.
+Todo eso lo ven **las cuatro cuentas del departamento y la del administrador, y nadie más**:
+ventas —gerencia incluida— no ve las pestañas de banquetes, ni sus eventos en el calendario, ni
+su dinero en los reportes. Del otro lado, banquetes comparte la cartera de clientes con ventas
+pero no ve los convenios ni los contratos de hospedaje. Hay dos papeles: **gerencia de
+banquetes**, que alcanza lo de todo su equipo, y **ejecutivo de banquetes**, que alcanza lo
+suyo. Quién es quién, y los datos legales que hay que capturar antes del primer contrato, en
+**[BANQUETES.md](BANQUETES.md)**.
 
 ### Formulario de prospección
 
@@ -383,7 +387,7 @@ de pie y con prisa.
   los ven todos, con una columna extra que dice quién capturó cada uno.
 
 Existe un papel de usuario, **Sólo prospección**, que no ve más que esta pestaña: es el de la
-cuenta de *Banquetes*. Ver **[ROLES.md](ROLES.md)**.
+cuenta de la tableta del lobby. Ver **[ROLES.md](ROLES.md)**.
 
 #### Modo tableta
 
@@ -513,12 +517,16 @@ lo que no, y cómo apagarlo están en **[IA.md](IA.md)**.
 
 ## Quién ve qué
 
-Cinco papeles: **administrador** (todo, y el único con Ajustes), **gerencia de ventas** (la
-cartera y la actividad de todo el equipo, sin Ajustes), **ejecutivo** (sólo lo suyo, más las
-actividades que él mismo hizo), **banquetes** (sus eventos y contratos, el calendario y los
-reportes; comparte la cartera con ventas, pero no ve el hospedaje) y **sólo prospección** (nada
+Seis papeles: **administrador** (todo, y el único con Ajustes), **gerencia de ventas** (la
+cartera y la actividad de todo el equipo, sin Ajustes), **ejecutivo de ventas** (sólo lo suyo,
+más las actividades que él mismo hizo), **gerencia de banquetes** (los eventos y contratos de
+todo su equipo), **ejecutivo de banquetes** (nada más los suyos) y **sólo prospección** (nada
 más la pestaña *Formulario* y lo que esa cuenta capturó). Se administran en *Ajustes → Usuarios
 y permisos*.
+
+Ventas y banquetes no se ven los papeles del otro: ventas no alcanza los eventos ni los
+contratos de banquetes —ni en el calendario ni en los reportes—, y banquetes no alcanza los
+convenios ni los contratos de hospedaje. La cartera de clientes sí es una sola.
 
 Lo que amarra a una persona con su cartera es el **nombre**, no el correo: se compara contra
 el campo *Ejecutivo* de cada cliente. Escribirlos distinto es el error más fácil de cometer y

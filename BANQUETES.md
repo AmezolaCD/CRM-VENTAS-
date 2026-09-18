@@ -6,22 +6,51 @@ pestañas y sus propios documentos.
 
 ---
 
-## Qué ve el equipo de banquetes
+## Quién entra a banquetes
 
-El papel **Banquetes** (en *Ajustes → Usuarios y permisos*) da acceso a:
+El apartado de banquetes lo ven **cinco cuentas y nadie más**: las cuatro del departamento y la
+del administrador.
+
+| Persona | Correo | Papel |
+|---|---|---|
+| Michelle Velazco Gonzalez | `gte.banquetes@quartzhotel.mx` | Gerencia de banquetes |
+| Martha Ascencio Salas | `coord.banquetes@quartzhotel.mx` | Ejecutivo de banquetes |
+| Gloria Falcón Sosa | `banquetes4@quartzhotel.mx` | Ejecutivo de banquetes |
+| Vanesa Yoselin Hernández Arriaga | `banquetes5@quartzhotel.mx` | Ejecutivo de banquetes |
+| Marco Ramírez | `sistemas@quartzhotel.mx` | Administrador |
+
+**Ventas no entra**, y eso incluye a la gerencia de ventas: ni las pestañas *Eventos* y
+*Contratos banquetes*, ni los eventos en el calendario, ni el dinero de banquetes en los
+reportes. Cada área ve su propio calendario y su propio reporte.
+
+Los dos papeles de banquetes se diferencian en cuánto alcanzan dentro de sus pestañas:
+
+- **Gerencia de banquetes** ve los eventos y contratos **de todo su equipo**, igual que la
+  gerencia de ventas con los convenios.
+- **Ejecutivo de banquetes** ve nada más los suyos.
+
+Ninguno de los dos entra a *Ajustes*.
 
 | Ve | No ve |
 |---|---|
 | Tablero, Clientes y Actividades — **la cartera es común con ventas** | Convenios de hospedaje |
 | Eventos (cotizaciones) y Contratos banquetes | Contratos de hospedaje |
-| Calendario y Reportes | Ajustes |
-| Formulario de prospección | |
+| Calendario y Reportes, con lo de banquetes | Confirmaciones de hospedaje |
+| Formulario de prospección | Ajustes |
 
 La cartera de clientes se comparte a propósito: si una empresa hace su convención en el hotel y
 además renta salón para la cena, es **un solo cliente**, no dos fichas.
 
-Ventas, del otro lado, no ve las pestañas de banquetes —le estorbarían todo el día— pero sí el
-calendario y los reportes, que son de los dos.
+### Para darlos de alta
+
+Son los dos pasos de siempre (ver `ROLES.md`): primero la cuenta en **Supabase →
+Authentication → Users**, con *Auto Confirm User* marcado; después la persona en **Ajustes →
+Usuarios y permisos**, con el mismo correo, su nombre tal como va a aparecer en los eventos, y
+su papel.
+
+> La cuenta `gte.banquetes@quartzhotel.mx` venía de antes con el papel *Sólo prospección*, de
+> cuando se usaba para la tableta del lobby. **Hay que cambiarla a *Gerencia de banquetes***, o
+> Michelle no verá nada más que el formulario.
 
 ---
 

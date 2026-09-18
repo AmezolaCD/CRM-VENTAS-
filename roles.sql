@@ -69,10 +69,15 @@ as $$ select coalesce(public.crm_yo() ->> 'nombre', ''); $$;
 --
 --    · El catálogo, los textos y la lista de usuarios los necesita todo el
 --      mundo para poder armar un convenio: se leen siempre.
---    · Administración y gerencia ven todo lo demás.
---    · Un ejecutivo ve lo suyo, y lo que todavía no tiene dueño.
---    · El papel 'captura' (Banquetes) sólo levanta prospectos en eventos: no
---      lee ni escribe nada más, ni siquiera le baja la cartera al equipo.
+--    · Administración ve todo lo demás.
+--    · Cada gerencia ve el trabajo de todo su equipo; un ejecutivo ve lo suyo
+--      y lo que todavía no tiene dueño.
+--    · Ventas y banquetes comparten la cartera de clientes y la bitácora, pero
+--      no los documentos del otro: los convenios, los contratos de hospedaje y
+--      los huéspedes no le bajan a banquetes, y los eventos de banquetes no le
+--      bajan a ventas.
+--    · El papel 'captura' —la tableta del lobby— sólo levanta prospectos en
+--      eventos: no lee ni escribe nada más, ni siquiera le baja la cartera.
 --
 --    Escribir sigue abierto a cualquiera que haya entrado, salvo los ajustes y
 --    la lista de usuarios, que son del administrador. No se restringe más
@@ -89,13 +94,33 @@ drop policy if exists "edita"          on public.crm_datos;
 
 create policy "lee lo suyo" on public.crm_datos for select to authenticated
 using (
-  case when public.crm_rol() = 'captura'
-       then tipo in ('ajustes','usuarios')
-            or (tipo = 'prospectos' and lower(coalesce(duenio,'')) = lower(public.crm_nombre()))
-       else tipo in ('ajustes','habitaciones','usuarios')
-            or public.crm_rol() in ('admin','gerente')
+  case
+    -- La administración lo ve todo.
+    when public.crm_rol() = 'admin' then true
+
+    -- La tableta del lobby: los ajustes, la lista de usuarios y lo que ella
+    -- misma capturó. Nada más.
+    when public.crm_rol() = 'captura'
+      then tipo in ('ajustes','usuarios')
+        or (tipo = 'prospectos' and lower(coalesce(duenio,'')) = lower(public.crm_nombre()))
+
+    -- Banquetes comparte la cartera con ventas, pero el hospedaje no es suyo.
+    -- La cartera le baja entera a propósito: un evento cuelga de un cliente, y
+    -- sin el cliente el evento no se puede ni abrir. La pantalla le sigue
+    -- enseñando nada más los suyos.
+    when public.crm_rol() in ('banquetes','gte_banquetes')
+      then tipo not in ('convenios','contratos','huespedes')
+       and (tipo in ('ajustes','habitaciones','usuarios','clientes')
+            or public.crm_rol() = 'gte_banquetes'
             or duenio is null
-            or lower(duenio) = lower(public.crm_nombre())
+            or lower(duenio) = lower(public.crm_nombre()))
+
+    -- Ventas: todo menos los eventos de banquetes.
+    else tipo <> 'eventos'
+     and (tipo in ('ajustes','habitaciones','usuarios')
+          or public.crm_rol() = 'gerente'
+          or duenio is null
+          or lower(duenio) = lower(public.crm_nombre()))
   end
 );
 
@@ -108,12 +133,15 @@ with check (
        else true end
 );
 
+-- Escribir se deja más suelto que leer a propósito: un renglón que el servidor
+-- no le entrega es un renglón que ese equipo nunca va a mandar, y una regla de
+-- más aquí le tumbaría la subida entera por una fila que ni siquiera tiene.
 create policy "edita" on public.crm_datos for update to authenticated
 using (
   case when public.crm_rol() = 'captura'
        then tipo = 'prospectos' and lower(coalesce(duenio,'')) = lower(public.crm_nombre())
        else tipo in ('ajustes','habitaciones','usuarios')
-            or public.crm_rol() in ('admin','gerente')
+            or public.crm_rol() in ('admin','gerente','gte_banquetes')
             or duenio is null
             or lower(duenio) = lower(public.crm_nombre())
   end

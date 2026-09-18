@@ -669,7 +669,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.18-40";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.18-42";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1043,16 +1043,22 @@ const ROLES = [
   { id:"gerente",   name:"Gerencia de ventas", ayuda:"Ve la cartera y la actividad de todo el equipo. Sin Ajustes." },
   { id:"ejecutivo", name:"Ejecutivo de ventas", ayuda:"Sólo sus propios clientes, convenios y actividades." },
   { id:"captura",   name:"Sólo prospección",  ayuda:"Únicamente el formulario de prospección y lo que esa cuenta capturó. No ve la cartera." },
-  { id:"banquetes", name:"Banquetes",         ayuda:"Eventos, contratos de banquetes, calendario y reportes. Comparte la cartera de clientes con ventas, pero no ve convenios ni contratos de hospedaje." }
+  { id:"gte_banquetes", name:"Gerencia de banquetes", ayuda:"Todo lo de banquetes, de todo su equipo. Comparte la cartera con ventas. Sin hospedaje y sin Ajustes." },
+  { id:"banquetes", name:"Ejecutivo de banquetes", ayuda:"Sólo sus propios eventos y contratos de banquetes. Comparte la cartera de clientes con ventas." }
 ];
 const infoRol = id => ROLES.find(r => r.id === id) || ROLES[2];
 
 const USUARIOS_DEF = [
+  // Ventas
   { id:"u1", correo:"sistemas@quartzhotel.mx",   nombre:"Marco Ramírez",  rol:"admin" },
   { id:"u2", correo:"gte.ventas@quartzhotel.mx", nombre:"Alicia Rocha",   rol:"gerente" },
   { id:"u3", correo:"ventas3@quartzhotel.mx",    nombre:"Carmen Sotelo",  rol:"ejecutivo" },
   { id:"u4", correo:"ventas2@quartzhotel.mx",    nombre:"Eduardo Islas",  rol:"ejecutivo" },
-  { id:"u5", correo:"gte.banquetes@quartzhotel.mx", nombre:"Banquetes",   rol:"captura" }
+  // Banquetes
+  { id:"u5", correo:"gte.banquetes@quartzhotel.mx",   nombre:"Michelle Velazco Gonzalez",    rol:"gte_banquetes" },
+  { id:"u6", correo:"coord.banquetes@quartzhotel.mx", nombre:"Martha Ascencio Salas",        rol:"banquetes" },
+  { id:"u7", correo:"banquetes4@quartzhotel.mx",      nombre:"Gloria Falcón Sosa",           rol:"banquetes" },
+  { id:"u8", correo:"banquetes5@quartzhotel.mx",      nombre:"Vanesa Yoselin Hernández Arriaga", rol:"banquetes" }
 ];
 
 /**
@@ -1065,16 +1071,26 @@ const USUARIOS_DEF = [
 const VISTAS = ["tablero","clientes","actividades","convenios","contratos",
                 "eventos","contratosbq","calendario","reportes",
                 "confirmaciones","formulario","ajustes"];
+/* Lo de banquetes es de banquetes. Gerencia de ventas ve toda la cartera y
+   todo el hospedaje, pero los eventos son de otro departamento: no le
+   aparecen, ni en sus pestañas ni en el calendario ni en los reportes. La
+   administración sí ve todo, que para eso es la administración. */
+const SOLO_BANQUETES = ["eventos","contratosbq"];
+
 const VISTAS_ROL = {
   admin:     VISTAS,
-  gerente:   VISTAS.filter(v => v !== "ajustes"),
-  // Ventas no necesita las pestañas de banquetes encima todo el día.
-  ejecutivo: VISTAS.filter(v => !["ajustes","eventos","contratosbq"].includes(v)),
+  gerente:   VISTAS.filter(v => !["ajustes", ...SOLO_BANQUETES].includes(v)),
+  ejecutivo: VISTAS.filter(v => !["ajustes", ...SOLO_BANQUETES].includes(v)),
   captura:   ["formulario"],
   // Banquetes comparte la cartera, pero el hospedaje no es asunto suyo.
   banquetes: ["tablero","clientes","actividades","eventos","contratosbq",
-              "calendario","reportes","formulario"]
+              "calendario","reportes","formulario"],
+  gte_banquetes: ["tablero","clientes","actividades","eventos","contratosbq",
+                  "calendario","reportes","formulario"]
 };
+
+/** ¿A esta persona le toca ver los eventos de banquetes? */
+const veBanquetes = () => puedeVer("eventos");
 const vistasDelRol = () => VISTAS_ROL[rolActual()] || VISTAS_ROL.ejecutivo;
 const puedeVer = v => vistasDelRol().includes(v);
 
@@ -1142,7 +1158,9 @@ function rolActual(){
 
 const miNombre    = () => { const u = usuarioActual(); return u ? u.nombre : ""; };
 const esAdmin     = () => rolActual() === "admin";
-const puedeVerTodo = () => ["admin","gerente"].includes(rolActual());
+/* Las dos gerencias ven el trabajo de todo el equipo; lo que cambia entre
+   ellas es qué pestañas alcanzan, no cuánto ven dentro de ellas. */
+const puedeVerTodo = () => ["admin","gerente","gte_banquetes"].includes(rolActual());
 
 /** ¿Este cliente es de quien está viendo la pantalla? */
 function esMio(c){
@@ -1226,6 +1244,18 @@ const entradaLista = new Promise(r => { terminarEntrada = r; setTimeout(r, 3500)
    ========================================================================== */
 
 let idCounter = 0;
+/**
+ * Lo que el último sanear() dejó fuera por no encontrarle cliente.
+ *
+ * Importa por una razón: con el servidor repartiendo por dueño, a alguien le
+ * puede llegar una actividad o un evento suyo colgando de un cliente que no
+ * alcanza a ver. Ese renglón se aparta —sin su cliente no sirve de nada—,
+ * pero NO es un borrado. Si la sincronización lo confundiera con uno, este
+ * equipo le daría de baja a todo el hotel un registro que ni siquiera puede
+ * abrir. Por eso se anotan aquí y se sacan de la lista de "ya sincronizado".
+ */
+let huerfanos = new Set();
+
 let state = cargar();
 let filtros = { q:"", ejecutivo:"" };
 let vista = "tablero";
@@ -1299,10 +1329,16 @@ function sanear(s){
     }
   };
   const ids = new Set(out.clientes.map(c => c.id));
-  out.actividades = out.actividades.filter(a => ids.has(a.clienteId));
-  out.convenios   = out.convenios.filter(c => ids.has(c.clienteId));
-  out.contratos   = out.contratos.filter(k => ids.has(k.clienteId));
-  out.eventos     = out.eventos.filter(e => ids.has(e.clienteId));
+  huerfanos = new Set();
+  const conCliente = (tipo, arr) => arr.filter(o => {
+    if (ids.has(o.clienteId)) return true;
+    huerfanos.add(tipo + ":" + o.id);
+    return false;
+  });
+  out.actividades = conCliente("actividades", out.actividades);
+  out.convenios   = conCliente("convenios",   out.convenios);
+  out.contratos   = conCliente("contratos",   out.contratos);
+  out.eventos     = conCliente("eventos",     out.eventos);
   // Un prospecto no cuelga de ningún cliente: si al que se pasó se borró, el
   // registro del evento se queda, nada más sin liga.
   out.prospectos.forEach(p => { if (p.clienteId && !ids.has(p.clienteId)) p.clienteId = ""; });
@@ -2098,6 +2134,16 @@ function marcarSincronizado(filas){
   sincronizado = new Map(filas.map(f => [f.id, JSON.stringify(f.datos)]));
 }
 
+/**
+ * Un renglón que llegó sin su cliente se cae del estado, y entonces la subida
+ * lo vería como desaparecido y mandaría la lápida. Sacarlo de "ya
+ * sincronizado" lo deja en paz: no se vuelve a subir, y tampoco se borra.
+ */
+function olvidarHuerfanos(){
+  for (const id of huerfanos) sincronizado.delete(id);
+  huerfanos = new Set();
+}
+
 /* ----- Bajada y subida ----- */
 
 async function bajar(desde){
@@ -2285,6 +2331,7 @@ async function sincronizar(){
       }
       if (aplicadas.length){
         state = estadoDesdeFilas([...porId.values()]);
+        olvidarHuerfanos();
         try{ localStorage.setItem(STORE, JSON.stringify(state)); }catch(e){}
         // Se dan por sincronizadas SÓLO las filas que acaban de llegar. Marcar
         // todas de golpe daba por subido lo que este equipo aún no manda, y el
@@ -2371,6 +2418,7 @@ async function primeraSincronizacion(){
   // sabe quién es quién: con roles.sql corrido trata a todos como ejecutivos
   // sin nombre, y entonces nadie ve un solo convenio.
   marcarSincronizado(remotas);
+  olvidarHuerfanos();
   // Salvo para quien no tiene permiso de escribir esas tablas: a un ejecutivo
   // el servidor le rebotaría el intento y le tumbaría la subida entera.
   if (!esAdmin())
@@ -8245,8 +8293,9 @@ function agenda(mes){
   };
 
   // Los eventos de banquetes, momento por momento: un mismo evento puede
-  // ocupar dos días (la boda y el after de la madrugada siguiente).
-  for (const e of state.eventos){
+  // ocupar dos días (la boda y el after de la madrugada siguiente). A quien no
+  // le toca ver banquetes tampoco se le asoman por aquí.
+  for (const e of veBanquetes() ? state.eventos : []){
     if (!eventoEsMio(e) || e.estado === "cancelado") continue;
     const vistos = new Set();
     for (const b of e.bloques){
@@ -8401,7 +8450,7 @@ function ingresos(){
   const [desde, hasta] = rangoReporte();
   const filas = [];
 
-  for (const e of state.eventos){
+  for (const e of veBanquetes() ? state.eventos : []){
     if (!eventoEsMio(e) || e.estado === "cancelado") continue;
     const f = fechaEvento(e);
     if (!f || f < desde || f > hasta) continue;
@@ -8418,7 +8467,7 @@ function ingresos(){
     });
   }
 
-  for (const k of state.contratos){
+  for (const k of puedeVer("contratos") ? state.contratos : []){
     if (!contratoEsMio(k)) continue;
     const f = k.fecha;
     if (!f || f < desde || f > hasta) continue;
@@ -8465,7 +8514,9 @@ function renderReportes(){
   const meses = [...porMes.entries()].sort();
   const tope = Math.max(1, ...meses.map(([, v]) => v.cerrado + v.mesa));
 
-  const porArea = a => ["Banquetes","Hospedaje"].map(x =>
+  const areas = [veBanquetes() ? "Banquetes" : null,
+                 puedeVer("contratos") ? "Hospedaje" : null].filter(Boolean);
+  const porArea = a => areas.map(x =>
     ({ area:x, monto: suma(a.filter(f => f.area === x)) }));
 
   cont.innerHTML = `
