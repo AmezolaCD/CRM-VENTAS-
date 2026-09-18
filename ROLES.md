@@ -166,6 +166,26 @@ lo primero deja de ver, pero su cuenta sigue viva.
 
 ---
 
+## Nadie entra sin contraseña
+
+Con la nube configurada, mientras no haya sesión **el CRM no está en la página**. No es que
+esté tapado por el recuadro de entrar: está quitado, igual que en el modo tableta. Así no se
+alcanza ni con el teclado, ni con un lector de pantalla, ni cerrando el recuadro.
+
+Eso cierra un hueco que existía: la pantalla de entrar traía un botón de *Trabajar sólo en
+este equipo* que la quitaba **sin contraseña**, y dejaba a la vista la cartera que ese equipo
+ya tenía guardada. Ese botón ya sólo aparece cuando no hay ninguna nube configurada, que es
+como se trabaja el archivo suelto.
+
+Lo único que queda abierto sin contraseña es **Configurar este equipo**, dentro de la misma
+pantalla: dos campos para apuntar la aplicación a otro servidor. No enseña un solo dato, y sin
+él una dirección mal escrita dejaría el equipo trabado para siempre, porque Ajustes está del
+otro lado del candado.
+
+Al **cerrar sesión** la cartera de quien se va se borra de ese navegador; el siguiente que
+entre la vuelve a bajar. Un equipo que se queda con la sesión caducada sí conserva su copia
+—para no perder capturas sin subir—, pero no la enseña hasta que alguien entre.
+
 ## Dos niveles de protección
 
 Esto es lo importante de entender.

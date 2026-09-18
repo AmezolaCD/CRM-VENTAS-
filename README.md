@@ -343,10 +343,20 @@ Un convenio externo cierra igual que uno firmado en pantalla: el cliente pasa a 
 queda su línea en la bitácora. Una cotización o un contrato externo caen en *Contratos* como
 **Aceptados**.
 
-> **Sobre el tamaño.** Cada archivo puede pesar hasta **2 MB** y se guarda junto con la
-> cartera, que en el navegador tiene un tope cercano a los 5 MB. Al acercarse, la aplicación
-> avisa y no deja seguir subiendo. Para archivar muchos escaneados de años pasados hace falta
-> guardarlos fuera de la fila —Supabase Storage—, que todavía no está montado.
+#### Dónde se guardan los escaneados
+
+Con el **almacén del proyecto** montado —se corre `archivos.sql` una vez— el archivo va a un
+depósito aparte de Supabase y del documento cuelga nada más la ruta. Caben hasta **20 MB por
+archivo** y 1 GB en total en el plan gratuito, y el navegador deja de cargar con ellos.
+
+Sin montar, el escaneado se guarda **dentro del propio documento**. Así empezó, y funciona,
+pero el navegador corta cerca de los **5 MB**: con tres o cuatro escaneados se llena y la
+aplicación avisa que ya no cabe. El límite por archivo baja entonces a 2 MB.
+
+Si ya había escaneados guardados así, **no hay que volver a subirlos**: *Ajustes → Nube y
+equipo → Mover los escaneados al almacén* los muda de uno en uno y libera el navegador de todo
+el equipo. Si se corta a la mitad, lo que ya subió quedó bien y volver a darle continúa donde
+se quedó.
 
 ### Banquetes: eventos, contratos, calendario y reportes
 

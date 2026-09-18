@@ -234,6 +234,52 @@ Ojo con dos cosas que engañan: el correo **no distingue mayúsculas**, pero la 
 
 ---
 
+## El almacén de escaneados
+
+Los documentos que se suben ya firmados —convenios, contratos, cotizaciones de
+banquetes— se guardaban **dentro del propio registro**. Eso llega bien a la nube,
+pero también se queda en el navegador de cada equipo, y ahí el tope son unos
+**5 MB**: con tres escaneados ya no cabe nada más.
+
+La solución es `archivos.sql`, que se corre **una vez** en el SQL Editor igual que
+los demás. Crea un depósito privado llamado `escaneados` y sus reglas. A partir de
+ahí:
+
+- Los archivos nuevos van al depósito y del registro cuelga nada más la ruta.
+- El límite por archivo sube de 2 MB a **20 MB**, y el total a 1 GB en el plan
+  gratuito.
+- El depósito es **privado**: el escaneado se baja con la sesión de quien pregunta,
+  no con una liga suelta que cualquiera pudiera abrir.
+
+Después de correrlo, en el CRM: **Ajustes → Nube y equipo → Mover los escaneados al
+almacén**. Ese botón sale sólo si queda alguno por mudar, y dice cuántos son. Sube
+uno por uno guardando después de cada uno, así que si se corta, lo que ya subió
+quedó bien.
+
+**Sin correrlo el CRM funciona igual**: los escaneados se siguen guardando como
+hasta ahora, con su aviso de que ya casi no cabe.
+
+## La liga del hotel, dentro de la aplicación
+
+Arriba de todo en `index.html` hay dos líneas:
+
+```html
+<script>
+window.CORE_NUBE = { url:"", anon:"" };
+</script>
+```
+
+Llenarlas hace que **cualquier equipo que abra la liga caiga directo en la pantalla
+de contraseña**, sin configurar nada y sin ver un solo dato. Vacías, cada equipo se
+configura con su liga de alta, como hasta ahora.
+
+La llave `anon` está hecha para ser pública —viaja al navegador de cualquiera que
+abra la página— y por sí sola no alcanza ni una fila: quien manda es la sesión y
+las reglas de `roles.sql`. Aun así, esto se llena **únicamente con el repositorio en
+privado**, porque la dirección del proyecto no tiene por qué andar publicada.
+
+Nunca, en ningún caso, la llave `service_role`.
+
 ## Lo que queda pendiente
 
 - **Permisos por persona.** Hoy todos pueden todo. Si más adelante se quiere que

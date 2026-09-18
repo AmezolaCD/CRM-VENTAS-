@@ -343,6 +343,12 @@
      —el teclado y el lector de pantalla seguían llegando a las pestañas de
      atrás—, y lo que no está dibujado no se alcanza de ninguna manera. */
   body.con-kiosco > header, body.con-kiosco > main{display:none !important}
+  /* Lo mismo con la pantalla de entrar. Tapar el CRM con un recuadro encima no
+     es proteger nada: la cartera seguía dibujada debajo, al alcance del teclado,
+     del lector de pantalla y de cerrar el recuadro. Mientras no haya sesión, la
+     aplicación no está en la página. */
+  body.sin-sesion > header, body.sin-sesion > main{display:none !important}
+  body.sin-sesion #bIA, body.sin-sesion #panelIA{display:none !important}
   /* La pantalla de departamento: pocas cosas y grandes, que es lo único que
      hay que hacer en ella. */
   .dep-grid{display:grid; gap:12px; grid-template-columns:1fr 1fr; margin-top:20px}
@@ -556,6 +562,27 @@
     .doc-body{padding:18px}
   }
 </style>
+<!-- ==========================================================================
+     LA NUBE DEL HOTEL
+
+     Las dos líneas que hay que llenar para que el CRM no se configure equipo
+     por equipo. Con esto puesto, quien abra la liga cae directo en la pantalla
+     de contraseña y no ve absolutamente nada hasta entrar.
+
+       url : la dirección del proyecto de Supabase
+       anon: la llave pública (anon / publishable), NUNCA la de service_role
+
+     La llave 'anon' está hecha para viajar al navegador de cualquiera que abra
+     la página, y por sí sola no alcanza ni una fila: quien manda es la sesión
+     y las reglas de roles.sql. Aun así, esto se llena únicamente con el
+     repositorio en privado.
+
+     Vacío, la aplicación se comporta como siempre: cada equipo se configura con
+     su liga de alta, o trabaja suelto en modo local.
+     ========================================================================== -->
+<script>
+window.CORE_NUBE = { url:"", anon:"" };
+</script>
 </head>
 <body>
 
@@ -682,7 +709,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.18-44";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.18-45";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1689,11 +1716,28 @@ function saneaEnvio(e){
 }
 
 /** Constancia de que el cliente lo firmó en papel y alguien subió el escaneado. */
+/**
+ * La constancia de un documento firmado en papel.
+ *
+ * El escaneado puede estar en dos lugares, y por eso hay dos campos:
+ *
+ *   ruta: vive en el almacén del proyecto (Supabase Storage). Es lo normal.
+ *   pdf : viene incrustado en el propio registro, en base64. Así empezó, y
+ *         así se quedaron los que se subieron antes; cabe mientras sean pocos,
+ *         porque el navegador corta cerca de los 5 MB. Se pueden mudar desde
+ *         Ajustes sin perder nada.
+ */
 function saneaManual(m){
   if (!m || !m.fecha) return null;
   return { fecha:m.fecha, quien:m.quien || "", archivo:m.archivo || "",
-           pdf: typeof m.pdf === "string" ? m.pdf : "" };
+           pdf: typeof m.pdf === "string" ? m.pdf : "",
+           ruta: typeof m.ruta === "string" ? m.ruta : "",
+           tam: Number(m.tam) || 0,
+           tipoMime: m.tipoMime || "" };
 }
+
+/** ¿Este documento trae escaneado, esté donde esté? */
+const traeEscaneo = m => !!(m && (m.pdf || m.ruta));
 
 /** Clave del enlace de firma: larga y al azar, para que no se pueda adivinar. */
 function nuevoToken(){
@@ -1785,6 +1829,21 @@ const normalizaUrlNube = u =>
     .replace(/\/+$/, "");
 const correoSesion = () => (nube.sesion && nube.sesion.user && nube.sesion.user.email) || "";
 
+/**
+ * La nube del hotel, para que un equipo nuevo no tenga que configurarse.
+ *
+ * Con esto puesto, quien abra la liga cae directo en la pantalla de contraseña:
+ * la aplicación ya sabe con qué servidor hablar y no enseña absolutamente nada
+ * hasta que alguien entre. Sin esto, un equipo sin configurar sigue abriendo en
+ * modo local, que es como se trabaja el archivo suelto.
+ *
+ * La llave 'anon' está hecha para ser pública —viaja al navegador de cualquiera
+ * que abra la página— y por sí sola no alcanza nada: quien manda es la sesión
+ * y las reglas de roles.sql. Aun así, esto sólo se llena con el repositorio en
+ * privado.
+ */
+const NUBE_DEF = Object.assign({ url:"", anon:"" }, window.CORE_NUBE || {});
+
 function cargarNube(){
   try{
     const c = JSON.parse(localStorage.getItem(NUBE_CFG) || "{}");
@@ -1792,6 +1851,13 @@ function cargarNube(){
     nube.anon = c.anon || "";
     nube.enlazado = !!c.enlazado;
   }catch(e){}
+  // Equipo nuevo: adopta la nube del hotel sin preguntar nada.
+  if (!nube.url && !nube.anon && NUBE_DEF.url && NUBE_DEF.anon){
+    nube.url = normalizaUrlNube(NUBE_DEF.url);
+    nube.anon = NUBE_DEF.anon;
+    nube.enlazado = false;
+    guardarNubeCfg();
+  }
   try{ nube.sesion = JSON.parse(localStorage.getItem(NUBE_SESION) || "null"); }catch(e){}
 }
 
@@ -2844,6 +2910,9 @@ function pintarDepto(){
 
 function pantallaEntrada(){
   if (document.getElementById("entrada")) return;
+  // Antes que nada: quitar el CRM de la página. Si se pintara primero el
+  // recuadro, la cartera alcanzaría a verse un instante detrás.
+  if (nube.url && nube.anon) document.body.classList.add("sin-sesion");
   const ov = document.createElement("div");
   ov.id = "entrada";
   ov.className = "overlay";
@@ -2865,8 +2934,25 @@ function pantallaEntrada(){
           <button class="btn primary" type="submit" id="bEntrar"
             style="width:100%;margin-top:16px;padding:10px">Entrar</button>
         </form>
-        <p class="hint" style="margin:16px 0 0">
-          <button class="btn sm" id="bLocalSolo" type="button">Trabajar sólo en este equipo</button></p>
+        ${nube.url && nube.anon ? `<p class="hint" style="margin:16px 0 0">
+          Si no recuerda su contraseña, pídale a sistemas que se la reponga.</p>`
+        : `<p class="hint" style="margin:16px 0 0">
+          <button class="btn sm" id="bLocalSolo" type="button">Trabajar sólo en este equipo</button></p>`}
+        <details id="cfgEquipo" style="margin-top:14px;text-align:left">
+          <summary class="hint" style="cursor:pointer">Configurar este equipo</summary>
+          <p class="hint" style="margin:8px 0">Esto no abre el CRM: sólo apunta este equipo al
+            servidor del hotel. Sirve cuando la dirección quedó mal escrita y por eso no deja
+            entrar.</p>
+          <label class="lbl">Dirección del proyecto</label>
+          <input class="field" id="cfgUrl" value="${esc(nube.url)}"
+            placeholder="https://abcdefgh.supabase.co" style="width:100%;margin-bottom:10px"
+            autocomplete="off" spellcheck="false">
+          <label class="lbl">Llave pública (anon)</label>
+          <input class="field" id="cfgAnon" value="${esc(nube.anon)}"
+            style="width:100%" autocomplete="off" spellcheck="false">
+          <button class="btn" type="button" id="bCfgGuardar"
+            style="width:100%;margin-top:10px">Guardar y volver a pedir la contraseña</button>
+        </details>
       </div>
     </div>`;
   document.body.appendChild(ov);
@@ -2883,21 +2969,73 @@ function pantallaEntrada(){
       await primeraSincronizacion();
       nube.estado = "listo"; pintarNube();
       arrancarSondeo();
-      ov.remove();
+      cerrarEntrada();
       render();
     }catch(ex){
       err.innerHTML = `<div class="errbox">${esc(ex.message)}</div>`;
       b.disabled = false; b.textContent = "Entrar";
     }
   };
-  ov.querySelector("#bLocalSolo").onclick = () => {
-    if (!confirm("Trabajarás sólo con los datos de este equipo; no se comparten con nadie.\n\n¿Continuar?")) return;
-    nube.estado = "local"; pintarNube(); ov.remove();
+  // El botón de "sólo en este equipo" existe nada más cuando no hay nube
+  // configurada. Con nube, era una salida de emergencia sin contraseña: se
+  // apretaba, se quitaba el recuadro y quedaba a la vista la cartera que este
+  // equipo ya tenía guardada. Eso es justo lo que no debe poder hacerse.
+  // La única puerta que queda abierta sin contraseña: apuntar el equipo a otro
+  // servidor. No enseña un solo dato —y sin ella, una dirección mal escrita
+  // dejaba el equipo trabado para siempre, porque Ajustes está del otro lado
+  // del candado.
+  ov.querySelector("#bCfgGuardar").onclick = () => {
+    const url  = normalizaUrlNube(ov.querySelector("#cfgUrl").value);
+    const anon = ov.querySelector("#cfgAnon").value.trim();
+    const err  = ov.querySelector("#errEntrar");
+    if (!url || !anon){
+      err.innerHTML = `<div class="errbox">Hacen falta la dirección y la llave.</div>`;
+      return;
+    }
+    nube.url = url; nube.anon = anon; nube.enlazado = false;
+    guardarNubeCfg();
+    ov.remove();
+    pantallaEntrada();
   };
+
+  const bl = ov.querySelector("#bLocalSolo");
+  if (bl) bl.onclick = () => {
+    if (!confirm("Trabajarás sólo con los datos de este equipo; no se comparten con nadie.\n\n¿Continuar?")) return;
+    nube.estado = "local"; cerrarEntrada(); pintarNube();
+  };
+}
+
+/**
+ * El candado: mientras la aplicación sepa a qué nube conectarse y no haya
+ * sesión, el CRM no está en la página.
+ *
+ * Se llama al poner la pantalla de entrar y al quitarla, y también desde
+ * render(), para que no haya manera de dejarlo abierto por descuido.
+ */
+function candado(){
+  // El cliente que viene a firmar no entra al CRM: su pantalla es otra cosa y
+  // no tiene por qué pedirle una contraseña que no tiene.
+  if (enlaceDeFirma()) return false;
+  const cerrado = !!(nube.url && nube.anon) && !nube.sesion;
+  document.body.classList.toggle("sin-sesion", cerrado);
+  if (cerrado && !document.getElementById("entrada")) pantallaEntrada();
+  return cerrado;
+}
+
+function cerrarEntrada(){
+  const ov = document.getElementById("entrada");
+  if (ov) ov.remove();
+  document.body.classList.remove("sin-sesion");
 }
 
 async function arrancarNube(){
   cargarNube();
+  // El candado se echa AQUÍ, antes de la animación de entrada y antes de
+  // cualquier espera. Si se dejara para después, un equipo con cartera
+  // guardada y sin sesión la enseñaría unos segundos —y con "reducir
+  // movimiento" no hay animación que la tape—.
+  if (nube.url && nube.anon && !nube.sesion && !enlaceDeFirma())
+    document.body.classList.add("sin-sesion");
   const invitacion = leerInvitacion();   // se limpia la barra de direcciones ya
   pintarNube();
 
@@ -3393,6 +3531,9 @@ function clientesVisibles(){
    ========================================================================== */
 
 function render(){
+  // Nada de lo que sigue se ve si no hay sesión; se dibuja igual para que al
+  // entrar esté listo, pero el candado lo deja fuera de la página.
+  candado();
   ajustarDepto();
   // Cada papel ve las suyas. Los Ajustes tocan las tarifas públicas, los textos
   // de los convenios y la conexión de todo el equipo: son del administrador.
@@ -4922,6 +5063,7 @@ function renderAjustes(){
         <button class="btn" id="bNbFirmas">Buscar firmas de clientes</button>
         <button class="btn" id="bNbLiga">Copiar liga para otro equipo</button>
         <button class="btn" id="bNbTodo">Volver a subir todo</button>
+        <button class="btn" id="bNbArchivos">Mover los escaneados al almacén</button>
         <button class="btn" id="bNbEntrar">Entrar con otra cuenta</button>
         <button class="btn danger" id="bNbSalir">Cerrar sesión</button>
         <button class="btn danger" id="bNbQuitar">Desconectar este equipo</button></p>
@@ -5278,6 +5420,11 @@ function renderAjustes(){
     p.querySelector("#bNbEntrar").style.display = (nube.url && nube.anon) ? "" : "none";
     p.querySelector("#bNbSalir").style.display  = nube.sesion ? "" : "none";
     p.querySelector("#bNbTodo").style.display   = nube.sesion ? "" : "none";
+    // Sólo se ofrece si hay algo que mudar: si no, es un botón que no hace nada.
+    const porMudar = escaneosIncrustados().length;
+    const bArch = p.querySelector("#bNbArchivos");
+    bArch.style.display = (nube.sesion && porMudar) ? "" : "none";
+    bArch.textContent = `Mover ${porMudar} escaneado(s) al almacén`;
     p.querySelector("#bNbLiga").style.display   = (nube.url && nube.anon) ? "" : "none";
     p.querySelector("#bNbFirmas").style.display = nube.sesion ? "" : "none";
     p.querySelector("#bNbQuitar").style.display = (nube.url || nube.anon) ? "" : "none";
@@ -5349,6 +5496,43 @@ function renderAjustes(){
               "En los demás equipos aparecen en menos de un minuto, o al recargar.");
       }catch(ex){
         alert("No se pudo subir: " + ex.message);
+      }finally{ b.disabled = false; b.textContent = antes; renderAjustes(); }
+    };
+
+    /**
+     * Mudar al almacén lo que se subió antes de que existiera.
+     *
+     * Es lo que le devuelve el espacio al navegador de todo el equipo: cada
+     * escaneado que sale del registro deja de viajar y de guardarse en cada
+     * máquina. Los documentos no cambian; lo único que cambia es dónde vive el
+     * archivo.
+     */
+    p.querySelector("#bNbArchivos").onclick = async e => {
+      if (!nubeActiva()){ alert("Primero hay que entrar a la nube."); return; }
+      const pend = escaneosIncrustados();
+      const mb = pend.reduce((a, x) => a + (x.m.pdf || "").length, 0) / 1024 / 1024;
+      if (!confirm(`Se subirán al almacén del proyecto ${pend.length} escaneado(s), ` +
+                   `unos ${mb.toFixed(1)} MB que hoy ocupan lugar en el navegador de cada ` +
+                   "equipo.\n\nLos documentos no cambian: lo único que cambia es dónde se " +
+                   "guarda el archivo.\n\n¿Continuar?")) return;
+
+      const b = e.currentTarget, antes = b.textContent;
+      b.disabled = true;
+      try{
+        const hechos = await mudarEscaneos((n, total) => {
+          b.textContent = `Subiendo ${n + 1} de ${total}…`;
+        });
+        await sincronizar().catch(() => {});
+        alert(`Listo: se mudaron ${hechos} escaneado(s).\n\n` +
+              "El navegador de este equipo quedó libre, y el de los demás en cuanto " +
+              "se sincronicen.");
+      }catch(ex){
+        alert(nube.sinDeposito
+          ? "El almacén del proyecto todavía no existe.\n\n" +
+            "Hay que correr archivos.sql una vez en el SQL Editor de Supabase. " +
+            "Lo que alcanzó a subirse antes del error se quedó bien guardado."
+          : "No se pudieron mudar todos: " + ex.message +
+            "\n\nLo que ya subió se quedó bien; vuelve a darle para continuar.");
       }finally{ b.disabled = false; b.textContent = antes; renderAjustes(); }
     };
 
@@ -7036,7 +7220,7 @@ function verConvenio(id, alCerrar, pedirFirma){
           <button class="btn ok" id="bF2">Registrar firma del cliente</button>` : ""}
         ${v.estado === "firmado_cliente" ? `<span class="hint">Convenio cerrado. El cliente pasó a <b>Ganado</b>.${
           v.firmaManual ? ` Firmado en papel.` : ""}</span>
-          ${v.firmaManual && v.firmaManual.pdf ? `<button class="btn sm" id="bVerEscaneo">Ver el escaneado</button>` : ""}` : ""}
+          ${traeEscaneo(v.firmaManual) ? `<button class="btn sm" id="bVerEscaneo">Ver el escaneado</button>` : ""}` : ""}
       </div>
     </div>`);
 
@@ -7155,18 +7339,20 @@ function subirConvenioFirmado(v, alTerminar){
   ov.querySelector("#bOkPdf").onclick = () => {
     const f = ov.querySelector("#fPdfFirmado").files[0];
     const err = ov.querySelector("#errPdf");
+    const b = ov.querySelector("#bOkPdf");
     if (!f){ err.innerHTML = `<div class="errbox">Elige el archivo escaneado.</div>`; return; }
-    const MAX = 2 * 1024 * 1024;
+    const MAX = hayDeposito() ? MAX_ARCHIVO_NUBE : MAX_ARCHIVO;
     if (f.size > MAX){
       err.innerHTML = `<div class="errbox">Pesa ${Math.round(f.size/1024/1024*10)/10} MB y el límite
-        son 2 MB. Vuelve a escanearlo en blanco y negro o a menor resolución, o toma una foto.</div>`;
+        son ${Math.round(MAX/1024/1024)} MB. Vuelve a escanearlo en blanco y negro o a menor
+        resolución, o toma una foto.</div>`;
       return;
     }
-    const r = new FileReader();
-    r.onload = () => {
-      v.firmaManual = saneaManual({ fecha:new Date().toISOString(),
-        quien: ov.querySelector("#fQuienRecibe").value.trim(),
-        archivo: f.name, pdf: String(r.result) });
+    b.disabled = true; b.textContent = "Subiendo…";
+    const suelta = () => { b.disabled = false; b.textContent = "Subir y cerrar el convenio"; };
+
+    const cerrar = manual => {
+      v.firmaManual = manual;
       // Sin firma trazada: la constancia es el archivo.
       cerrarConvenio(v, null, `Firmado en papel. Se subió el archivo "${f.name}".`,
         v.firmaManual.quien);
@@ -7175,8 +7361,35 @@ function subirConvenioFirmado(v, alTerminar){
       ov.remove();
       if (alTerminar) alTerminar();
     };
-    r.onerror = () => { err.innerHTML = `<div class="errbox">No se pudo leer el archivo.</div>`; };
-    r.readAsDataURL(f);
+    const quien = () => ov.querySelector("#fQuienRecibe").value.trim();
+
+    const incrustar = () => {
+      if (pesoGuardado() + f.size * 1.4 > TOPE_TOTAL){
+        suelta();
+        err.innerHTML = `<div class="errbox"><b>Ya casi no cabe en este navegador.</b>
+          Avísale a sistemas para que monte el almacén del proyecto
+          (<code>archivos.sql</code>).</div>`;
+        return;
+      }
+      const r = new FileReader();
+      r.onload = () => cerrar(saneaManual({ fecha:new Date().toISOString(), quien: quien(),
+        archivo: f.name, pdf: String(r.result), tam: f.size, tipoMime: f.type }));
+      r.onerror = () => { suelta();
+        err.innerHTML = `<div class="errbox">No se pudo leer el archivo.</div>`; };
+      r.readAsDataURL(f);
+    };
+
+    if (hayDeposito()){
+      subirEscaneo(f)
+        .then(ruta => cerrar(saneaManual({ fecha:new Date().toISOString(), quien: quien(),
+          archivo: f.name, ruta, tam: f.size, tipoMime: f.type })))
+        .catch(e => {
+          if (nube.sinDeposito) return incrustar();
+          suelta();
+          err.innerHTML = `<div class="errbox">No se pudo subir el archivo al almacén.<br>
+            <span class="hint">${esc(e.message)}</span></div>`;
+        });
+    } else incrustar();
   };
 }
 
@@ -7202,8 +7415,131 @@ const TIPOS_EXTERNO = [
 function pesoGuardado(){
   try{ return (localStorage.getItem(STORE) || "").length; }catch(e){ return 0; }
 }
-const MAX_ARCHIVO = 2 * 1024 * 1024;      // por documento
+/* Con almacén en la nube el archivo ni toca el navegador, así que cabe uno de
+   verdad: un escaneado a color de varias hojas anda por los 8 MB. Sin almacén
+   se queda el límite viejo, que no es capricho —es lo que aguanta el navegador—. */
+const MAX_ARCHIVO      = 2 * 1024 * 1024;    // incrustado, por documento
+const MAX_ARCHIVO_NUBE = 20 * 1024 * 1024;   // en el almacén del proyecto
 const TOPE_TOTAL  = 4.2 * 1024 * 1024;    // el navegador corta cerca de 5 MB
+
+/* ==========================================================================
+   EL ALMACÉN DE ESCANEADOS
+
+   Un convenio escaneado pesa lo que pesa, y meterlo dentro del propio registro
+   llenaba el navegador con tres documentos. Aquí los archivos van aparte, al
+   almacén del proyecto, y del registro cuelga nada más la ruta.
+
+   El depósito es privado: se lee con la sesión de quien pregunta, igual que
+   todo lo demás. Se crea corriendo archivos.sql una sola vez.
+   ========================================================================== */
+
+const DEPOSITO = "escaneados";
+
+/** ¿Hay a dónde subirlos? Sin nube o sin sesión, no. */
+const hayDeposito = () => nubeActiva() && !nube.sinDeposito;
+
+/** Nombre de archivo limpio y único, para que dos escaneados no se pisen. */
+function rutaEscaneo(nombre){
+  const ext = (String(nombre).match(/\.([A-Za-z0-9]{1,8})$/) || [,"bin"])[1].toLowerCase();
+  const b = new Uint8Array(9);
+  crypto.getRandomValues(b);
+  const azar = [...b].map(x => x.toString(36).padStart(2,"0")).join("").slice(0, 14);
+  return `${hoyISO().slice(0,7)}/${azar}.${ext}`;
+}
+
+/**
+ * Sube el archivo al almacén y devuelve su ruta.
+ *
+ * Si el depósito no existe todavía —nadie ha corrido archivos.sql— se anota y
+ * no se vuelve a intentar en esta sesión: el escaneado se guarda incrustado,
+ * como antes, para no dejar a nadie sin poder registrar su documento.
+ */
+async function subirEscaneo(archivo){
+  const ruta = rutaEscaneo(archivo.name);
+  const r = await fetch(`${nube.url}/storage/v1/object/${DEPOSITO}/${ruta}`, {
+    method: "POST",
+    headers: {
+      apikey: nube.anon,
+      Authorization: "Bearer " + (nube.sesion && nube.sesion.access_token),
+      "Content-Type": archivo.type || "application/octet-stream",
+      "x-upsert": "false"
+    },
+    body: archivo
+  });
+  if (!r.ok){
+    const detalle = await r.text().catch(() => "");
+    if (r.status === 404 || /bucket not found/i.test(detalle)) nube.sinDeposito = true;
+    throw new Error(`${r.status} · ${detalle || "sin detalle"}`);
+  }
+  return ruta;
+}
+
+/** Trae el archivo del almacén como una dirección que el navegador pueda abrir. */
+async function bajarEscaneo(ruta){
+  const r = await fetch(`${nube.url}/storage/v1/object/${DEPOSITO}/${ruta}`, {
+    headers: {
+      apikey: nube.anon,
+      Authorization: "Bearer " + (nube.sesion && nube.sesion.access_token)
+    }
+  });
+  if (!r.ok) throw new Error(`${r.status} · ${await r.text().catch(() => "")}`);
+  return URL.createObjectURL(await r.blob());
+}
+
+/**
+ * Todos los documentos que traen un escaneado, vengan de donde vengan.
+ *
+ * Se recorre de una sola manera para que mudarlos, contarlos y pesarlos usen
+ * la misma lista y no se le olvide a nadie una colección.
+ */
+function documentosConEscaneo(){
+  const fuera = [];
+  for (const col of ["convenios","contratos","eventos"])
+    for (const d of state[col])
+      if (traeEscaneo(d.firmaManual)) fuera.push({ col, doc:d, m:d.firmaManual });
+  return fuera;
+}
+
+/** Los que todavía pesan dentro del navegador. */
+const escaneosIncrustados = () => documentosConEscaneo().filter(x => x.m.pdf);
+
+/**
+ * Sube al almacén los escaneados que estén incrustados y los saca del registro.
+ *
+ * Es la operación que libera el navegador. Se hace de uno en uno y guardando
+ * después de cada uno: si se corta a la mitad, lo que ya subió quedó bien y
+ * volver a darle continúa donde se quedó.
+ */
+async function mudarEscaneos(avisa){
+  const pendientes = escaneosIncrustados();
+  let hechos = 0;
+  for (const { doc, m } of pendientes){
+    if (avisa) avisa(hechos, pendientes.length);
+    const blob = await (await fetch(m.pdf)).blob();
+    const archivo = new File([blob], m.archivo || "escaneado",
+                             { type: m.tipoMime || blob.type });
+    const ruta = await subirEscaneo(archivo);
+    doc.firmaManual = saneaManual(Object.assign({}, m,
+      { ruta, pdf:"", tam: m.tam || blob.size, tipoMime: m.tipoMime || blob.type }));
+    doc.updatedAt = new Date().toISOString();
+    guardar();
+    hechos++;
+  }
+  if (avisa) avisa(hechos, pendientes.length);
+  return hechos;
+}
+
+/** Borra un escaneado del almacén. Que falle no es grave: queda huérfano y ya. */
+async function borrarEscaneo(ruta){
+  if (!ruta || !hayDeposito()) return;
+  try{
+    await fetch(`${nube.url}/storage/v1/object/${DEPOSITO}/${ruta}`, {
+      method: "DELETE",
+      headers: { apikey: nube.anon,
+                 Authorization: "Bearer " + (nube.sesion && nube.sesion.access_token) }
+    });
+  }catch(e){ console.warn("No se pudo borrar el escaneado:", e.message); }
+}
 
 function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
   const hoy = hoyISO();
@@ -7214,7 +7550,11 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
       <div class="modal-body">
         <div class="note">Para lo que <b>ya andaba firmado</b> antes de usar el CRM, o lo
           que se hizo en Word. Se guarda el escaneado tal cual —no se vuelve a armar el
-          documento— y queda en la lista que le toca, marcado como <b>externo</b>.</div>
+          documento— y queda en la lista que le toca, marcado como <b>externo</b>.
+          ${hayDeposito()
+            ? ` El archivo se guarda en el almacén del proyecto: hasta
+                ${Math.round(MAX_ARCHIVO_NUBE/1024/1024)} MB por documento.`
+            : ` Hasta ${Math.round(MAX_ARCHIVO/1024/1024)} MB por documento.`}</div>
         <div id="exErr"></div>
         <div class="grid">
           <div><label class="lbl">¿Qué es?</label>
@@ -7278,6 +7618,15 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
   const falla = html => { err.innerHTML = `<div class="errbox">${html}</div>`;
                           err.scrollIntoView({ block:"center", behavior:"smooth" }); };
 
+  // Se avisa al abrir, no al final. Enterarse de que no cabe después de
+  // escanear el papel, escoger el archivo y llenar la ficha es enterarse tarde.
+  if (!hayDeposito() && pesoGuardado() > TOPE_TOTAL * 0.7)
+    err.innerHTML = `<div class="errbox"><b>Este equipo ya casi no tiene lugar.</b>
+      Sin el almacén del proyecto, los escaneados se guardan dentro del navegador y ahí
+      el tope son unos 5 MB —con tres o cuatro documentos se llena—.
+      <br>Avísale a sistemas: se monta una vez (<code>archivos.sql</code>) y a partir de
+      ahí los archivos dejan de ocupar lugar aquí.</div>`;
+
   ov.querySelector("#bOkEx").onclick = () => {
     const tipo = ov.querySelector("#exTipo").value;
     const cid  = ov.querySelector("#exCli").value;
@@ -7285,26 +7634,65 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
 
     if (!cid) return falla("Selecciona el cliente.");
     if (!f)   return falla("Elige el archivo escaneado.");
-    if (f.size > MAX_ARCHIVO)
-      return falla(`El archivo pesa ${(f.size/1024/1024).toFixed(1)} MB y el límite son 2 MB.
+    const tope = hayDeposito() ? MAX_ARCHIVO_NUBE : MAX_ARCHIVO;
+    if (f.size > tope)
+      return falla(`El archivo pesa ${(f.size/1024/1024).toFixed(1)} MB y el límite son
+        ${Math.round(tope/1024/1024)} MB.
         Vuelve a escanearlo en blanco y negro o a menor resolución, o toma una foto.`);
-    if (pesoGuardado() + f.size * 1.4 > TOPE_TOTAL)
-      return falla(`<b>Ya casi no cabe en este navegador.</b> Los archivos escaneados se
-        guardan junto con la cartera y el navegador corta cerca de los 5 MB.
-        Saca un respaldo (Exportar → Respaldo completo) y avísale a sistemas antes de
-        seguir subiendo escaneados.`);
+    if (!hayDeposito() && pesoGuardado() + f.size * 1.4 > TOPE_TOTAL)
+      return falla(`<b>Ya casi no cabe en este navegador.</b> Sin el almacén del proyecto los
+        archivos escaneados se guardan junto con la cartera, y el navegador corta cerca de
+        los 5 MB. Avísale a sistemas para que monte el almacén (<code>archivos.sql</code>);
+        a partir de ahí dejan de ocupar lugar aquí.`);
 
-    const r = new FileReader();
-    r.onerror = () => falla("No se pudo leer el archivo.");
-    r.onload = () => {
+    const bOk = ov.querySelector("#bOkEx");
+    bOk.disabled = true; bOk.textContent = "Guardando…";
+    const listo = manual => { seguir(manual); };
+    const seRindio = e => {
+      bOk.disabled = false; bOk.textContent = "Registrar";
+      falla(`No se pudo guardar el archivo en el almacén del proyecto.<br>
+        <span class="hint">${esc(e.message)}</span>`);
+    };
+
+    // Al almacén si lo hay; si no —o si el depósito todavía no existe—, al
+    // propio registro, como se hacía antes.
+    if (hayDeposito()){
+      subirEscaneo(f)
+        .then(ruta => listo(saneaManual({ fecha:new Date().toISOString(), quien:quienEs(),
+          archivo:f.name, ruta, tam:f.size, tipoMime:f.type })))
+        .catch(e => {
+          if (!nube.sinDeposito) return seRindio(e);
+          // El depósito no existe: se sigue por el camino viejo sin molestar.
+          console.warn("Sin almacén de escaneados:", e.message);
+          incrustado();
+        });
+    } else incrustado();
+
+    function quienEs(){
+      return ov.querySelector('[name="exEje"]').value.trim() || miNombre();
+    }
+
+    function incrustado(){
+      if (pesoGuardado() + f.size * 1.4 > TOPE_TOTAL){
+        bOk.disabled = false; bOk.textContent = "Registrar";
+        return falla(`<b>Ya casi no cabe en este navegador.</b> Avísale a sistemas para que
+          monte el almacén del proyecto (<code>archivos.sql</code>).`);
+      }
+      const r = new FileReader();
+      r.onerror = () => { bOk.disabled = false; bOk.textContent = "Registrar";
+                          falla("No se pudo leer el archivo."); };
+      r.onload = () => listo(saneaManual({ fecha:new Date().toISOString(), quien:quienEs(),
+        archivo:f.name, pdf:String(r.result), tam:f.size, tipoMime:f.type }));
+      r.readAsDataURL(f);
+    }
+
+    function seguir(manual){
       const c = cliente(cid);
       const quien = ov.querySelector('[name="exEje"]').value.trim() || miNombre();
       const folio = ov.querySelector("#exFolio").value.trim();
       const fecha = ov.querySelector("#exFecha").value || hoy;
       const vig   = ov.querySelector("#exVig").value;
       const notas = ov.querySelector("#exNotas").value.trim();
-      const manual = saneaManual({ fecha:new Date().toISOString(), quien,
-                                   archivo:f.name, pdf:String(r.result) });
       const dest = c ? { empresa:c.empresa, contacto:c.contacto, ubicacion:c.ubicacion,
                          telefono:c.telefono, email:c.email } : null;
       const nombre = TIPOS_EXTERNO.find(t => t.id === tipo).name;
@@ -7349,8 +7737,7 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
       vista = TIPOS_EXTERNO.find(t => t.id === tipo).donde;
       render();
       if (alTerminar) alTerminar();
-    };
-    r.readAsDataURL(f);
+    }
   };
 }
 
@@ -7382,6 +7769,9 @@ function fichaExterna(titulo, etiqueta, filas, manual, alBorrar){
   ov.querySelector("#bVerEsc").onclick = () => verEscaneado(manual, titulo);
   ov.querySelector("#bDelEx").onclick = () => {
     if (!confirm("¿Eliminar este documento del CRM?\n\nSe borra también el archivo subido.")) return;
+    // El archivo del almacén se va con el registro; si no, quedaría ocupando
+    // lugar en el proyecto sin que nadie pueda volver a abrirlo.
+    if (manual && manual.ruta) borrarEscaneo(manual.ruta);
     alBorrar(); ov.remove();
   };
   return ov;
@@ -7421,30 +7811,61 @@ function verContratoExterno(k, alCerrar){
 
 /** Enseña el escaneado que se subió, sin sacarlo de la aplicación. */
 function verEscaneado(manual, titulo){
-  if (!manual || !manual.pdf){ alert("Este documento no trae archivo."); return; }
-  const esImagen = /^data:image\//.test(manual.pdf);
-  modal(`
+  if (!traeEscaneo(manual)){ alert("Este documento no trae archivo."); return; }
+
+  const nombre = manual.archivo || "documento";
+  const esImagen = manual.pdf
+    ? /^data:image\//.test(manual.pdf)
+    : /^image\//.test(manual.tipoMime || "") || /\.(jpe?g|png|gif|webp|heic)$/i.test(nombre);
+
+  const ov = modal(`
     <div class="modal wide">
-      <div class="modal-head"><h2>${esc(titulo || manual.archivo || "Documento")}</h2>
-        <button class="btn" data-close>✕</button></div>
+      <div class="modal-head"><h2>${esc(titulo || nombre)}</h2>
+        <button class="btn" data-close>\u2715</button></div>
       <div class="modal-body" style="background:#f2f0f5">
-        ${esImagen
-          ? `<img src="${esc(manual.pdf)}" alt="${esc(manual.archivo)}"
-               style="max-width:100%;display:block;margin:0 auto;background:#fff">`
-          : `<iframe src="${esc(manual.pdf)}" title="${esc(manual.archivo)}"
-               style="border:0;width:100%;height:70vh;background:#fff"></iframe>`}
+        <div id="escCaja" class="vacio">Trayendo el archivo\u2026</div>
       </div>
       <div class="modal-foot">
-        <span class="hint">${esc(manual.archivo || "")}${manual.quien
-          ? " · lo subió " + esc(manual.quien) : ""}</span>
+        <span class="hint">${esc(nombre)}${manual.quien
+          ? " \u00b7 lo subi\u00f3 " + esc(manual.quien) : ""}</span>
         <div class="spacer"></div>
-        <button class="btn" id="bBajarEsc">Descargar</button>
+        <button class="btn" id="bBajarEsc" disabled>Descargar</button>
         <button class="btn" data-close>Cerrar</button></div>
-    </div>`).querySelector("#bBajarEsc").onclick = () => {
+    </div>`);
+
+  const pintar = src => {
+    ov.querySelector("#escCaja").outerHTML = esImagen
+      ? `<img src="${esc(src)}" alt="${esc(nombre)}"
+           style="max-width:100%;display:block;margin:0 auto;background:#fff">`
+      : `<iframe src="${esc(src)}" title="${esc(nombre)}"
+           style="border:0;width:100%;height:70vh;background:#fff"></iframe>`;
+    const b = ov.querySelector("#bBajarEsc");
+    b.disabled = false;
+    b.onclick = () => {
       const a = document.createElement("a");
-      a.href = manual.pdf; a.download = manual.archivo || "documento";
+      a.href = src; a.download = nombre;
       document.body.appendChild(a); a.click(); a.remove();
     };
+  };
+
+  // Incrustado: ya lo trae consigo. En el almac\u00e9n: hay que ir por \u00e9l con la
+  // sesi\u00f3n, porque el dep\u00f3sito es privado y no se abre con una liga suelta.
+  if (manual.pdf) return pintar(manual.pdf);
+
+  bajarEscaneo(manual.ruta)
+    .then(src => {
+      pintar(src);
+      // La direcci\u00f3n temporal se suelta al cerrar; si no, el archivo se queda
+      // en memoria hasta recargar la p\u00e1gina.
+      ov.addEventListener("remove", () => URL.revokeObjectURL(src));
+    })
+    .catch(e => {
+      const caja = ov.querySelector("#escCaja");
+      if (caja) caja.innerHTML = `<div class="errbox" style="text-align:left">
+        <b>No se pudo traer el archivo del almac\u00e9n.</b><br>
+        <span class="hint">${esc(e.message)}</span><br>
+        Si dice <i>Bucket not found</i>, falta correr <code>archivos.sql</code>.</div>`;
+    });
 }
 
 /* ==========================================================================
