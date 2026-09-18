@@ -41,6 +41,22 @@ Ninguno de los dos entra a *Ajustes*.
 La cartera de clientes se comparte a propósito: si una empresa hace su convención en el hotel y
 además renta salón para la cena, es **un solo cliente**, no dos fichas.
 
+### Nada de habitaciones, en ningún rincón
+
+Banquetes no renta cuartos, así que el hospedaje no le sale por ningún lado —no basta con
+quitarle la pestaña—:
+
+- **El tablero** cuenta sus eventos firmados y sus cotizaciones en la mesa, no convenios.
+- **La ficha del cliente** no trae la pestaña de *Convenios*: nada más *Datos* y *Actividad*.
+- **La tabla de clientes** cuenta eventos en vez de convenios, y la tarjeta del tablero dice
+  *Evento contratado* donde ventas ve *Convenio firmado*.
+- **El aviso de «el cliente firmó»** es de convenios, así que a banquetes no le llega.
+- **La IA** tampoco: no se le cuentan tarifas de habitación, convenios ni contratos de
+  estancia, y en cambio sí sus eventos.
+
+Borrar un cliente sigue arrastrando todo lo que cuelga de él, convenios incluidos. Por eso el
+aviso de borrado los cuenta uno por uno aunque quien borra no los alcance a ver.
+
 ### Para darlos de alta
 
 Son los dos pasos de siempre (ver `ROLES.md`): primero la cuenta en **Supabase →

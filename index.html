@@ -669,7 +669,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.18-42";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.18-43";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1091,6 +1091,10 @@ const VISTAS_ROL = {
 
 /** ¿A esta persona le toca ver los eventos de banquetes? */
 const veBanquetes = () => puedeVer("eventos");
+/* Banquetes no renta habitaciones, así que el hospedaje no le toca en ningún
+   lado: ni la pestaña de convenios, ni la ficha del cliente, ni el tablero,
+   ni los avisos, ni lo que se le cuenta a la IA. */
+const veHospedaje = () => puedeVer("convenios");
 const vistasDelRol = () => VISTAS_ROL[rolActual()] || VISTAS_ROL.ejecutivo;
 const puedeVer = v => vistasDelRol().includes(v);
 
@@ -3279,15 +3283,27 @@ function renderKpis(){
   const abiertos = cs.filter(c => !est(c.estatus).won && !est(c.estatus).lost);
   const ganados  = cs.filter(c => est(c.estatus).won);
   const ids = new Set(cs.map(c => c.id));
-  const firmados = state.convenios.filter(v => ids.has(v.clienteId) && v.estado === "firmado_cliente");
-  const pend     = state.convenios.filter(v => ids.has(v.clienteId) && v.estado === "firmado_ejecutiva");
+  // Los dos últimos recuadros son los del papel que se lleva cada quien: a
+  // ventas le importan los convenios; a banquetes, sus eventos.
+  const propios = veHospedaje()
+    ? [["Convenios firmados",
+        String(state.convenios.filter(v => ids.has(v.clienteId) && v.estado === "firmado_cliente").length),
+        "por el cliente"],
+       ["Esperando cliente",
+        String(state.convenios.filter(v => ids.has(v.clienteId) && v.estado === "firmado_ejecutiva").length),
+        "firma pendiente"]]
+    : [["Eventos firmados",
+        String(state.eventos.filter(e => eventoEsMio(e) && ["firmado","confirmado"].includes(e.estado)).length),
+        "contratados"],
+       ["En la mesa",
+        String(eventosVisibles("cotizacion").filter(e => ["borrador","enviada"].includes(e.estado)).length),
+        "cotizaciones sin cerrar"]];
 
   document.getElementById("kpis").innerHTML = [
-    ["Clientes",           String(cs.length),       "en la cartera"],
-    ["En proceso",         String(abiertos.length), "sin cerrar"],
-    ["Ganados",            String(ganados.length),  "convenio cerrado"],
-    ["Convenios firmados", String(firmados.length), "por el cliente"],
-    ["Esperando cliente",  String(pend.length),     "firma pendiente"]
+    ["Clientes",   String(cs.length),       "en la cartera"],
+    ["En proceso", String(abiertos.length), "sin cerrar"],
+    ["Ganados",    String(ganados.length),  veHospedaje() ? "convenio cerrado" : "cerrados"],
+    ...propios
   ].map(([t,v,s]) => `<div class="kpi"><small>${esc(t)}</small><b>${esc(v)}</b><small>${esc(s)}</small></div>`).join("");
 }
 
@@ -3330,9 +3346,12 @@ function tarjeta(c, e){
 
   const ua = ultimaAct(c.id);
   const n = actsDe(c.id).length;
-  const convs = conveniosDe(c.id);
-  const firmado = convs.some(v => v.estado === "firmado_cliente");
-  const espera  = convs.some(v => v.estado === "firmado_ejecutiva");
+  const docs = veHospedaje() ? conveniosDe(c.id)
+                             : state.eventos.filter(e => e.clienteId === c.id && eventoEsMio(e));
+  const firmado = veHospedaje() ? docs.some(v => v.estado === "firmado_cliente")
+                                : docs.some(e => ["firmado","confirmado"].includes(e.estado));
+  const espera  = veHospedaje() ? docs.some(v => v.estado === "firmado_ejecutiva")
+                                : docs.some(e => e.estado === "enviada");
   const i = ESTATUS.findIndex(x => x.id === c.estatus);
 
   el.innerHTML = `
@@ -3342,7 +3361,7 @@ function tarjeta(c, e){
       ${c.tarifa ? `<span class="pill oro">${esc(money(c.tarifa))}</span>` : ""}
       ${c.ejecutivo ? `<span class="pill">${esc(c.ejecutivo)}</span>` : ""}
       ${n ? `<span class="pill" title="Actividades registradas">${n} act.</span>` : ""}
-      ${firmado ? `<span class="pill good">Convenio firmado</span>`
+      ${firmado ? `<span class="pill good">${veHospedaje() ? "Convenio firmado" : "Evento contratado"}</span>`
                 : espera ? `<span class="pill warn">Espera firma</span>` : ""}
     </div>
     ${ua ? `<div class="card-sub" style="margin-top:6px">${tipoAct(ua.tipo).icon} ${esc(ua.asunto || tipoAct(ua.tipo).name)} · ${esc(fechaHora(ua.fecha))}</div>` : ""}
@@ -3393,7 +3412,7 @@ function renderClientes(){
     <thead><tr>
       <th>Empresa</th><th>Contacto</th><th>Teléfono</th><th>Correo</th><th>Ubicación</th>
       <th>Estatus</th><th class="num">Tarifa</th><th>Ejecutivo</th>
-      <th class="num">Act.</th><th class="num">Conv.</th><th></th>
+      <th class="num">Act.</th><th class="num">${veHospedaje() ? "Conv." : "Eventos"}</th><th></th>
     </tr></thead>
     <tbody>${cs.map(c => {
       const e = est(c.estatus);
@@ -3407,7 +3426,8 @@ function renderClientes(){
         <td class="num">${c.tarifa ? esc(money(c.tarifa)) : "—"}</td>
         <td>${esc(c.ejecutivo || "—")}</td>
         <td class="num">${actsDe(c.id).length}</td>
-        <td class="num">${conveniosDe(c.id).length}</td>
+        <td class="num">${veHospedaje() ? conveniosDe(c.id).length
+          : state.eventos.filter(e => e.clienteId === c.id && eventoEsMio(e)).length}</td>
         <td class="nowrap"><button class="btn sm wa" data-wa="${c.id}" ${c.telefono ? "" : "disabled"} title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button></td>
       </tr>`;
     }).join("")}</tbody></table>`;
@@ -5265,7 +5285,8 @@ function abrirCliente(id, estatusInicial, pane){
         ${existente ? `<div class="subtabs">
           <button data-pane="datos" aria-current="true">Datos</button>
           <button data-pane="acts">Actividad <span class="hint">(${actsDe(c.id).length})</span></button>
-          <button data-pane="convs">Convenios <span class="hint">(${conveniosDe(c.id).length})</span></button>
+          ${veHospedaje() ? `<button data-pane="convs">Convenios
+            <span class="hint">(${conveniosDe(c.id).length})</span></button>` : ""}
         </div>` : ""}
         <div class="pane" id="p-datos" data-on><form id="fCliente"><div class="grid">${campos}</div></form></div>
         <div class="pane" id="p-acts"></div>
@@ -5288,12 +5309,21 @@ function abrirCliente(id, estatusInicial, pane){
 
   const bDel = ov.querySelector("#bDel");
   if (bDel) bDel.onclick = () => {
-    const na = actsDe(c.id).length, nv = conveniosDe(c.id).length;
-    const extra = (na || nv) ? `\n\nSe borrarán también ${na} actividad(es) y ${nv} convenio(s).` : "";
+    // Se cuenta TODO lo que cuelga, aunque quien borra no lo alcance a ver:
+    // banquetes no ve los convenios del cliente, y aun así se los llevaría por
+    // delante. Más vale que lo sepa antes de apretar.
+    const cuelga = [[actsDe(c.id).length, "actividad(es)"],
+                    [conveniosDe(c.id).length, "convenio(s)"],
+                    [state.contratos.filter(k => k.clienteId === c.id).length, "contrato(s) de hospedaje"],
+                    [state.eventos.filter(e => e.clienteId === c.id).length, "evento(s) de banquetes"]]
+                   .filter(([n]) => n).map(([n, q]) => `${n} ${q}`);
+    const extra = cuelga.length ? `\n\nSe borrarán también ${cuelga.join(", ")}.` : "";
     if (!confirm(`¿Eliminar a "${c.empresa}"?${extra}\n\nEsta acción no se puede deshacer.`)) return;
     state.clientes    = state.clientes.filter(x => x.id !== c.id);
     state.actividades = state.actividades.filter(a => a.clienteId !== c.id);
     state.convenios   = state.convenios.filter(v => v.clienteId !== c.id);
+    state.contratos   = state.contratos.filter(k => k.clienteId !== c.id);
+    state.eventos     = state.eventos.filter(e => e.clienteId !== c.id);
     guardar(); render(); ov.remove();
   };
 
@@ -8680,16 +8710,23 @@ function contextoIA(){
   for (const a of state.actividades)
     if (!ultima[a.clienteId] || a.fecha > ultima[a.clienteId]) ultima[a.clienteId] = a.fecha;
 
+  // A cada quien se le cuenta lo suyo: banquetes no renta habitaciones, así
+  // que ni las tarifas ni los convenios ni los contratos de hospedaje tienen
+  // por qué salir de aquí —y en cambio sus eventos sí—.
+  const hosp = veHospedaje(), banq = veBanquetes();
+
   return [
 `HOTEL: ${h.nombre} · ${h.ciudad} · tel ${h.telefono}`,
 `HOY: ${hoyISO()}`,
 `QUIEN PREGUNTA: ${(u && u.nombre) || correoSesion()} · ${u ? infoRol(u.rol).name : "sin papel"}`,
-`ALCANCE: ${puedeVerTodo() ? "ve la cartera de todo el equipo" : "ve sólo su propia cartera"}`,
+`ALCANCE: ${puedeVerTodo() ? "ve la cartera de todo el equipo" : "ve sólo su propia cartera"}` +
+  (hosp ? "" : ". No lleva hospedaje: nada de habitaciones, convenios ni contratos de estancia"),
 "",
+...(hosp ? [
 `TIPOS DE HABITACIÓN Y TARIFA PÚBLICA (${state.habitaciones.length}):`,
 ...state.habitaciones.map(x =>
   `- ${x.codigo || "—"} ${x.nombre} · ${x.publica === null ? "N/A" : moneyMN(x.publica)}`),
-"",
+""] : []),
 `CLIENTES (${cs.length}):`,
 ...lim(cs.map(c =>
   `- ${c.empresa} · contacto ${c.contacto || "—"} · ${est(c.estatus).name}` +
@@ -8699,6 +8736,7 @@ function contextoIA(){
   ` · última actividad ${ultima[c.id] ? String(ultima[c.id]).slice(0,10) : "nunca"}` +
   (c.notas ? ` · notas: ${corta(c.notas, 160)}` : "")), 120),
 "",
+...(hosp ? [
 `CONVENIOS (${state.convenios.filter(convenioEsMio).length}):`,
 ...lim(state.convenios.filter(convenioEsMio).map(v =>
   `- ${v.folio} · ${nombreCli(v.clienteId)} · ${ESTADOS_CONV[v.estado].name}` +
@@ -8708,12 +8746,22 @@ function contextoIA(){
     ? ` · ${v.habitaciones.map(x => `${x.codigo || x.nombre} ${moneyMN(x.convenio)}`).join(", ")}`
     : "")), 60),
 "",
-`CONTRATOS Y COTIZACIONES (${state.contratos.filter(contratoEsMio).length}):`,
+`CONTRATOS Y COTIZACIONES DE HOSPEDAJE (${state.contratos.filter(contratoEsMio).length}):`,
 ...lim(state.contratos.filter(contratoEsMio).map(k =>
   `- ${k.folio} · ${infoTipoCt(k.tipo).name} · ${nombreCli(k.clienteId)} · ${ESTADOS_CT[k.estado].name}` +
   ` · fecha ${k.fecha} · total ${money(cuentasContrato(k).total, k.moneda)}` +
   (k.titulo ? ` · ${k.titulo}` : "")), 60),
-"",
+""] : []),
+...(banq ? [
+`EVENTOS DE BANQUETES (${state.eventos.filter(eventoEsMio).length}):`,
+...lim(state.eventos.filter(eventoEsMio).map(e =>
+  `- ${e.folio} · ${e.tipo === "contrato" ? "contrato" : "cotización"} · ${nombreCli(e.clienteId)}` +
+  ` · ${ESTADOS_EV[e.estado].name} · ${corta(e.titulo, 70) || "sin título"}` +
+  ` · fecha ${fechaEvento(e) || "sin fecha"}` +
+  ` · ${e.bloques.reduce((a, b) => Math.max(a, Number(b.pax) || 0), 0) || "?"} pax` +
+  ` · total ${moneyMN(cuentasEvento(e).total)}` +
+  ` · ejecutivo ${ejecutivoDeEv(e) || "sin asignar"}`), 60),
+""] : []),
 `ACTIVIDAD DE LOS ÚLTIMOS 60 DÍAS (${acts.length}):`,
 ...lim(acts.map(a =>
   `- ${String(a.fecha).slice(0,10)} · ${tipoAct(a.tipo).name} · ${nombreCli(a.clienteId)}` +
@@ -9119,7 +9167,7 @@ function cerrarConvenio(v, firma, comoLlego, quien){
 /* ----- Aviso al ejecutivo ----- */
 
 /** Convenios firmados por el cliente que el ejecutivo todavía no ha visto. */
-const novedadesFirma = () => state.convenios.filter(v =>
+const novedadesFirma = () => !veHospedaje() ? [] : state.convenios.filter(v =>
   v.estado === "firmado_cliente" && v.firmaEmpresa && !v.avisado && convenioEsMio(v));
 
 function pintarAvisos(){

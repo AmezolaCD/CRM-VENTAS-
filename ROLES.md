@@ -18,7 +18,9 @@ otro: a veces se cubre a un compañero y esa llamada es suya de todos modos.
 
 Son dos negocios distintos y cada uno ve el suyo:
 
-- Banquetes **no ve** convenios, contratos de hospedaje ni confirmaciones.
+- Banquetes **no ve** convenios, contratos de hospedaje ni confirmaciones. Y no sólo la
+  pestaña: tampoco en el tablero, ni en la ficha del cliente, ni en los avisos, ni en lo que se
+  le cuenta a la IA. No renta habitaciones, así que el hospedaje no le sale por ningún lado.
 - Ventas **no ve** las pestañas *Eventos* ni *Contratos banquetes* —tampoco la gerencia de
   ventas—, ni los eventos en el calendario, ni el dinero de banquetes en los reportes.
 
