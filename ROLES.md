@@ -7,6 +7,7 @@ El CRM tiene cuatro papeles:
 | **Administrador** | Todas, Ajustes incluido | Todo |
 | **Gerencia de ventas** | Todas menos Ajustes | La cartera, los convenios, la actividad y los prospectos de todo el equipo |
 | **Ejecutivo de ventas** | Todas menos Ajustes | Sólo sus propios clientes, convenios, actividades y prospectos |
+| **Banquetes** | Tablero, Clientes, Actividades, Eventos, Contratos banquetes, Calendario, Reportes y Formulario | Sus eventos y contratos de banquetes; la cartera de clientes la comparte con ventas |
 | **Sólo prospección** | Únicamente *Formulario* | Sólo los prospectos que esa cuenta capturó |
 
 Un ejecutivo ve además **las actividades que él mismo registró**, aunque sean de un cliente de

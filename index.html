@@ -280,6 +280,56 @@
     #bIA{right:14px; bottom:14px}
   }
   body.con-kiosco #bIA, body.con-kiosco #panelIA{display:none !important}
+  /* Calendario */
+  .cal-leyenda{display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:var(--muted);
+    margin-bottom:10px}
+  .cal-leyenda span{display:inline-flex; align-items:center; gap:6px}
+  .cal-leyenda i, .cal-punto{width:10px; height:10px; border-radius:3px; display:inline-block}
+  .ev-contrato{background:var(--ok)}
+  .ev-cot{background:var(--accent)}
+  .ev-act{background:var(--warn)}
+  .cal-sem{display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:4px}
+  .cal-sem div{font-size:11px; font-weight:700; color:var(--muted); text-align:center;
+    text-transform:uppercase; letter-spacing:.04em}
+  .cal-rej{display:grid; grid-template-columns:repeat(7,1fr); gap:4px}
+  .cal-d{min-height:104px; background:var(--panel); border:1px solid var(--line);
+    border-radius:8px; padding:5px 5px 6px; cursor:pointer; overflow:hidden}
+  .cal-d.fuera{background:transparent; border-color:transparent; cursor:default}
+  .cal-d.hoy{border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent)}
+  .cal-n{font-size:11.5px; font-weight:700; color:var(--muted); margin-bottom:3px}
+  .cal-d.hoy .cal-n{color:var(--accent)}
+  .cal-ev{display:block; width:100%; text-align:left; font-size:11px; line-height:1.3;
+    border:0; border-radius:5px; padding:3px 5px; margin-bottom:3px; cursor:pointer;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#fff}
+  .cal-ev.ev-contrato{background:var(--ok); color:var(--ok-ink,#2b0d3a)}
+  .cal-ev.ev-cot{background:var(--accent)}
+  .cal-ev.ev-act{background:var(--warn-soft); color:var(--warn)}
+  .cal-mas{border:0; background:transparent; color:var(--muted); font-size:11px;
+    cursor:pointer; padding:1px 4px}
+  .cal-fila{display:flex; gap:10px; align-items:center; padding:9px 4px; cursor:pointer;
+    border-bottom:1px solid var(--line)}
+  .cal-fila:hover{background:var(--panel-2)}
+  .cal-fila .cal-punto{flex:none; margin-top:2px}
+  @media (max-width:760px){
+    .cal-d{min-height:74px}
+    .cal-ev{font-size:10px}
+  }
+
+  /* Reportes */
+  .barra{background:var(--col); border-radius:999px; height:9px; overflow:hidden}
+  .barra i{display:block; height:100%; background:var(--accent); border-radius:999px}
+  .rep-meses{display:flex; gap:8px; align-items:flex-end; height:150px; padding:10px 0 0;
+    overflow-x:auto}
+  .rep-mes{flex:1 0 34px; display:flex; flex-direction:column; align-items:center; height:100%}
+  .rep-barras{flex:1; width:100%; display:flex; gap:2px; align-items:flex-end;
+    justify-content:center}
+  .rep-barras i{display:block; width:12px; border-radius:3px 3px 0 0; min-height:2px}
+  .rep-barras .cerr{background:var(--accent)}
+  .rep-barras .mesa{background:var(--col)}
+  .rep-et{font-size:10.5px; color:var(--muted); margin-top:5px; text-transform:capitalize}
+
+  .doc-contenido .cl{margin:9px 0; text-align:justify; font-size:11.5px; line-height:1.55}
+  .doc-contenido .cl b{color:#39104e}
   .ct-serv{margin:6px 0 10px; padding-left:20px}
   .ct-serv li{margin-top:3px; font-weight:600}
   .ct-mon{font-weight:700; font-size:11.5px; letter-spacing:.02em; margin:8px 0}
@@ -561,6 +611,10 @@
     <button data-view="actividades">Actividades</button>
     <button data-view="convenios">Convenios</button>
     <button data-view="contratos">Contratos</button>
+    <button data-view="eventos">Eventos</button>
+    <button data-view="contratosbq">Contratos banquetes</button>
+    <button data-view="calendario">Calendario</button>
+    <button data-view="reportes">Reportes</button>
     <button data-view="confirmaciones">Confirmaciones</button>
     <button data-view="formulario">Formulario</button>
     <button data-view="ajustes">Ajustes</button>
@@ -588,6 +642,10 @@
   <section class="view" id="v-actividades"><div class="table-wrap" id="tblAct"></div></section>
   <section class="view" id="v-convenios"><div class="table-wrap" id="tblConvenios"></div></section>
   <section class="view" id="v-contratos"><div class="table-wrap" id="tblContratos"></div></section>
+  <section class="view" id="v-eventos"><div class="table-wrap" id="tblEventos"></div></section>
+  <section class="view" id="v-contratosbq"><div class="table-wrap" id="tblContratosBq"></div></section>
+  <section class="view" id="v-calendario"><div class="table-wrap" id="tblCalendario"></div></section>
+  <section class="view" id="v-reportes"><div class="table-wrap" id="tblReportes"></div></section>
   <section class="view" id="v-confirmaciones"><div class="table-wrap" id="tblConfirm"></div></section>
   <section class="view" id="v-formulario"><div class="table-wrap" id="tblFormulario"></div></section>
   <section class="view" id="v-ajustes"><div class="table-wrap" id="panelAjustes"></div></section>
@@ -611,7 +669,7 @@
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.17-39";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.18-40";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -653,6 +711,40 @@ const infoGrupo = (id, conv) => (conv && conv.grupos && conv.grupos[id])
  * —si lo hay— el salón del evento. El machote sale del que traía ventas en
  * Word, sección por sección.
  */
+/* ----- Banquetes -----------------------------------------------------------
+   Los documentos de banquetes no se parecen a los de ventas: cotizan un
+   evento —un salón, unas horas, tantos invitados— y la cuenta lleva IVA del
+   8% más un cargo por servicio del 15% que sólo aplica a alimentos y
+   bebidas: al audiovisual, al DJ o a la pista, no. Por eso cada renglón
+   dice si lo lleva.
+   -------------------------------------------------------------------------- */
+
+const IVA_BANQ = 8;          // alimentos y bebidas
+const SERV_BANQ = 15;        // cargo por servicio
+
+const TIPOS_EVENTO = [
+  { id:"cotizacion", name:"Cotización", titulo:"COTIZACIÓN DE EVENTO",
+    ayuda:"No compromete al hotel. Vence y hay que re-cotizar." },
+  { id:"contrato",   name:"Contrato",   titulo:"CONTRATO DE PRESTACIÓN DE SERVICIOS",
+    ayuda:"El legal completo, con anticipo y penas por cancelación." }
+];
+const infoTipoEv = id => TIPOS_EVENTO.find(t => t.id === id) || TIPOS_EVENTO[0];
+
+const ESTADOS_EV = {
+  borrador:  { name:"Borrador",          bg:"var(--col)",       fg:"var(--muted)" },
+  enviada:   { name:"Enviada",           bg:"var(--accent-soft)", fg:"var(--accent)" },
+  firmado:   { name:"Firmado",           bg:"var(--warn-soft)", fg:"var(--warn)" },
+  confirmado:{ name:"Confirmado",        bg:"var(--ok-soft)",   fg:"var(--ok)" },
+  cancelado: { name:"Cancelado",         bg:"var(--bad-soft)",  fg:"var(--bad)" }
+};
+
+/** Los montajes que usa banquetes, para no escribirlos a mano cada vez. */
+const MONTAJES = ["Banquete","Cóctel","Auditorio","Escuela","Herradura","Imperial",
+                  "Media luna","Tipo U","Sin montaje"];
+
+/** Lo que el 15% de servicio sí toca: alimentos y bebidas. */
+const CON_SERVICIO_DEF = true;
+
 const TIPOS_CONTRATO = [
   { id:"cotizacion", name:"Cotización", titulo:"COTIZACIÓN",
     ayuda:"No compromete al hotel. Es lo que se manda primero." },
@@ -685,8 +777,30 @@ const HOTEL_DEF = {
   telReservaciones: "664 374 2487",
   emailReservaciones: "reservaciones@quartzhotel.mx",
   logo: "",                 // data URI; si está vacío se usa el monograma
-  marcaAgua: "monograma"    // monograma | logo | ninguna
+  marcaAgua: "monograma",   // monograma | logo | ninguna
+
+  /* Los datos fiscales y bancarios del contrato de banquetes van vacíos a
+     propósito: este archivo es público. Se capturan una vez en
+     Ajustes → Datos legales del contrato y se quedan en la nube del hotel. */
+  razonSocial: "", representante: "", rfc: "", escritura: "",
+  domicilioFiscal: "", banco: "", cuenta: "", clabe: "",
+  horarioAtencion: "de 9:00 a 18:00 horas, de lunes a viernes",
+  registroProfeco: "", multaFumar: "20,000"
 };
+
+/** Lo que hay que capturar para que el contrato de banquetes salga completo. */
+const CAMPOS_LEGALES = [
+  ["razonSocial",     "Razón social",                "HOTEL EJEMPLO S.A. DE C.V."],
+  ["representante",   "Representante legal",         "Nombre de quien firma"],
+  ["rfc",             "RFC",                         ""],
+  ["escritura",       "Escritura pública",           "número, volumen, fecha y notario"],
+  ["domicilioFiscal", "Domicilio fiscal",            "como va en el contrato"],
+  ["banco",           "Banco",                       ""],
+  ["cuenta",          "Número de cuenta",            ""],
+  ["clabe",           "CLABE interbancaria",         ""],
+  ["registroProfeco", "Registro PROFECO del contrato", "número y fecha"],
+  ["multaFumar",      "Sanción por fumar (MN)",      "20,000"]
+];
 
 /* Monograma Q de Quartz, redibujado: marco con 6% de margen, círculo de r≈28.6
    centrado en (48.5,49) y cola horizontal tangente al borde inferior. */
@@ -928,7 +1042,8 @@ const ROLES = [
   { id:"admin",     name:"Administrador",     ayuda:"Todo, incluidos los Ajustes." },
   { id:"gerente",   name:"Gerencia de ventas", ayuda:"Ve la cartera y la actividad de todo el equipo. Sin Ajustes." },
   { id:"ejecutivo", name:"Ejecutivo de ventas", ayuda:"Sólo sus propios clientes, convenios y actividades." },
-  { id:"captura",   name:"Sólo prospección",  ayuda:"Únicamente el formulario de prospección y lo que esa cuenta capturó. No ve la cartera." }
+  { id:"captura",   name:"Sólo prospección",  ayuda:"Únicamente el formulario de prospección y lo que esa cuenta capturó. No ve la cartera." },
+  { id:"banquetes", name:"Banquetes",         ayuda:"Eventos, contratos de banquetes, calendario y reportes. Comparte la cartera de clientes con ventas, pero no ve convenios ni contratos de hospedaje." }
 ];
 const infoRol = id => ROLES.find(r => r.id === id) || ROLES[2];
 
@@ -948,12 +1063,17 @@ const USUARIOS_DEF = [
  * otra pestaña a la que pueda irse.
  */
 const VISTAS = ["tablero","clientes","actividades","convenios","contratos",
+                "eventos","contratosbq","calendario","reportes",
                 "confirmaciones","formulario","ajustes"];
 const VISTAS_ROL = {
   admin:     VISTAS,
   gerente:   VISTAS.filter(v => v !== "ajustes"),
-  ejecutivo: VISTAS.filter(v => v !== "ajustes"),
-  captura:   ["formulario"]
+  // Ventas no necesita las pestañas de banquetes encima todo el día.
+  ejecutivo: VISTAS.filter(v => !["ajustes","eventos","contratosbq"].includes(v)),
+  captura:   ["formulario"],
+  // Banquetes comparte la cartera, pero el hospedaje no es asunto suyo.
+  banquetes: ["tablero","clientes","actividades","eventos","contratosbq",
+              "calendario","reportes","formulario"]
 };
 const vistasDelRol = () => VISTAS_ROL[rolActual()] || VISTAS_ROL.ejecutivo;
 const puedeVer = v => vistasDelRol().includes(v);
@@ -1166,6 +1286,7 @@ function sanear(s){
     convenios:    Array.isArray(s.convenios) ? s.convenios.map(saneaConv) : [],
     prospectos:   Array.isArray(s.prospectos) ? s.prospectos.map(saneaProspecto) : [],
     contratos:    Array.isArray(s.contratos) ? s.contratos.map(saneaContrato) : [],
+    eventos:      Array.isArray(s.eventos) ? s.eventos.map(saneaEvento) : [],
     huespedes:    Array.isArray(s.huespedes) ? s.huespedes.map(saneaHuesped) : [],
     usuarios:     Array.isArray(s.usuarios) ? s.usuarios.map(saneaUsuario) : USUARIOS_DEF.map(saneaUsuario),
     habitaciones: catalogo(s.habitaciones),
@@ -1181,6 +1302,7 @@ function sanear(s){
   out.actividades = out.actividades.filter(a => ids.has(a.clienteId));
   out.convenios   = out.convenios.filter(c => ids.has(c.clienteId));
   out.contratos   = out.contratos.filter(k => ids.has(k.clienteId));
+  out.eventos     = out.eventos.filter(e => ids.has(e.clienteId));
   // Un prospecto no cuelga de ningún cliente: si al que se pasó se borró, el
   // registro del evento se queda, nada más sin liga.
   out.prospectos.forEach(p => { if (p.clienteId && !ids.has(p.clienteId)) p.clienteId = ""; });
@@ -1268,6 +1390,93 @@ function saneaLineaExtra(x){
   o.costo    = String(o.costo || "").trim();
   return o;
 }
+
+function saneaBloqueEv(b){
+  const o = Object.assign({ fecha:"", horario:"", evento:"", pax:"", montaje:"", salon:"",
+    renta:"" }, b || {});
+  for (const k of ["fecha","horario","evento","montaje","salon","renta"])
+    o[k] = String(o[k] || "").trim();
+  o.pax = String(o.pax || "").trim();
+  return o;
+}
+
+function saneaLineaEv(l){
+  const o = Object.assign({ fecha:"", servicio:"", cantidad:"", precio:"",
+    conServicio:CON_SERVICIO_DEF }, l || {});
+  o.fecha = String(o.fecha || "").trim();
+  o.servicio = String(o.servicio || "").trim();
+  o.cantidad = Number(o.cantidad) || 0;
+  o.precio = Number(o.precio) || 0;
+  o.conServicio = !!o.conServicio;
+  return o;
+}
+
+/**
+ * Un documento de banquetes: la cotización de un evento o su contrato.
+ *
+ * Los dos viven en la misma lista porque el contrato sale de la cotización
+ * —mismos bloques, mismas cuentas— y así no hay que recapturarlo todo.
+ */
+function saneaEvento(e){
+  const o = Object.assign({ id:"", folio:"", clienteId:"", ejecutivo:"", tipo:"cotizacion",
+    titulo:"", atencion:"", fecha:"", vigencia:"", bloques:[], servicios:"", lineas:[],
+    iva:IVA_BANQ, cargoServicio:SERV_BANQ, observaciones:"", cotizacionId:"",
+    anticipo:"", fechaLimitePago:"", garantiaPax:"",
+    estado:"borrador", firmaHotel:null, firmaCliente:null, enviado:null, destinatario:null,
+    firmaManual:null, externo:false, createdAt:"", updatedAt:"" }, e || {});
+  o.id = o.id || nuevoId("e");
+  if (!TIPOS_EVENTO.some(t => t.id === o.tipo)) o.tipo = "cotizacion";
+  if (!ESTADOS_EV[o.estado]) o.estado = "borrador";
+  for (const k of ["folio","clienteId","ejecutivo","titulo","atencion","fecha","vigencia",
+                   "servicios","observaciones","cotizacionId","fechaLimitePago","garantiaPax"])
+    o[k] = String(o[k] || "").trim();
+  o.iva = o.iva === "" || o.iva === null || o.iva === undefined ? IVA_BANQ : (Number(o.iva) || 0);
+  o.cargoServicio = o.cargoServicio === "" || o.cargoServicio === null ||
+    o.cargoServicio === undefined ? SERV_BANQ : (Number(o.cargoServicio) || 0);
+  o.anticipo = o.anticipo === "" ? "" : (Number(o.anticipo) || 0);
+  o.bloques = (Array.isArray(o.bloques) ? o.bloques : []).map(saneaBloqueEv);
+  o.lineas  = (Array.isArray(o.lineas)  ? o.lineas  : []).map(saneaLineaEv);
+  o.externo = !!o.externo;
+  o.firmaHotel   = saneaFirma(o.firmaHotel);
+  o.firmaCliente = saneaFirma(o.firmaCliente);
+  o.firmaManual  = saneaManual(o.firmaManual);
+  o.enviado      = saneaEnvio(o.enviado);
+  o.destinatario = o.destinatario && o.destinatario.empresa
+    ? { empresa:o.destinatario.empresa || "", contacto:o.destinatario.contacto || "",
+        ubicacion:o.destinatario.ubicacion || "", telefono:o.destinatario.telefono || "",
+        email:o.destinatario.email || "" }
+    : null;
+  return o;
+}
+
+/**
+ * Las cuentas del evento.
+ *
+ * Cada renglón paga IVA; el cargo por servicio sólo lo pagan los de alimentos
+ * y bebidas, que es como lo cobra el hotel.
+ */
+function cuentasEvento(e){
+  const pIva  = (Number(e.iva) || 0) / 100;
+  const pServ = (Number(e.cargoServicio) || 0) / 100;
+  const lineas = e.lineas.map(l => {
+    const subtotal = (Number(l.cantidad) || 0) * (Number(l.precio) || 0);
+    const iva  = subtotal * pIva;
+    const serv = l.conServicio ? subtotal * pServ : 0;
+    return Object.assign({}, l, { subtotal, iva, serv, total: subtotal + iva + serv });
+  });
+  const suma = k => lineas.reduce((a, l) => a + l[k], 0);
+  return { lineas, subtotal:suma("subtotal"), iva:suma("iva"), serv:suma("serv"),
+           total:suma("total") };
+}
+
+/** La fecha en que ocurre el evento: la primera de sus bloques, o la del documento. */
+function fechaEvento(e){
+  const fs = e.bloques.map(b => b.fecha).filter(f => /^\d{4}-\d{2}-\d{2}$/.test(f)).sort();
+  return fs[0] || (/^\d{4}-\d{2}-\d{2}$/.test(e.fecha) ? e.fecha : "");
+}
+
+const ejecutivoDeEv = e => String(e.ejecutivo || "").trim() ||
+  String((cliente(e.clienteId) || {}).ejecutivo || "").trim();
 
 function saneaContrato(k){
   const o = Object.assign({ id:"", folio:"", clienteId:"", ejecutivo:"", tipo:"cotizacion",
@@ -1860,7 +2069,7 @@ function menuSesion(){
 
 /* ----- Traducción entre el estado y las filas de la tabla ----- */
 
-const COLECCIONES = ["clientes","actividades","convenios","contratos","prospectos",
+const COLECCIONES = ["clientes","actividades","convenios","contratos","eventos","prospectos",
                      "huespedes","habitaciones","usuarios"];
 /** Lo que roles.sql sólo deja escribir al administrador. */
 const SOLO_ADMIN = ["ajustes","usuarios","habitaciones"];
@@ -1874,8 +2083,8 @@ function filasDeEstado(){
 }
 
 function estadoDesdeFilas(filas){
-  const bruto = { clientes:[], actividades:[], convenios:[], contratos:[], prospectos:[],
-                  huespedes:[], habitaciones:[], usuarios:[], ajustes:null };
+  const bruto = { clientes:[], actividades:[], convenios:[], contratos:[], eventos:[],
+                  prospectos:[], huespedes:[], habitaciones:[], usuarios:[], ajustes:null };
   for (const f of filas){
     if (f.tipo === "ajustes") bruto.ajustes = f.datos;
     else if (bruto[f.tipo]) bruto[f.tipo].push(f.datos);
@@ -1915,6 +2124,8 @@ function duenioDe(fila){
   if (fila.tipo === "convenios")   return String(fila.datos.ejecutivo || "").trim() ||
                                           deCliente(fila.datos.clienteId);
   if (fila.tipo === "contratos")   return String(fila.datos.ejecutivo || "").trim() ||
+                                          deCliente(fila.datos.clienteId);
+  if (fila.tipo === "eventos")     return String(fila.datos.ejecutivo || "").trim() ||
                                           deCliente(fila.datos.clienteId);
   if (fila.tipo === "prospectos")  return String(fila.datos.capturadoPor || "").trim() || null;
   return null;
@@ -2980,6 +3191,10 @@ function render(){
   if (vista === "actividades") renderActividades();
   if (vista === "convenios") renderConvenios();
   if (vista === "contratos") renderContratos();
+  if (vista === "eventos") renderEventos();
+  if (vista === "contratosbq") renderContratosBq();
+  if (vista === "calendario") renderCalendario();
+  if (vista === "reportes") renderReportes();
   if (vista === "confirmaciones") renderConfirmaciones();
   if (vista === "formulario") renderFormulario();
   if (vista === "ajustes")   renderAjustes();
@@ -4478,6 +4693,19 @@ function renderAjustes(){
 
       <div id="huerfanos" style="margin-top:22px"></div>
 
+      <h3 class="sec">Datos legales del contrato de banquetes</h3>
+      <div class="note warn"><b>Estos datos no vienen puestos a propósito.</b> El archivo de
+        la aplicación es público —está en internet, cualquiera lo puede abrir—, así que el RFC,
+        la escritura y la cuenta bancaria del hotel no pueden ir escritos ahí. Se capturan
+        aquí una vez y se quedan en la nube del hotel, donde sólo los ve el equipo.
+        <br><br>Mientras estén vacíos, el contrato de banquetes sale con rayitas en su lugar.</div>
+      <div class="grid">
+        ${CAMPOS_LEGALES.map(([k, etq, ph]) => `<div class="full">
+          <label class="lbl">${esc(etq)}</label>
+          <input class="field" data-legal="${k}" value="${esc(h[k] || "")}"
+            placeholder="${esc(ph)}"></div>`).join("")}
+      </div>
+
       <h3 class="sec">Datos del hotel</h3>
       <div class="grid">
         <div class="full"><label class="lbl">Nombre</label><input class="field" id="hNombre" value="${esc(h.nombre)}"></div>
@@ -4670,6 +4898,7 @@ function renderAjustes(){
     h.telReservaciones   = p.querySelector("#hTelRes").value.trim();
     h.emailReservaciones = p.querySelector("#hMailRes").value.trim();
     h.marcaAgua = p.querySelector("#hAgua").value;
+    p.querySelectorAll("[data-legal]").forEach(i => { h[i.dataset.legal] = i.value.trim(); });
     a.ladaPais  = p.querySelector("#hLada").value.replace(/\D/g,"") || "52";
 
     const mon = p.querySelector("#hMoneda").value.trim().toUpperCase() || "MXN";
@@ -6697,9 +6926,11 @@ function subirConvenioFirmado(v, alTerminar){
  * la aplicación cuando lo abra.
  */
 const TIPOS_EXTERNO = [
-  { id:"convenio",   name:"Convenio",   donde:"convenios" },
-  { id:"cotizacion", name:"Cotización", donde:"contratos" },
-  { id:"contrato",   name:"Contrato",   donde:"contratos" }
+  { id:"convenio",      name:"Convenio de hospedaje",      donde:"convenios" },
+  { id:"cotizacion",    name:"Cotización de hospedaje",    donde:"contratos" },
+  { id:"contrato",      name:"Contrato de hospedaje",      donde:"contratos" },
+  { id:"cotizacionbq",  name:"Cotización de evento",       donde:"eventos" },
+  { id:"contratobq",    name:"Contrato de banquetes",      donde:"contratosbq" }
 ];
 
 /** Cuánto ocupa hoy la cartera en este navegador, para no pasarnos del tope. */
@@ -6737,7 +6968,7 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
             ${selectEjecutivo(miNombre(), "exEje")}</div>
           <div><label class="lbl">Fecha del documento</label>
             <input class="field" type="date" id="exFecha" value="${esc(hoy)}"></div>
-          <div><label class="lbl">Vigencia hasta <span class="hint">(opcional)</span></label>
+          <div><label class="lbl" id="exVigLbl">Vigencia hasta <span class="hint">(opcional)</span></label>
             <input class="field" type="date" id="exVig"></div>
           <div class="full"><label class="lbl">El archivo escaneado</label>
             <input type="file" class="field" id="exArchivo" accept="application/pdf,image/*">
@@ -6764,6 +6995,18 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
       if (e && [...fEje.options].some(o => o.value === e)) fEje.value = auto = e;
     });
     fCli.dispatchEvent(new Event("change"));   // por si ya venía un cliente escogido
+  }
+
+  // En un documento de banquetes lo que importa es cuándo es el evento.
+  {
+    const fTipo = ov.querySelector("#exTipo"), lbl = ov.querySelector("#exVigLbl");
+    const acomoda = () => {
+      const bq = /bq$/.test(fTipo.value);
+      lbl.innerHTML = bq ? `Fecha del evento <span class="hint">(para el calendario)</span>`
+                         : `Vigencia hasta <span class="hint">(opcional)</span>`;
+    };
+    fTipo.addEventListener("change", acomoda);
+    acomoda();
   }
 
   const err = ov.querySelector("#exErr");
@@ -6811,6 +7054,19 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
         state.convenios.push(v);
         cerrarConvenio(v, null, `Documento externo. Se subió el archivo "${f.name}".`, quien);
         v.avisado = true;     // lo registró el propio equipo: no hay novedad que avisar
+      } else if (tipo === "cotizacionbq" || tipo === "contratobq"){
+        const ev = saneaEvento({
+          clienteId:cid, ejecutivo:quien, externo:true,
+          tipo: tipo === "contratobq" ? "contrato" : "cotizacion",
+          folio: folio || folioEvento(tipo === "contratobq" ? "contrato" : "cotizacion",
+                                      String(fecha).slice(0,4)),
+          fecha, vigencia:vig, observaciones:notas, estado:"confirmado",
+          bloques: vig ? [saneaBloqueEv({ fecha: vig })] : [],
+          firmaManual: manual, destinatario: dest, createdAt:new Date().toISOString()
+        });
+        state.eventos.push(ev);
+        registrarAuto(cid, `${nombre} ${ev.folio} registrada desde un documento externo`,
+          `Se subió el archivo "${f.name}".`, quien);
       } else {
         const k = saneaContrato({
           clienteId:cid, ejecutivo:quien, externo:true, tipo,
@@ -6924,6 +7180,1379 @@ function verEscaneado(manual, titulo){
       a.href = manual.pdf; a.download = manual.archivo || "documento";
       document.body.appendChild(a); a.click(); a.remove();
     };
+}
+
+/* ==========================================================================
+   BANQUETES · el documento
+
+   Sale de las cotizaciones que trae el departamento, sección por sección:
+   detalles del evento, los servicios descritos, la propuesta económica con su
+   IVA y su cargo por servicio, las observaciones y la firma.
+   ========================================================================== */
+
+const TEXTOS_EV = {
+  saludo: "Agradeciendo su preferencia, anexo detallado de los servicios cotizados " +
+          "para su evento en {{HOTEL}} en base a la información previamente proporcionada.",
+  cortesia: "Si el consumo de Alimentos y Bebidas (en importes netos) cubre la renta del " +
+            "espacio, el salón se otorga en cortesía. En caso contrario, el salón será " +
+            "re-cotizado.",
+  vigencia: "Le recordamos que la presente es solamente una cotización y no establece un " +
+    "compromiso por parte del Hotel, tiene una vigencia hasta el {{VIGENCIA}}. En caso de " +
+    "confirmar los servicios deberá procederse a la contratación del evento mediante firma " +
+    "de contrato y pago de anticipo.",
+  observaciones: "Se prohíbe el ingreso de Alimentos & Bebidas ajenos al Hotel.",
+  cierre: "Me reitero nuevamente a sus órdenes por cualquier duda o requerimiento adicional."
+};
+
+const anioEvento = e => String(e.fecha || hoyISO()).slice(0, 4) ||
+  String(new Date().getFullYear());
+
+/** Serie propia: EV para cotizaciones de evento, CB para contratos de banquetes. */
+function folioEvento(tipo, anio, excluirId){
+  const pre = tipo === "contrato" ? "CB" : "EV";
+  const a = String(anio || new Date().getFullYear()).slice(0, 4);
+  const re = new RegExp("^" + pre + "-" + a + "-(\\d+)$", "i");
+  const usados = new Set(state.eventos
+    .filter(x => x.id !== excluirId)
+    .map(x => String(x.folio || "").trim().toUpperCase()));
+  let n = Math.max(0, ...state.eventos
+    .filter(x => x.id !== excluirId)
+    .map(x => Number((re.exec(String(x.folio || "").trim()) || [])[1]) || 0)) + 1;
+  let f;
+  do { f = `${pre}-${a}-${String(n++).padStart(3, "0")}`; } while (usados.has(f));
+  return f;
+}
+
+const eventoEsMio = e => puedeVerTodo() ||
+  (!!miNombre().trim() && ejecutivoDeEv(e).toLowerCase() === miNombre().trim().toLowerCase()) ||
+  esMio(cliente(e.clienteId) || {});
+
+/** Los eventos que le tocan a quien está viendo, del tipo que se le pida. */
+const eventosVisibles = tipo => state.eventos
+  .filter(e => e.tipo === tipo && eventoEsMio(e))
+  .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+
+/** "jueves 15 de enero, 2026" — como lo escribe banquetes en sus cotizaciones. */
+function fechaLarga(iso){
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) return String(iso || "");
+  const [a, m, d] = String(iso).split("-").map(Number);
+  const f = new Date(a, m - 1, d);
+  const dias = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+  const meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto",
+                 "septiembre","octubre","noviembre","diciembre"];
+  return `${dias[f.getDay()]} ${d} de ${meses[m-1]}, ${a}`;
+}
+
+const fechaBloque = f => /^\d{4}-\d{2}-\d{2}$/.test(String(f))
+  ? fechaCorta(f) : String(f || "—");
+
+/** La cotización lleva su carta; el contrato, el legal completo. */
+const docEvento = (e, c) => e.tipo === "contrato" ? cuerpoContratoBq(e, c) : cuerpoEvento(e, c);
+
+function cuerpoEvento(e, c){
+  if (!(c && c.empresa) && e.destinatario) c = e.destinatario;
+  const h = state.ajustes.hotel;
+  const cu = cuentasEvento(e);
+  const u = state.usuarios.find(x => x.nombre === ejecutivoDeEv(e));
+
+  const rellena = t => String(t || "")
+    .replace(/\{\{HOTEL\}\}/g, h.nombre)
+    .replace(/\{\{VIGENCIA\}\}/g, e.vigencia ? fechaTexto(e.vigencia) : "—");
+
+  const bloqueFirma = (f, titulo, nombreDef, puestoDef, celDef) => `
+    <div class="firma">
+      <h4>${esc(titulo)}</h4>
+      <div class="cv">${f ? `<img src="${f.img}" alt="Firma">` : `<span>Pendiente de firma</span>`}</div>
+      <div class="lin">
+        <i>Nombre</i> <u>${esc(f ? f.nombre : (nombreDef || ""))}</u><br>
+        <i>Puesto</i> <u>${esc(f ? f.puesto : (puestoDef || ""))}</u><br>
+        <i>Fecha</i> <u>${esc(f ? fechaFirma(f.fecha) : "")}</u><br>
+        <i>Celular</i> <u>${esc(f ? f.celular : (celDef || ""))}</u>
+      </div>
+    </div>`;
+
+  return `
+    <div class="doc-hotel">
+      ${h.logo ? `<img class="doc-logo" src="${esc(h.logo)}" alt="${esc(h.nombre)}">`
+        : esQuartz(h.nombre) ? `<div class="doc-wordmark">${logoQuartz(MORADO_QUARTZ)}</div>`
+        : `<div class="doc-mono">${monogramaQ(MORADO_QUARTZ)}</div><b>${esc(h.nombre)}</b>`}
+      <div>${esc(h.direccion)}</div>
+      <div>Tel. ${esc(h.telefono)}</div>
+    </div>
+    <div class="doc-regla"></div>
+
+    <div class="doc-fecha">${esc(h.ciudad)} a ${esc(fechaTexto(e.fecha || hoyISO()))}</div>
+
+    <div class="doc-dest">
+      <i>Atención:</i><br>
+      <b>${esc(e.atencion || (c && c.contacto) || "—")}</b><br>
+      ${c && c.empresa ? esc(c.empresa) + "<br>" : ""}
+      ${c && c.email ? esc(c.email) + "<br>" : ""}
+      ${e.titulo ? `Ref. “${esc(e.titulo)}”` : ""}
+    </div>
+
+    <p style="white-space:pre-wrap">${esc(rellena(TEXTOS_EV.saludo))}</p>
+
+    ${e.bloques.length ? `
+      <h2>Detalles de evento</h2>
+      <table class="tar"><thead><tr>
+          <th style="width:92px">Fecha</th><th style="width:92px">Horario</th><th>Evento</th>
+          <th class="num" style="width:52px">Pax</th><th style="width:88px">Montaje</th>
+          <th style="width:96px">Salón</th><th style="width:130px">Renta</th></tr></thead>
+        <tbody>${e.bloques.map(b => `<tr>
+          <td class="nowrap">${esc(fechaBloque(b.fecha))}</td>
+          <td class="nowrap">${esc(b.horario || "—")}</td>
+          <td>${esc(b.evento || "—")}</td>
+          <td class="num">${esc(b.pax || "—")}</td>
+          <td>${esc(b.montaje || "—")}</td>
+          <td>${esc(b.salon || "—")}</td>
+          <td>${esc(b.renta || "—")}</td></tr>`).join("")}</tbody></table>
+      <div class="inc">${esc(TEXTOS_EV.cortesia)}</div>` : ""}
+
+    ${e.servicios ? `
+      <h2>Servicios cotizados</h2>
+      <div class="pol" style="white-space:pre-wrap">${esc(e.servicios)}</div>` : ""}
+
+    ${cu.lineas.length ? `
+      <h2>Propuesta económica del evento</h2>
+      <table class="tar"><thead><tr>
+          <th style="width:82px">Fecha</th><th>Servicio</th>
+          <th class="num" style="width:54px">Cant.</th>
+          <th class="num" style="width:88px">P. unitario</th>
+          <th class="num" style="width:92px">Subtotal</th>
+          <th class="num" style="width:76px">IVA ${esc(String(e.iva))}%</th>
+          <th class="num" style="width:82px">Serv. ${esc(String(e.cargoServicio))}%</th>
+          <th class="num" style="width:96px">Total</th></tr></thead>
+        <tbody>${cu.lineas.map(l => `<tr>
+          <td class="nowrap">${esc(fechaBloque(l.fecha))}</td>
+          <td>${esc(l.servicio || "—")}</td>
+          <td class="num">${l.cantidad}</td>
+          <td class="num">${esc(moneyMN(l.precio))}</td>
+          <td class="num">${esc(moneyMN(l.subtotal))}</td>
+          <td class="num">${esc(moneyMN(l.iva))}</td>
+          <td class="num">${l.conServicio ? esc(moneyMN(l.serv)) : "—"}</td>
+          <td class="num"><b>${esc(moneyMN(l.total))}</b></td></tr>`).join("")}
+          <tr class="ct-tot">
+            <td colspan="4"><b>Total del evento</b></td>
+            <td class="num"><b>${esc(moneyMN(cu.subtotal))}</b></td>
+            <td class="num"><b>${esc(moneyMN(cu.iva))}</b></td>
+            <td class="num"><b>${esc(moneyMN(cu.serv))}</b></td>
+            <td class="num"><b>${esc(moneyMN(cu.total))}</b></td></tr></tbody></table>
+      <div class="inc">El cargo por servicio del ${esc(String(e.cargoServicio))}% aplica
+        únicamente a alimentos y bebidas.</div>` : ""}
+
+    <h2>Observaciones</h2>
+    <div class="pol" style="white-space:pre-wrap">${esc(
+      e.observaciones || TEXTOS_EV.observaciones)}</div>
+
+    <div class="pol" style="margin-top:14px">${esc(rellena(TEXTOS_EV.vigencia))}</div>
+
+    <p style="white-space:pre-wrap;margin-top:14px">${esc(TEXTOS_EV.cierre)}</p>
+
+    <div class="firmas">
+      ${bloqueFirma(e.firmaHotel, "Por el hotel", ejecutivoDeEv(e),
+        (u && u.rol === "banquetes") ? "Banquetes" : "Banquetes", "")}
+      ${bloqueFirma(e.firmaCliente, "Firma de aceptación",
+        e.atencion || (c && c.contacto) || "", "", (c && c.telefono) || "")}
+    </div>`;
+}
+
+/* ----- Las dos listas: cotizaciones y contratos ----- */
+
+function renderEventos(){ pintarListaEv("cotizacion", "tblEventos"); }
+function renderContratosBq(){ pintarListaEv("contrato", "tblContratosBq"); }
+
+function pintarListaEv(tipo, idCaja){
+  const cont = document.getElementById(idCaja);
+  const es = eventosVisibles(tipo);
+  const conEje = puedeVerTodo();
+  const esCot = tipo === "cotizacion";
+
+  const cab = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+      <b style="font-size:15px">${esCot ? "Cotizaciones de evento" : "Contratos de banquetes"}</b>
+      <span class="hint">${es.length} en total</span>
+      <span style="flex:1"></span>
+      <button class="btn" data-subirev="${tipo}">Subir uno firmado</button>
+      <button class="btn primary" data-nuevoev="${tipo}">+ ${esCot ? "Nueva cotización" : "Nuevo contrato"}</button></div>
+    <div class="note">${esCot
+      ? "Cotiza un evento: el salón, las horas, los invitados y lo que se sirve. " +
+        "Cuando el cliente confirma, se pasa a contrato desde la propia cotización."
+      : "El contrato de prestación de servicios, con su anticipo y sus penas por " +
+        "cancelación. Sale de una cotización aceptada."}</div>`;
+
+  if (!es.length){
+    cont.innerHTML = cab + `<div class="vacio">Todavía no hay ${esCot ? "cotizaciones" : "contratos"}.</div>`;
+  } else {
+    cont.innerHTML = cab + `<table class="data">
+      <thead><tr><th>Folio</th><th>Evento</th><th>Cliente</th>${conEje ? "<th>Ejecutivo</th>" : ""}
+        <th>Fecha del evento</th><th class="num">Pax</th><th class="num">Total</th>
+        <th>Estado</th><th>Enviado</th><th></th></tr></thead>
+      <tbody>${es.map(e => {
+        const ec = ESTADOS_EV[e.estado], cu = cuentasEvento(e);
+        const pax = e.bloques.reduce((a,b) => Math.max(a, Number(b.pax) || 0), 0);
+        const fe = fechaEvento(e);
+        return `<tr class="row-link" data-id="${e.id}">
+          <td><b>${esc(e.folio || "—")}</b>${e.externo
+            ? ` <span class="pill" title="Se subió escaneado">externo</span>` : ""}</td>
+          <td>${esc(e.titulo || "—")}</td>
+          <td>${esc(nombreCli(e.clienteId))}</td>
+          ${conEje ? `<td class="nowrap">${esc(ejecutivoDeEv(e) || "—")}</td>` : ""}
+          <td class="nowrap">${fe ? esc(fechaCorta(fe)) : "—"}</td>
+          <td class="num">${pax || "—"}</td>
+          <td class="num nowrap"><b>${esc(moneyMN(cu.total))}</b></td>
+          <td><span class="estado-chip" style="background:${ec.bg};color:${ec.fg}">${esc(ec.name)}</span></td>
+          <td class="nowrap">${selloEnvio(e)}</td>
+          <td class="nowrap"><button class="btn sm" data-doc="${e.id}">Ver documento</button></td>
+        </tr>`;
+      }).join("")}</tbody></table>`;
+
+    cont.querySelectorAll("tr[data-id]").forEach(tr => tr.addEventListener("click", ev => {
+      const d = ev.target.closest("[data-doc]");
+      if (d){ ev.stopPropagation(); verEvento(d.dataset.doc); return; }
+      editarEvento(tr.dataset.id);
+    }));
+  }
+  cont.querySelector("[data-nuevoev]").onclick = () => editarEvento(null, tipo);
+  cont.querySelector("[data-subirev]").onclick = () => subirEventoExterno(tipo);
+}
+
+/* ----- El editor ----- */
+
+function editarEvento(id, tipoPre, alCerrar){
+  const existente = id ? state.eventos.find(x => x.id === id) : null;
+
+  if (existente && existente.externo){ verEventoExterno(existente, alCerrar); return; }
+  if (existente && existente.estado !== "borrador"){
+    alert("Este documento ya salió y no se puede editar.\n\nSe abrirá en modo lectura.");
+    verEvento(existente.id, alCerrar);
+    return;
+  }
+
+  const tipo = existente ? existente.tipo : (tipoPre || "cotizacion");
+  const e = existente || saneaEvento({
+    tipo, fecha: hoyISO(), ejecutivo: miNombre(),
+    folio: folioEvento(tipo, new Date().getFullYear()),
+    bloques: [saneaBloqueEv({})],
+    lineas: [saneaLineaEv({})]
+  });
+
+  const filaB = b => `<tr>
+    <td><input class="field b-fecha" type="date" value="${esc(b.fecha)}" style="width:100%"></td>
+    <td><input class="field b-hora" value="${esc(b.horario)}" placeholder="20:00-02:00" style="width:100%"></td>
+    <td><input class="field b-evento" value="${esc(b.evento)}" placeholder="Boda" style="width:100%"></td>
+    <td><input class="field b-pax num" inputmode="numeric" value="${esc(b.pax)}" style="width:100%;text-align:right"></td>
+    <td><input class="field b-montaje" value="${esc(b.montaje)}" list="listaMontajes" style="width:100%"></td>
+    <td><input class="field b-salon" value="${esc(b.salon)}" placeholder="Ónix" style="width:100%"></td>
+    <td><input class="field b-renta" value="${esc(b.renta)}" placeholder="En cortesía por consumo" style="width:100%"></td>
+    <td><button class="btn sm danger" data-quita>✕</button></td></tr>`;
+
+  const filaL = l => `<tr>
+    <td><input class="field l-fecha" type="date" value="${esc(l.fecha)}" style="width:100%"></td>
+    <td><input class="field l-servicio" value="${esc(l.servicio)}" placeholder="Cena emplatada" style="width:100%"></td>
+    <td><input class="field l-cant num" inputmode="numeric" value="${l.cantidad || ""}" style="width:100%;text-align:right"></td>
+    <td><input class="field l-precio num" inputmode="decimal" value="${l.precio || ""}" style="width:100%;text-align:right"></td>
+    <td class="selcell"><input type="checkbox" class="l-serv"${l.conServicio ? " checked" : ""}
+          title="¿Lleva cargo por servicio? Sólo alimentos y bebidas."></td>
+    <td class="num l-sub">—</td>
+    <td class="num l-tot">—</td>
+    <td><button class="btn sm danger" data-quita>✕</button></td></tr>`;
+
+  const ov = modal(`
+    <div class="modal wide">
+      <div class="modal-head"><h2>${existente ? "Editar" : "Nueva"} ${esc(infoTipoEv(tipo).name.toLowerCase())} de evento</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div id="evErr"></div>
+        <div class="grid">
+          <div class="full"><label class="lbl">Cliente</label>
+            <select class="field" id="evCli">
+              <option value="">— Selecciona un cliente —</option>
+              ${[...state.clientes].sort((a,b)=>a.empresa.localeCompare(b.empresa,"es")).map(x =>
+                `<option value="${x.id}"${x.id===e.clienteId?" selected":""}>${esc(x.empresa)}${
+                  x.contacto?" · "+esc(x.contacto):""}</option>`).join("")}
+            </select></div>
+          <div><label class="lbl">Atención a <span class="hint">(a quién va dirigida)</span></label>
+            <input class="field" id="evAtn" value="${esc(e.atencion)}" placeholder="Claudia Cruz"></div>
+          <div><label class="lbl">Referencia del evento</label>
+            <input class="field" id="evTit" value="${esc(e.titulo)}" placeholder="Boda Claudia &amp; Ricardo"></div>
+          <div><label class="lbl">Folio</label>
+            <input class="field" id="evFolio" value="${esc(e.folio)}"></div>
+          <div><label class="lbl">Fecha del documento</label>
+            <input class="field" type="date" id="evFecha" value="${esc(e.fecha)}"></div>
+          <div><label class="lbl">Vigencia hasta</label>
+            <input class="field" type="date" id="evVig" value="${esc(e.vigencia)}"></div>
+          <div class="full"><label class="lbl">Ejecutivo de banquetes</label>
+            ${selectEjecutivo(e.ejecutivo || (cliente(e.clienteId)||{}).ejecutivo || miNombre(), "evEje")}</div>
+          <div><label class="lbl">IVA (%)</label>
+            <input class="field" id="evIva" inputmode="decimal" value="${esc(String(e.iva))}"></div>
+          <div><label class="lbl">Cargo por servicio (%)</label>
+            <input class="field" id="evServ" inputmode="decimal" value="${esc(String(e.cargoServicio))}">
+            <div class="hint">Sólo sobre alimentos y bebidas.</div></div>
+        </div>
+
+        <h3 class="sec">Detalles del evento</h3>
+        <div class="note">Un renglón por momento: el cóctel, la cena, el after. Es lo que
+          después se ve en el calendario.</div>
+        <div style="overflow:auto"><table class="data" id="tBloq">
+          <thead><tr><th style="width:150px">Fecha</th><th style="width:120px">Horario</th><th>Evento</th>
+            <th class="num" style="width:80px">Pax</th><th style="width:130px">Montaje</th>
+            <th style="width:130px">Salón</th><th style="width:180px">Renta</th><th style="width:44px"></th></tr></thead>
+          <tbody>${(e.bloques.length ? e.bloques : [saneaBloqueEv({})]).map(filaB).join("")}</tbody></table></div>
+        <datalist id="listaMontajes">${MONTAJES.map(m => `<option value="${esc(m)}">`).join("")}</datalist>
+        <p style="margin:8px 0 0"><button class="btn" id="bAddBloq">+ Agregar momento</button></p>
+
+        <h3 class="sec">Servicios cotizados</h3>
+        <p class="hint" style="margin-top:0">Tal cual va en el documento: por espacio, con sus
+          viñetas. Se imprime respetando los renglones.</p>
+        <textarea class="field" id="evServicios" style="width:100%;min-height:150px"
+          placeholder="Jardín ZEN&#10;· Ceremonia durante 2 horas previas a la recepción&#10;· Barra de mixología por 1 hora">${esc(e.servicios)}</textarea>
+
+        <h3 class="sec">Propuesta económica</h3>
+        <div class="note">La palomita de <b>Serv.</b> marca los renglones que llevan el cargo
+          por servicio: alimentos y bebidas sí, audiovisual y mobiliario no.</div>
+        <div style="overflow:auto"><table class="data" id="tLin">
+          <thead><tr><th style="width:150px">Fecha</th><th>Servicio</th>
+            <th class="num" style="width:80px">Cant.</th><th class="num" style="width:110px">P. unitario</th>
+            <th style="width:54px">Serv.</th>
+            <th class="num" style="width:110px">Subtotal</th>
+            <th class="num" style="width:120px">Total</th><th style="width:44px"></th></tr></thead>
+          <tbody>${(e.lineas.length ? e.lineas : [saneaLineaEv({})]).map(filaL).join("")}</tbody>
+          <tfoot><tr><td colspan="5"><b>Total del evento</b></td>
+            <td class="num" id="evSub"><b>—</b></td>
+            <td class="num" id="evTot"><b>—</b></td><td></td></tr></tfoot></table></div>
+        <p style="margin:8px 0 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn" id="bAddLin">+ Agregar renglón</button>
+          <span class="hint" id="evDesglose"></span></p>
+
+        ${tipo === "contrato" ? `
+          <h3 class="sec">Del contrato</h3>
+          <div class="grid">
+            <div><label class="lbl">Garantía de invitados</label>
+              <input class="field" id="evGar" inputmode="numeric" value="${esc(e.garantiaPax)}"
+                placeholder="150"></div>
+            <div><label class="lbl">Anticipo</label>
+              <input class="field" id="evAnt" inputmode="decimal" value="${e.anticipo === "" ? "" : e.anticipo}"></div>
+            <div><label class="lbl">Pagar antes del</label>
+              <input class="field" type="date" id="evLim" value="${esc(e.fechaLimitePago)}"></div>
+          </div>` : ""}
+
+        <h3 class="sec">Observaciones</h3>
+        <textarea class="field" id="evObs" style="width:100%;min-height:70px"
+          placeholder="${esc(TEXTOS_EV.observaciones)}">${esc(e.observaciones)}</textarea>
+      </div>
+      <div class="modal-foot">
+        ${existente ? `<button class="btn danger" id="bDelEv">Eliminar</button>` : ""}
+        <div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn" id="bOkEv">Guardar borrador</button>
+        <button class="btn ok" id="bFirmarEv">Guardar y firmar</button>
+      </div>
+    </div>`);
+
+  const q = sel => ov.querySelector(sel);
+  const pct = id => Number(q(id).value) || 0;
+
+  function recalcular(){
+    const pIva = pct("#evIva") / 100, pServ = pct("#evServ") / 100;
+    let sub = 0, iva = 0, serv = 0;
+    ov.querySelectorAll("#tLin tbody tr").forEach(tr => {
+      const cant = Number(tr.querySelector(".l-cant").value) || 0;
+      const pr = parseMoney(tr.querySelector(".l-precio").value);
+      const st = cant * pr;
+      const i = st * pIva, sv = tr.querySelector(".l-serv").checked ? st * pServ : 0;
+      sub += st; iva += i; serv += sv;
+      tr.querySelector(".l-sub").textContent = st ? moneyMN(st) : "—";
+      tr.querySelector(".l-tot").textContent = st ? moneyMN(st + i + sv) : "—";
+    });
+    q("#evSub").innerHTML = `<b>${sub ? esc(moneyMN(sub)) : "—"}</b>`;
+    q("#evTot").innerHTML = `<b>${sub ? esc(moneyMN(sub + iva + serv)) : "—"}</b>`;
+    q("#evDesglose").textContent = sub
+      ? `Subtotal ${moneyMN(sub)} · IVA ${moneyMN(iva)} · servicio ${moneyMN(serv)}` : "";
+  }
+
+  ov.addEventListener("input", ev => {
+    if (ev.target.closest("#tLin") || ev.target.id === "evIva" || ev.target.id === "evServ")
+      recalcular();
+  });
+  ov.addEventListener("change", ev => {
+    if (ev.target.classList.contains("l-serv")) recalcular();
+  });
+  ov.addEventListener("click", ev => {
+    const b = ev.target.closest("[data-quita]");
+    if (!b) return;
+    const tr = b.closest("tr"), cuerpo = tr.parentElement;
+    tr.remove();
+    if (!cuerpo.children.length)
+      cuerpo.insertAdjacentHTML("beforeend",
+        cuerpo.closest("#tBloq") ? filaB(saneaBloqueEv({})) : filaL(saneaLineaEv({})));
+    recalcular();
+  });
+  recalcular();
+
+  q("#bAddBloq").onclick = () =>
+    ov.querySelector("#tBloq tbody").insertAdjacentHTML("beforeend", filaB(saneaBloqueEv({})));
+  q("#bAddLin").onclick = () => {
+    ov.querySelector("#tLin tbody").insertAdjacentHTML("beforeend", filaL(saneaLineaEv({})));
+    recalcular();
+  };
+
+  const bd = q("#bDelEv");
+  if (bd) bd.onclick = () => {
+    if (!confirm("¿Eliminar este documento? Esta acción no se puede deshacer.")) return;
+    state.eventos = state.eventos.filter(x => x.id !== e.id);
+    guardar(); render(); ov.remove();
+    if (alCerrar) alCerrar();
+  };
+
+  q("#bOkEv").onclick = () => { if (recoger()){ ov.remove(); if (alCerrar) alCerrar(); } };
+  q("#bFirmarEv").onclick = () => {
+    if (!recoger()) return;
+    ov.remove();
+    verEvento(e.id, alCerrar, true);
+  };
+
+  function pintaErrores(lista){
+    q("#evErr").innerHTML = lista.length
+      ? `<div class="errbox"><b>Falta esto para poder continuar:</b><ul>${
+          lista.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`
+      : "";
+  }
+
+  function recoger(){
+    const cid = q("#evCli").value;
+    const bloques = [...ov.querySelectorAll("#tBloq tbody tr")].map(tr => saneaBloqueEv({
+      fecha: tr.querySelector(".b-fecha").value, horario: tr.querySelector(".b-hora").value,
+      evento: tr.querySelector(".b-evento").value, pax: tr.querySelector(".b-pax").value,
+      montaje: tr.querySelector(".b-montaje").value, salon: tr.querySelector(".b-salon").value,
+      renta: tr.querySelector(".b-renta").value
+    })).filter(b => b.fecha || b.evento || b.salon);
+    const lineas = [...ov.querySelectorAll("#tLin tbody tr")].map(tr => saneaLineaEv({
+      fecha: tr.querySelector(".l-fecha").value, servicio: tr.querySelector(".l-servicio").value,
+      cantidad: tr.querySelector(".l-cant").value,
+      precio: parseMoney(tr.querySelector(".l-precio").value),
+      conServicio: tr.querySelector(".l-serv").checked
+    })).filter(l => l.servicio || l.cantidad || l.precio);
+
+    const problemas = [];
+    if (!cid) problemas.push("Selecciona el cliente.");
+    if (!bloques.length) problemas.push("Captura al menos un momento del evento.");
+    if (!bloques.some(b => b.fecha))
+      problemas.push("Al menos un momento necesita fecha, o el evento no sale en el calendario.");
+    if (!lineas.length) problemas.push("Captura al menos un renglón en la propuesta económica.");
+    lineas.forEach((l, i) => {
+      if (!l.servicio) problemas.push(`Al renglón ${i+1} de la propuesta le falta el servicio.`);
+      if (!l.cantidad) problemas.push(`Al renglón ${i+1} le falta la cantidad.`);
+      if (!l.precio)   problemas.push(`Al renglón ${i+1} le falta el precio.`);
+    });
+
+    pintaErrores(problemas);
+    if (problemas.length){
+      q("#evErr").scrollIntoView({ block:"center", behavior:"smooth" });
+      return false;
+    }
+
+    let folio = q("#evFolio").value.trim();
+    if (state.eventos.some(x => x.id !== e.id &&
+        String(x.folio || "").trim().toUpperCase() === folio.toUpperCase()))
+      folio = folioEvento(tipo, String(q("#evFecha").value || "").slice(0,4), e.id);
+
+    Object.assign(e, {
+      clienteId: cid,
+      ejecutivo: q('[name="evEje"]').value.trim(),
+      atencion: q("#evAtn").value.trim(),
+      titulo: q("#evTit").value.trim(),
+      folio,
+      fecha: q("#evFecha").value || hoyISO(),
+      vigencia: q("#evVig").value,
+      iva: pct("#evIva"), cargoServicio: pct("#evServ"),
+      bloques, lineas,
+      servicios: q("#evServicios").value.trim(),
+      observaciones: q("#evObs").value.trim(),
+      garantiaPax: q("#evGar") ? q("#evGar").value.trim() : e.garantiaPax,
+      anticipo: q("#evAnt") ? (q("#evAnt").value.trim() === "" ? "" : parseMoney(q("#evAnt").value)) : e.anticipo,
+      fechaLimitePago: q("#evLim") ? q("#evLim").value : e.fechaLimitePago,
+      updatedAt: new Date().toISOString()
+    });
+    if (!existente){ e.createdAt = new Date().toISOString(); state.eventos.push(e); }
+    guardar(); render();
+    return true;
+  }
+}
+
+/**
+ * El contrato de prestación de servicios de eventos sociales.
+ *
+ * Es el legal que usa banquetes, con sus diecinueve cláusulas. Lo que cambia
+ * de un contrato a otro son unos cuantos huecos —el cliente, el evento, el
+ * salón, el monto—; el resto es siempre igual, así que vive aquí y no se
+ * recaptura. Los datos fiscales y bancarios del hotel salen de Ajustes: en
+ * este archivo no puede haber ninguno, porque se publica.
+ */
+function cuerpoContratoBq(e, c){
+  if (!(c && c.empresa) && e.destinatario) c = e.destinatario;
+  const h = state.ajustes.hotel;
+  const cu = cuentasEvento(e);
+  const fe = fechaEvento(e);
+  const primero = e.bloques[0] || {};
+  const hueco = v => String(v || "").trim() || "________________";
+
+  const cl = (t, x) => `<div class="cl"><b>${esc(t)}</b> ${x}</div>`;
+  const li = xs => `<ul class="ct-serv">${xs.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+  const penas = [
+    "El 10% del monto total, si la cancelación se solicita 90 días hábiles antes del evento.",
+    "El 25% del monto total, si se solicita 60 días hábiles antes del evento.",
+    "El 50% del monto total, si se solicita 30 días hábiles antes del evento.",
+    "El 100% del monto total, si se solicita 5 días hábiles antes del evento."
+  ];
+
+  return `
+    <div class="doc-hotel">
+      ${h.logo ? `<img class="doc-logo" src="${esc(h.logo)}" alt="${esc(h.nombre)}">`
+        : esQuartz(h.nombre) ? `<div class="doc-wordmark">${logoQuartz(MORADO_QUARTZ)}</div>`
+        : `<div class="doc-mono">${monogramaQ(MORADO_QUARTZ)}</div><b>${esc(h.nombre)}</b>`}
+    </div>
+    <div class="doc-regla"></div>
+
+    <h1 style="font-size:14px;text-align:center;margin:14px 0 12px;color:#39104e;
+      line-height:1.5">CONTRATO DE PRESTACIÓN DE SERVICIOS DE EVENTOS SOCIALES
+      (BANQUETES)</h1>
+
+    <div class="pol">Que celebran por una parte <b>${esc(hueco(h.razonSocial))}</b>,
+      representada por <b>${esc(hueco(h.representante))}</b>, a quien en lo sucesivo se le
+      denominará <b>“EL PRESTADOR DEL SERVICIO”</b>, y por la otra
+      <b>${esc(hueco(c && c.empresa))}</b>, a quien en lo sucesivo se le denominará
+      <b>“EL CLIENTE”</b>, al tenor de las siguientes declaraciones y cláusulas:</div>
+
+    <h2>Declaraciones</h2>
+    <div class="pol"><b>I.- Declara “EL PRESTADOR DEL SERVICIO”:</b></div>
+    ${li([
+      `Ser una persona moral mexicana según consta en la escritura pública ${hueco(h.escritura)}.`,
+      `Que su RFC es ${hueco(h.rfc)} y su domicilio el ubicado en ${hueco(h.domicilioFiscal)}.`,
+      "Que cuenta con la capacidad, infraestructura, servicios y recursos necesarios para dar " +
+      "cabal cumplimiento a las obligaciones contenidas en el presente contrato.",
+      `Que cuenta con personal capacitado para atender quejas y reclamaciones, para lo cual ` +
+      `señala el teléfono ${h.telefono}, con horario de atención ${h.horarioAtencion}.`,
+      "Que informó al CLIENTE los precios, tarifas, condiciones, características y costo total " +
+      "del servicio, así como las restricciones aplicables."
+    ])}
+
+    <div class="pol"><b>II.- Declara “EL CLIENTE”:</b></div>
+    ${li([
+      "Llamarse como ha quedado plasmado en el proemio de este contrato.",
+      "Que es su deseo obligarse en los términos y condiciones del presente contrato, " +
+      "manifestando que cuenta con la capacidad legal para celebrarlo.",
+      `Que su domicilio es ${hueco(c && c.ubicacion)}, con teléfono ` +
+      `${hueco(c && c.telefono)} y correo electrónico ${hueco(c && c.email)}.`
+    ])}
+
+    <h2>Cláusulas</h2>
+
+    ${cl("PRIMERA. CONSENTIMIENTO.—",
+      "Las partes manifiestan su voluntad de celebrar el presente contrato de prestación de " +
+      "servicios de eventos sociales, por lo que EL PRESTADOR DEL SERVICIO se obliga a prestar " +
+      "el servicio a EL CLIENTE en el domicilio del primero y, en consecuencia, este último se " +
+      "obliga a pagar como contraprestación un precio cierto y determinado.")}
+
+    ${cl("SEGUNDA. OBJETO.—",
+      `El Prestador de Servicios se obliga a proporcionar al CLIENTE el servicio del evento ` +
+      `denominado <b>“${esc(hueco(e.titulo))}”</b>, con fecha ` +
+      `<b>${esc(fe ? fechaLarga(fe) : "________________")}</b>, a llevarse a cabo en el salón ` +
+      `<b>${esc(hueco(primero.salon))}</b>${primero.horario
+        ? ` en horario de <b>${esc(primero.horario)}</b>` : ""}. Los servicios se especifican ` +
+      `en el presupuesto final del evento (anexo A) y en la hoja de trabajo (anexo B), que ` +
+      `forman parte integrante de este contrato.`)}
+
+    ${cl("TERCERA. LOS SERVICIOS.—",
+      "De manera general: renta de salones para eventos; servicio de banquete, proporcionando " +
+      "alimento y servicio; asistir al CLIENTE en el desarrollo de su evento; y prestar " +
+      "aquellos servicios que de tiempo en tiempo convengan ambas partes. Si el CLIENTE " +
+      "contrata servicios adicionales por su parte, es su responsabilidad que esos proveedores " +
+      "cuenten con los permisos necesarios.")}
+
+    ${cl("CUARTA. PAGO DEL SERVICIO.—",
+      `El costo total del servicio contratado asciende a <b>${esc(moneyMN(cu.total))}</b> ` +
+      `(${esc(enLetras(cu.total))}), con IVA, ISH y cargo por servicio de alimentos y bebidas ` +
+      `incluidos, el cual deberá ser cubierto ` +
+      (e.fechaLimitePago ? `antes del <b>${esc(fechaTexto(e.fechaLimitePago))}</b>` :
+        "conforme a lo acordado entre las partes") + `. ` +
+      (e.anticipo !== "" && Number(e.anticipo)
+        ? `Se entrega como anticipo la cantidad de <b>${esc(moneyMN(e.anticipo))}</b>. ` : "") +
+      `El pago podrá hacerse en efectivo en las instalaciones del hotel, con tarjeta de ` +
+      `crédito o débito, o mediante transferencia o depósito a la cuenta ` +
+      `<b>${esc(hueco(h.cuenta))}</b>, CLABE <b>${esc(hueco(h.clabe))}</b>, del banco ` +
+      `<b>${esc(hueco(h.banco))}</b>, a nombre de ${esc(hueco(h.razonSocial))}. ` +
+      `El precio se cubrirá sin importar si el número de asistentes resulta inferior al ` +
+      `contratado. El pago de extras autorizados durante el evento deberá cubrirse al finalizar.`)}
+
+    ${cl("QUINTA. COBRO POR EXCESO DE INVITADOS.—",
+      `El PRESTADOR DEL SERVICIO podrá cobrar al CLIENTE, al final del servicio, la cantidad ` +
+      `que corresponda al número de invitados excedente sobre la garantía de ` +
+      `<b>${esc(hueco(e.garantiaPax))}</b> personas. EL CLIENTE se obliga a entregar el 10% ` +
+      `del precio estipulado para garantizar el pago de servicios excedentes e imprevistos, ` +
+      `cantidad que le será devuelta si al finalizar el evento no se presenta ninguno de ` +
+      `estos supuestos.`)}
+
+    ${cl("SEXTA. OBLIGACIONES DE LAS PARTES.—",
+      "EL PRESTADOR DEL SERVICIO: cumplir lo establecido en este contrato; llevar a cabo la " +
+      "prestación del servicio en la fecha y horarios establecidos; y no hacer ningún cobro " +
+      "ajeno a lo aquí establecido. EL CLIENTE: cumplir lo establecido en este contrato y " +
+      "hacer los pagos en la forma y tiempo señalados.")}
+
+    ${cl("SÉPTIMA. CANCELACIÓN.—",
+      "EL CLIENTE cuenta con cinco días hábiles posteriores a la firma para cancelar o " +
+      "solicitar cambio de fecha sin responsabilidad alguna, siempre que el servicio no se " +
+      "haya prestado. Las cancelaciones deberán solicitarse por escrito. Transcurrido ese " +
+      "plazo, la parte que cancele deberá pagar:") + li(penas) +
+      `<div class="pol">Las mismas penas aplican cuando la cancelación la solicite EL
+        PRESTADOR DEL SERVICIO fuera de ese plazo; dentro de él, deberá reintegrar el anticipo
+        recibido.</div>`}
+
+    ${cl("OCTAVA. CAUSAS DE RESCISIÓN.—",
+      "Que alguna de las partes incumpla cualquiera de los términos y condiciones de este " +
+      "contrato y sus anexos; que el Prestador no realice los servicios en las fechas " +
+      "convenidas; que el CLIENTE no cumpla con los pagos en las fechas estipuladas; o cuando " +
+      "las disposiciones aplicables así lo señalen.")}
+
+    ${cl("NOVENA. PENA CONVENCIONAL.—",
+      "La parte que cause la rescisión deberá pagar una pena equivalente al 10% del precio " +
+      "total del servicio sin incluir el Impuesto al Valor Agregado, dentro de los diez días " +
+      "hábiles siguientes a la solicitud por escrito.")}
+
+    ${cl("DÉCIMA. ATENCIÓN DE RECLAMACIONES.—",
+      `El procedimiento de queja puede iniciarse al teléfono ${esc(h.telefono)}, ` +
+      `${esc(h.horarioAtencion)}, o por comunicación directa con el personal del área donde se ` +
+      `genere. La queja deberá indicar el motivo preciso, el momento en que ocurrieron los ` +
+      `hechos y los datos de contacto para la respuesta. El plazo de respuesta no excederá de ` +
+      `veinte días hábiles.`)}
+
+    ${cl("DÉCIMA PRIMERA. TERMINACIÓN.—",
+      "El presente contrato llegará a su fin al concluir la prestación del servicio para el " +
+      "cual fue contratado, en la hora señalada en la cláusula SEGUNDA.")}
+
+    ${cl("DÉCIMA SEGUNDA. DESIGNACIÓN DE PERSONAL.—",
+      "Cada parte designará a una persona que durante el evento tratará los asuntos " +
+      "relacionados con la prestación del servicio. EL CLIENTE se obliga a abstenerse de dar " +
+      "instrucciones al personal del PRESTADOR que no tengan relación con el objeto de este " +
+      "contrato, y a procurar que sus invitados observen la misma conducta.")}
+
+    ${cl("DÉCIMA TERCERA. ESPECIFICACIONES OPERATIVAS EN SALONES.—",
+      `Los salones se asignan según el tipo de montaje y el número de asistentes. El tiempo ` +
+      `extra para montajes o desmontajes puede tener cargo adicional. Si el sonido rebasa los ` +
+      `parámetros normales de decibeles y molesta a los eventos contiguos, el hotel podrá ` +
+      `reubicar o cancelar el evento. El hotel es libre de humo: está prohibido fumar dentro ` +
+      `de las instalaciones, aun en áreas abiertas, y su incumplimiento se sanciona con ` +
+      `$${esc(h.multaFumar)} pesos.`)}
+
+    ${cl("DÉCIMA CUARTA. SEGURIDAD.—",
+      "Para eventos con asistencia de 600 personas o más, se recomienda que EL CLIENTE " +
+      "contrate un servicio médico con ambulancia por seguridad de sus participantes.")}
+
+    ${cl("DÉCIMA QUINTA. GASTOS DE REPARACIÓN.—",
+      "Si los bienes destinados a la prestación del servicio sufrieren menoscabo por culpa o " +
+      "negligencia comprobada de EL CLIENTE o de sus invitados, éste se obliga a cubrir los " +
+      "gastos de reparación o a indemnizar hasta con un 50% del valor de los bienes dañados.")}
+
+    ${cl("DÉCIMA SEXTA. CONFIDENCIALIDAD.—",
+      "El presente contrato tiene carácter confidencial. El Prestador del Servicio se obliga a " +
+      "mantener los datos del CLIENTE con tal carácter y a no cederlos ni transmitirlos a " +
+      "terceros con fines mercadotécnicos o publicitarios, salvo autorización expresa.")}
+
+    ${cl("DÉCIMA SÉPTIMA. AVISO DE PRIVACIDAD.—",
+      "Previo a la firma, y en cumplimiento de la Ley Federal de Protección de Datos " +
+      "Personales en Posesión de los Particulares, EL PRESTADOR DEL SERVICIO hizo del " +
+      "conocimiento de EL CLIENTE el aviso de privacidad y el procedimiento para ejercer sus " +
+      "derechos de acceso, rectificación, cancelación y oposición.")}
+
+    ${cl("DÉCIMA OCTAVA. CASO FORTUITO Y FUERZA MAYOR.—",
+      "Ninguna de las partes responderá por el incumplimiento, suspensión o retraso causado " +
+      "por caso fortuito o fuerza mayor, entendido como el acontecimiento imprevisible, " +
+      "inevitable y ajeno a la voluntad de las partes. La parte que lo alegue deberá " +
+      "comunicarlo por escrito dentro de los diez días hábiles siguientes. No podrá invocarse " +
+      "por dificultad económica o falta de fondos.")}
+
+    ${cl("DÉCIMA NOVENA. JURISDICCIÓN.—",
+      `La Procuraduría Federal del Consumidor es competente en la vía administrativa para ` +
+      `resolver cualquier controversia sobre la interpretación o cumplimiento de este ` +
+      `contrato. Sin perjuicio de lo anterior, las partes se someten a la jurisdicción de los ` +
+      `tribunales competentes en la ciudad de ${esc(h.ciudad)}.`)}
+
+    <div class="pol" style="margin-top:14px">Leído que fue por las partes el contenido del
+      presente contrato y sabedoras de su alcance legal, lo firman por duplicado en
+      ${esc(h.ciudad)} el ${esc(fechaTexto(e.fecha || hoyISO()))}.</div>
+
+    <div class="firmas">
+      <div class="firma">
+        <h4>EL PRESTADOR DEL SERVICIO</h4>
+        <div class="cv">${e.firmaHotel
+          ? `<img src="${e.firmaHotel.img}" alt="Firma">` : `<span>Pendiente de firma</span>`}</div>
+        <div class="lin">
+          <i>Nombre</i> <u>${esc((e.firmaHotel && e.firmaHotel.nombre) || h.representante)}</u><br>
+          <i>Por</i> <u>${esc(h.razonSocial)}</u><br>
+          <i>Fecha</i> <u>${esc(e.firmaHotel ? fechaFirma(e.firmaHotel.fecha) : "")}</u>
+        </div></div>
+      <div class="firma">
+        <h4>EL CLIENTE</h4>
+        <div class="cv">${e.firmaCliente
+          ? `<img src="${e.firmaCliente.img}" alt="Firma">` : `<span>Pendiente de firma</span>`}</div>
+        <div class="lin">
+          <i>Nombre</i> <u>${esc((e.firmaCliente && e.firmaCliente.nombre) ||
+            e.atencion || (c && c.contacto) || "")}</u><br>
+          <i>Por</i> <u>${esc((c && c.empresa) || "")}</u><br>
+          <i>Fecha</i> <u>${esc(e.firmaCliente ? fechaFirma(e.firmaCliente.fecha) : "")}</u>
+        </div></div>
+    </div>
+
+    ${h.registroProfeco ? `<div class="hint" style="margin-top:14px;font-size:9.5px">
+      El presente contrato de adhesión fue registrado en el Registro Público de Contratos de
+      Adhesión de la Procuraduría Federal del Consumidor bajo el número
+      ${esc(h.registroProfeco)}; cualquier variación del presente en perjuicio del consumidor,
+      frente al contrato registrado, se tendrá por no puesta.</div>` : ""}
+
+    <div style="page-break-before:always"></div>
+    <h2>Anexo A · Desglose del servicio</h2>
+    <table class="tar"><thead><tr>
+        <th>Servicio</th><th class="num" style="width:56px">Cant.</th>
+        <th class="num" style="width:94px">P. unitario</th>
+        <th class="num" style="width:96px">Subtotal</th>
+        <th class="num" style="width:80px">IVA</th>
+        <th class="num" style="width:86px">Servicio</th>
+        <th class="num" style="width:100px">Total</th></tr></thead>
+      <tbody>${cu.lineas.map(l => `<tr>
+        <td>${esc(l.servicio || "—")}</td>
+        <td class="num">${l.cantidad}</td>
+        <td class="num">${esc(moneyMN(l.precio))}</td>
+        <td class="num">${esc(moneyMN(l.subtotal))}</td>
+        <td class="num">${esc(moneyMN(l.iva))}</td>
+        <td class="num">${l.conServicio ? esc(moneyMN(l.serv)) : "—"}</td>
+        <td class="num"><b>${esc(moneyMN(l.total))}</b></td></tr>`).join("")}
+        <tr class="ct-tot"><td colspan="3"><b>Total</b></td>
+          <td class="num"><b>${esc(moneyMN(cu.subtotal))}</b></td>
+          <td class="num"><b>${esc(moneyMN(cu.iva))}</b></td>
+          <td class="num"><b>${esc(moneyMN(cu.serv))}</b></td>
+          <td class="num"><b>${esc(moneyMN(cu.total))}</b></td></tr></tbody></table>
+
+    <h2>Anexo B · Hoja de trabajo</h2>
+    ${e.bloques.length ? `<table class="tar"><thead><tr>
+        <th style="width:92px">Fecha</th><th style="width:92px">Horario</th><th>Evento</th>
+        <th class="num" style="width:52px">Pax</th><th style="width:88px">Montaje</th>
+        <th style="width:96px">Salón</th></tr></thead>
+      <tbody>${e.bloques.map(b => `<tr>
+        <td class="nowrap">${esc(fechaBloque(b.fecha))}</td>
+        <td class="nowrap">${esc(b.horario || "—")}</td>
+        <td>${esc(b.evento || "—")}</td>
+        <td class="num">${esc(b.pax || "—")}</td>
+        <td>${esc(b.montaje || "—")}</td>
+        <td>${esc(b.salon || "—")}</td></tr>`).join("")}</tbody></table>` : ""}
+    ${e.servicios ? `<div class="pol" style="white-space:pre-wrap;margin-top:10px">${
+      esc(e.servicios)}</div>` : ""}
+    ${e.observaciones ? `<div class="pol" style="white-space:pre-wrap;margin-top:10px">${
+      esc(e.observaciones)}</div>` : ""}`;
+}
+
+/** Cantidades en letra, que es como las pide un contrato. */
+function enLetras(n){
+  const ent = Math.floor(Math.abs(Number(n) || 0));
+  const cent = Math.round((Math.abs(Number(n) || 0) - ent) * 100);
+  const U = ["","uno","dos","tres","cuatro","cinco","seis","siete","ocho","nueve","diez",
+    "once","doce","trece","catorce","quince","dieciséis","diecisiete","dieciocho","diecinueve",
+    "veinte","veintiuno","veintidós","veintitrés","veinticuatro","veinticinco","veintiséis",
+    "veintisiete","veintiocho","veintinueve"];
+  const D = ["","","","treinta","cuarenta","cincuenta","sesenta","setenta","ochenta","noventa"];
+  const C = ["","ciento","doscientos","trescientos","cuatrocientos","quinientos","seiscientos",
+    "setecientos","ochocientos","novecientos"];
+  const hasta999 = x => {
+    if (x === 0) return "";
+    if (x === 100) return "cien";
+    const c = Math.floor(x / 100), d = Math.floor((x % 100) / 10), u = x % 10;
+    const resto = x % 100;
+    let t = C[c];
+    if (resto){
+      if (t) t += " ";
+      t += resto < 30 ? U[resto] : (D[d] + (u ? " y " + U[u] : ""));
+    }
+    return t;
+  };
+  const tramo = (x, sing, plur) => {
+    if (!x) return "";
+    if (x === 1) return sing;
+    return hasta999(x) + " " + plur;
+  };
+  let t;
+  if (ent === 0) t = "cero";
+  else {
+    const mill = Math.floor(ent / 1e6), miles = Math.floor((ent % 1e6) / 1000), r = ent % 1000;
+    t = [tramo(mill, "un millón", "millones"), tramo(miles, "mil", "mil"), hasta999(r)]
+      .filter(Boolean).join(" ");
+  }
+  return `${t} pesos ${String(cent).padStart(2, "0")}/100 M.N.`;
+}
+
+const nombrePdfEvento = (e, c) =>
+  infoTipoEv(e.tipo).name + "-" +
+  nombreArchivo([e.folio, e.titulo || (c && c.empresa)].filter(Boolean).join(" ")) + ".pdf";
+
+/* ----- Ver el documento ----- */
+
+function verEvento(id, alCerrar, pedirFirma){
+  const e = state.eventos.find(x => x.id === id);
+  if (!e) return;
+  if (e.externo){ verEventoExterno(e, alCerrar); return; }
+  const c = cliente(e.clienteId);
+  const h = state.ajustes.hotel;
+  const ec = ESTADOS_EV[e.estado];
+  const agua = h.marcaAgua === "ninguna" ? ""
+             : (h.marcaAgua === "logo" && h.logo) ? `<img src="${esc(h.logo)}" alt="">`
+             : monogramaQ(MORADO_QUARTZ);
+  const yaTieneContrato = state.eventos.some(x => x.cotizacionId === e.id);
+
+  const ov = modal(`
+    <div class="modal doc">
+      <div class="modal-head">
+        <h2>${esc(infoTipoEv(e.tipo).name)} ${esc(e.folio || "")}</h2>
+        <span class="estado-chip" style="background:${ec.bg};color:${ec.fg}">${esc(ec.name)}</span>
+        <button class="btn" data-close>✕</button>
+      </div>
+      <div class="doc-body">
+        ${agua ? `<div class="doc-agua">${agua}</div>` : ""}
+        <div class="doc-contenido">${docEvento(e, c)}</div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="bPrintEv">Imprimir</button>
+        <button class="btn" id="bPdfEv">Descargar PDF</button>
+        ${e.estado === "borrador" ? `<button class="btn" id="bEditEv">Editar</button>` : ""}
+        <div class="spacer"></div>
+        ${e.tipo === "cotizacion" && !yaTieneContrato
+          ? `<button class="btn" id="bAContrato">Pasar a contrato</button>` : ""}
+        ${!e.firmaHotel ? `<button class="btn ok" id="bEvF1">Firmar por el hotel</button>` : ""}
+        ${e.firmaHotel && !e.firmaCliente
+          ? `<button class="btn primary" id="bEvEnviar">Enviar al cliente</button>
+             <button class="btn ok" id="bEvF2">Registrar firma del cliente</button>` : ""}
+        ${e.firmaCliente ? `<span class="hint">Aceptado y firmado por el cliente.</span>` : ""}
+      </div>
+    </div>`);
+
+  ov.querySelector("#bPrintEv").onclick = () => {
+    fijarPagina(false);
+    ov.classList.add("printable");
+    const quitar = () => { ov.classList.remove("printable"); window.removeEventListener("afterprint", quitar); };
+    window.addEventListener("afterprint", quitar);
+    window.print();
+    setTimeout(quitar, 1500);
+  };
+
+  const bp = ov.querySelector("#bPdfEv");
+  bp.onclick = async () => {
+    const antes = bp.textContent;
+    bp.disabled = true; bp.textContent = "Generando…";
+    try{
+      const bytes = await pdfDeDocumento(docEvento(e, c));
+      descargarBlob(new Blob([bytes], { type:"application/pdf" }), nombrePdfEvento(e, c));
+    }catch(err){
+      alert("No se pudo generar el PDF aquí: " + err.message +
+            "\n\nUsa Imprimir y elige \"Guardar como PDF\".");
+    }finally{ bp.disabled = false; bp.textContent = antes; }
+  };
+
+  const be = ov.querySelector("#bEditEv");
+  if (be) be.onclick = () => { ov.remove(); editarEvento(e.id, null, alCerrar); };
+
+  const bc = ov.querySelector("#bAContrato");
+  if (bc) bc.onclick = () => { ov.remove(); pasarAContratoBq(e, alCerrar); };
+
+  const f1 = ov.querySelector("#bEvF1");
+  if (f1) f1.onclick = () => padFirma("Firma por el hotel",
+    { nombre: ejecutivoDeEv(e) || miNombre(), puesto:"Banquetes", celular:"" },
+    d => { firmarEvento(e, "hotel", d); ov.remove(); verEvento(e.id, alCerrar); },
+    { recordar:true });
+
+  const f2 = ov.querySelector("#bEvF2");
+  if (f2) f2.onclick = () => padFirma("Firma de aceptación del cliente",
+    { nombre: e.atencion || (c && c.contacto) || "", puesto:"", celular:(c && c.telefono) || "" },
+    d => { firmarEvento(e, "cliente", d); ov.remove(); verEvento(e.id, alCerrar); });
+
+  const en = ov.querySelector("#bEvEnviar");
+  if (en) en.onclick = () => enviarEvento(e, c);
+
+  if (pedirFirma && !e.firmaHotel && f1) setTimeout(() => f1.click(), 60);
+}
+
+function firmarEvento(e, quien, d){
+  const fecha = new Date().toISOString();
+  const firma = saneaFirma(Object.assign({}, d, { fecha }));
+  const c = cliente(e.clienteId);
+  const doc = infoTipoEv(e.tipo).name;
+
+  if (quien === "hotel"){
+    e.firmaHotel = firma;
+    if (e.estado === "borrador") e.estado = "firmado";
+    if (c) e.destinatario = { empresa:c.empresa, contacto:c.contacto, ubicacion:c.ubicacion,
+                              telefono:c.telefono, email:c.email };
+    registrarAuto(e.clienteId, `${doc} ${e.folio} firmada por el hotel`,
+      e.titulo || "", ejecutivoDeEv(e));
+  } else {
+    e.firmaCliente = firma;
+    e.estado = "confirmado";
+    registrarAuto(e.clienteId, `${doc} ${e.folio} aceptada por el cliente`,
+      `Firmó ${d.nombre}.`, ejecutivoDeEv(e));
+    // Un evento confirmado es un cliente ganado.
+    if (c && !est(c.estatus).won){ c.estatus = "ganado"; c.updatedAt = fecha; }
+  }
+  e.updatedAt = new Date().toISOString();
+  guardar(); render();
+}
+
+/** De cotización a contrato: se copia todo y se le agrega lo del contrato. */
+function pasarAContratoBq(cot, alCerrar){
+  const k = saneaEvento(Object.assign({}, cot, {
+    id:"", tipo:"contrato", cotizacionId: cot.id,
+    folio: folioEvento("contrato", anioEvento(cot)),
+    estado:"borrador", firmaHotel:null, firmaCliente:null, enviado:null,
+    garantiaPax: String(cot.bloques.reduce((a,b) => Math.max(a, Number(b.pax) || 0), 0) || ""),
+    fecha: hoyISO(), createdAt:"", updatedAt:""
+  }));
+  state.eventos.push(k);
+  guardar();
+  vista = "contratosbq"; render();
+  editarEvento(k.id, null, alCerrar);
+}
+
+function enviarEvento(e, c){
+  const h = state.ajustes.hotel;
+  const doc = infoTipoEv(e.tipo).name;
+  const asunto = `${doc} ${e.folio} · ${h.nombre}`;
+  const archivo = nombrePdfEvento(e, c);
+  const firmante = (e.firmaHotel && e.firmaHotel.nombre) || ejecutivoDeEv(e);
+  const fe = fechaEvento(e);
+
+  const mensaje = `Estimado(a) ${e.atencion || (c && c.contacto) || ""}:\n\n` +
+    `Adjunto la ${doc.toLowerCase()} ${e.folio} de ${h.nombre}` +
+    (e.titulo ? ` para ${e.titulo}` : "") + `.` +
+    (fe ? ` El evento sería el ${fechaTexto(fe)}.` : "") +
+    (e.vigencia ? ` La cotización tiene vigencia hasta el ${fechaTexto(e.vigencia)}.` : "") +
+    `\n\nQuedo al pendiente de sus comentarios.\n\nSaludos cordiales,\n${firmante}\n${h.nombre}`;
+
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>Enviar ${esc(doc.toLowerCase())} al cliente</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body" id="cuerpoEnvioEv"><p class="hint">Preparando el documento…</p></div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cerrar</button></div>
+    </div>`);
+
+  const anotar = via => {
+    e.enviado = { fecha:new Date().toISOString(), via, quien: correoSesion() };
+    if (e.estado === "firmado") e.estado = "enviada";
+    e.updatedAt = new Date().toISOString();
+    registrarAuto(e.clienteId, `${doc} ${e.folio} enviada por ${VIAS[via]}`,
+      `Enviada a ${via === "correo" ? (c && c.email) : (c && c.telefono)}.`, ejecutivoDeEv(e));
+    guardar(); render();
+  };
+
+  pdfDeDocumento(docEvento(e, c)).then(bytes => {
+    const blob = new Blob([bytes], { type:"application/pdf" });
+    const file = new File([blob], archivo, { type:"application/pdf" });
+    const puedeCompartir = typeof navigator.canShare === "function" &&
+                           navigator.canShare({ files:[file] });
+
+    ov.querySelector("#cuerpoEnvioEv").innerHTML =
+      (puedeCompartir
+        ? `<div class="note">Con <b>Compartir</b> se va el PDF y el mensaje juntos.</div>
+           <p><button class="btn ok" id="evCompartir" style="font-size:15px;padding:10px 16px">
+             Compartir el PDF y el mensaje</button></p>`
+        : `<div class="note warn">Este navegador no deja mandar el archivo y el mensaje de una
+             vez. Descargue el PDF y adjúntelo a mano.</div>`) +
+      `<p><button class="btn" id="evBajar">Descargar el PDF</button></p>
+       <p class="hint" style="margin:10px 0 4px">O abra el mensaje ya redactado:</p>
+       <p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+         <button class="btn" id="evMail" ${(c && c.email) ? "" : "disabled"}>Enviar por correo</button>
+         <button class="btn wa" id="evWa" ${(c && c.telefono) ? "" : "disabled"}
+           title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button></p>
+       <p class="hint">Se guardará como <b>${esc(archivo)}</b></p>`;
+
+    const comp = ov.querySelector("#evCompartir");
+    if (comp) comp.onclick = async () => {
+      try{
+        await navigator.share({ files:[file], title:asunto, text:mensaje });
+        anotar("whatsapp"); ov.remove();
+      }catch(err){}
+    };
+    ov.querySelector("#evBajar").onclick = () => descargarBlob(blob, archivo);
+    ov.querySelector("#evMail").onclick = () => {
+      window.location.href = `mailto:${encodeURIComponent((c && c.email) || "")}` +
+        `?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(mensaje)}`;
+      anotar("correo"); ov.remove();
+    };
+    ov.querySelector("#evWa").onclick = () => {
+      window.open(waLink((c && c.telefono) || "", mensaje), "_blank", "noopener");
+      anotar("whatsapp"); ov.remove();
+    };
+  }).catch(err => {
+    ov.querySelector("#cuerpoEnvioEv").innerHTML =
+      `<div class="errbox">No se pudo armar el PDF: ${esc(err.message)}</div>`;
+  });
+}
+
+/** Un documento de banquetes que vino de fuera, ya firmado. */
+function subirEventoExterno(tipo){
+  subirDocumentoExterno(tipo === "contrato" ? "contratobq" : "cotizacionbq");
+}
+
+function verEventoExterno(e, alCerrar){
+  const c = cliente(e.clienteId);
+  fichaExterna(`${infoTipoEv(e.tipo).name} ${e.folio || ""}`, "Externo · firmado", [
+    ["Cliente", (c && c.empresa) || nombreCli(e.clienteId)],
+    ["Evento", e.titulo],
+    ["Ejecutivo", ejecutivoDeEv(e)],
+    ["Fecha del evento", fechaEvento(e) ? fechaCorta(fechaEvento(e)) : ""],
+    ["Archivo", e.firmaManual && e.firmaManual.archivo],
+    ["Lo registró", e.firmaManual && e.firmaManual.quien],
+    ["Observaciones", e.observaciones]
+  ], e.firmaManual, () => {
+    state.eventos = state.eventos.filter(x => x.id !== e.id);
+    guardar(); render(); if (alCerrar) alCerrar();
+  });
+}
+
+/* ==========================================================================
+   CALENDARIO
+
+   Un mes a la vista con los eventos de banquetes y las actividades agendadas
+   del equipo. Sirve para dos cosas distintas: no encimar dos eventos en el
+   mismo salón, y ver de un vistazo la semana de cada quien.
+   ========================================================================== */
+
+let mesCal = "";        // "2026-09"; vacío = el mes de hoy
+
+const MESES_L = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto",
+                 "septiembre","octubre","noviembre","diciembre"];
+
+const mesActual = () => mesCal || hoyISO().slice(0, 7);
+
+function mueveMes(n){
+  const [a, m] = mesActual().split("-").map(Number);
+  const d = new Date(a, m - 1 + n, 1);
+  mesCal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Todo lo que cae en cada día del mes, ya filtrado por lo que esa persona ve. */
+function agenda(mes){
+  const dias = {};
+  const mete = (f, item) => {
+    const d = String(f || "").slice(0, 10);
+    if (!d.startsWith(mes)) return;
+    (dias[d] = dias[d] || []).push(item);
+  };
+
+  // Los eventos de banquetes, momento por momento: un mismo evento puede
+  // ocupar dos días (la boda y el after de la madrugada siguiente).
+  for (const e of state.eventos){
+    if (!eventoEsMio(e) || e.estado === "cancelado") continue;
+    const vistos = new Set();
+    for (const b of e.bloques){
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(b.fecha) || vistos.has(b.fecha)) continue;
+      vistos.add(b.fecha);
+      const mismos = e.bloques.filter(x => x.fecha === b.fecha);
+      mete(b.fecha, {
+        clase: e.tipo === "contrato" ? "ev-contrato" : "ev-cot",
+        titulo: e.titulo || nombreCli(e.clienteId),
+        detalle: mismos.map(x => [x.horario, x.salon, x.pax ? x.pax + " pax" : ""]
+          .filter(Boolean).join(" · ")).join("  |  "),
+        pie: `${infoTipoEv(e.tipo).name} ${e.folio} · ${ESTADOS_EV[e.estado].name}`,
+        abre: () => verEvento(e.id)
+      });
+    }
+  }
+
+  // Y las actividades agendadas del equipo.
+  const mios = new Set(state.clientes.filter(esMio).map(c => c.id));
+  const yo = miNombre().trim().toLowerCase();
+  for (const a of state.actividades){
+    const suya = puedeVerTodo() || mios.has(a.clienteId) ||
+      (!!yo && String(a.responsable || "").trim().toLowerCase() === yo);
+    if (!suya) continue;
+    mete(a.fecha, {
+      clase: "ev-act",
+      titulo: `${tipoAct(a.tipo).icon} ${a.asunto || tipoAct(a.tipo).name}`,
+      detalle: [String(a.fecha).slice(11, 16), nombreCli(a.clienteId)].filter(Boolean).join(" · "),
+      pie: a.responsable || "",
+      abre: () => abrirCliente(a.clienteId, null, "acts")
+    });
+  }
+
+  for (const d of Object.keys(dias))
+    dias[d].sort((x, y) => String(x.detalle).localeCompare(String(y.detalle)));
+  return dias;
+}
+
+function renderCalendario(){
+  const cont = document.getElementById("tblCalendario");
+  const mes = mesActual();
+  const [anio, m] = mes.split("-").map(Number);
+  const dias = agenda(mes);
+
+  const primero = new Date(anio, m - 1, 1);
+  const largo = new Date(anio, m, 0).getDate();
+  const arranque = (primero.getDay() + 6) % 7;      // la semana empieza en lunes
+  const hoy = hoyISO();
+
+  const celdas = [];
+  for (let i = 0; i < arranque; i++) celdas.push(`<div class="cal-d fuera"></div>`);
+  for (let d = 1; d <= largo; d++){
+    const iso = `${anio}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    const items = dias[iso] || [];
+    celdas.push(`<div class="cal-d${iso === hoy ? " hoy" : ""}" data-dia="${iso}">
+      <div class="cal-n">${d}</div>
+      ${items.slice(0, 4).map((x, i) =>
+        `<button class="cal-ev ${x.clase}" data-dia="${iso}" data-i="${i}"
+           title="${esc([x.titulo, x.detalle, x.pie].filter(Boolean).join(" · "))}"
+        >${esc(x.titulo)}</button>`).join("")}
+      ${items.length > 4 ? `<button class="cal-mas" data-dia="${iso}">+${items.length - 4} más</button>` : ""}
+    </div>`);
+  }
+
+  const totalEv = Object.values(dias).flat().filter(x => x.clase !== "ev-act").length;
+  const totalAc = Object.values(dias).flat().filter(x => x.clase === "ev-act").length;
+
+  cont.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn sm" id="calAnt" aria-label="Mes anterior">‹</button>
+      <b style="font-size:16px;min-width:190px;text-align:center">${
+        esc(MESES_L[m-1][0].toUpperCase() + MESES_L[m-1].slice(1))} ${anio}</b>
+      <button class="btn sm" id="calSig" aria-label="Mes siguiente">›</button>
+      <button class="btn sm" id="calHoy">Hoy</button>
+      <span style="flex:1"></span>
+      <span class="hint">${totalEv} evento(s) · ${totalAc} actividad(es)</span>
+    </div>
+    <div class="cal-leyenda">
+      <span><i class="ev-contrato"></i> Contratado</span>
+      <span><i class="ev-cot"></i> Cotizado</span>
+      <span><i class="ev-act"></i> Actividad</span>
+    </div>
+    <div class="cal-sem">${["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"].map(x =>
+      `<div>${x}</div>`).join("")}</div>
+    <div class="cal-rej">${celdas.join("")}</div>`;
+
+  cont.querySelector("#calAnt").onclick = () => { mueveMes(-1); render(); };
+  cont.querySelector("#calSig").onclick = () => { mueveMes(1); render(); };
+  cont.querySelector("#calHoy").onclick = () => { mesCal = ""; render(); };
+
+  cont.querySelectorAll(".cal-ev").forEach(b => b.onclick = () => {
+    const x = (dias[b.dataset.dia] || [])[Number(b.dataset.i)];
+    if (x) x.abre();
+  });
+  cont.querySelectorAll(".cal-mas, .cal-d").forEach(b => b.onclick = ev => {
+    if (ev.target.closest(".cal-ev")) return;
+    const iso = b.dataset.dia;
+    if (!iso || !(dias[iso] || []).length) return;
+    diaCalendario(iso, dias[iso]);
+  });
+}
+
+function diaCalendario(iso, items){
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>${esc(fechaLarga(iso))}</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        ${items.map((x, i) => `<div class="cal-fila" data-i="${i}">
+          <span class="cal-punto ${x.clase}"></span>
+          <div style="flex:1;min-width:0">
+            <b>${esc(x.titulo)}</b>
+            ${x.detalle ? `<div class="hint">${esc(x.detalle)}</div>` : ""}
+            ${x.pie ? `<div class="hint">${esc(x.pie)}</div>` : ""}
+          </div>
+          <button class="btn sm">Abrir</button></div>`).join("")}
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cerrar</button></div>
+    </div>`);
+  ov.querySelectorAll(".cal-fila").forEach(f => f.onclick = () => {
+    const x = items[Number(f.dataset.i)];
+    ov.remove();
+    if (x) x.abre();
+  });
+}
+
+/* ==========================================================================
+   REPORTES
+
+   Lo que de verdad va a entrar, contado en el mes en que ocurre el evento o
+   la estancia: contratos de hospedaje aceptados y eventos de banquetes
+   confirmados. Lo que sigue en la mesa se cuenta aparte, como pronóstico.
+   ========================================================================== */
+
+let repDesde = "", repHasta = "";
+
+const rangoReporte = () => {
+  const hoy = new Date();
+  const desde = repDesde || `${hoy.getFullYear()}-01-01`;
+  const hasta = repHasta || `${hoy.getFullYear()}-12-31`;
+  return [desde, hasta];
+};
+
+/**
+ * Cada renglón de ingreso: de dónde viene, cuánto, de quién y cuándo cae.
+ *
+ * La fecha que manda es la del evento o la de la estancia, no la de la firma:
+ * es cuando el hotel de verdad cobra.
+ */
+function ingresos(){
+  const [desde, hasta] = rangoReporte();
+  const filas = [];
+
+  for (const e of state.eventos){
+    if (!eventoEsMio(e) || e.estado === "cancelado") continue;
+    const f = fechaEvento(e);
+    if (!f || f < desde || f > hasta) continue;
+    // Un contrato manda sobre la cotización de la que salió: si no, se cuenta doble.
+    if (e.tipo === "cotizacion" && state.eventos.some(x => x.cotizacionId === e.id)) continue;
+    filas.push({
+      fecha: f, area: "Banquetes", tipo: infoTipoEv(e.tipo).name,
+      folio: e.folio, cliente: nombreCli(e.clienteId),
+      concepto: e.titulo || "Evento",
+      ejecutivo: ejecutivoDeEv(e) || "Sin asignar",
+      monto: cuentasEvento(e).total,
+      cerrado: e.estado === "confirmado",
+      abre: () => verEvento(e.id)
+    });
+  }
+
+  for (const k of state.contratos){
+    if (!contratoEsMio(k)) continue;
+    const f = k.fecha;
+    if (!f || f < desde || f > hasta) continue;
+    filas.push({
+      fecha: f, area: "Hospedaje", tipo: infoTipoCt(k.tipo).name,
+      folio: k.folio, cliente: nombreCli(k.clienteId),
+      concepto: k.titulo || "Hospedaje",
+      ejecutivo: ejecutivoDeCt(k) || "Sin asignar",
+      monto: cuentasContrato(k).total,
+      cerrado: k.estado === "aceptado",
+      abre: () => verContrato(k.id)
+    });
+  }
+
+  return filas.sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+}
+
+function renderReportes(){
+  const cont = document.getElementById("tblReportes");
+  const [desde, hasta] = rangoReporte();
+  const filas = ingresos();
+  const cerrado = filas.filter(f => f.cerrado);
+  const enMesa  = filas.filter(f => !f.cerrado);
+  const suma = a => a.reduce((x, f) => x + f.monto, 0);
+
+  // Por ejecutivo
+  const porEje = new Map();
+  for (const f of filas){
+    const k = porEje.get(f.ejecutivo) || { cerrado:0, mesa:0, n:0 };
+    k[f.cerrado ? "cerrado" : "mesa"] += f.monto;
+    k.n++;
+    porEje.set(f.ejecutivo, k);
+  }
+  const ejes = [...porEje.entries()].sort((a, b) => b[1].cerrado - a[1].cerrado);
+
+  // Por mes, para ver la estacionalidad
+  const porMes = new Map();
+  for (const f of filas){
+    const m = String(f.fecha).slice(0, 7);
+    const k = porMes.get(m) || { cerrado:0, mesa:0 };
+    k[f.cerrado ? "cerrado" : "mesa"] += f.monto;
+    porMes.set(m, k);
+  }
+  const meses = [...porMes.entries()].sort();
+  const tope = Math.max(1, ...meses.map(([, v]) => v.cerrado + v.mesa));
+
+  const porArea = a => ["Banquetes","Hospedaje"].map(x =>
+    ({ area:x, monto: suma(a.filter(f => f.area === x)) }));
+
+  cont.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <b style="font-size:15px">Reportes de ingreso</b>
+      <span style="flex:1"></span>
+      <label class="hint">Del</label>
+      <input class="field" type="date" id="repD" value="${esc(desde)}">
+      <label class="hint">al</label>
+      <input class="field" type="date" id="repH" value="${esc(hasta)}">
+      <button class="btn" id="repAnio">Este año</button>
+      <button class="btn" id="repCsv">Exportar CSV</button>
+    </div>
+    <div class="note">Cada documento se cuenta en el mes en que <b>ocurre el evento o la
+      estancia</b>, no en el que se firmó: es cuando el hotel cobra. Una cotización que ya
+      tiene contrato no se cuenta dos veces.</div>
+
+    <div class="kpis" style="margin-bottom:16px">
+      <div class="kpi"><div class="k-t">Cerrado</div>
+        <div class="k-v">${esc(moneyMN(suma(cerrado)))}</div>
+        <div class="k-s">${cerrado.length} documento(s) firmado(s)</div></div>
+      <div class="kpi"><div class="k-t">En la mesa</div>
+        <div class="k-v">${esc(moneyMN(suma(enMesa)))}</div>
+        <div class="k-s">${enMesa.length} sin cerrar</div></div>
+      ${porArea(cerrado).map(x => `<div class="kpi"><div class="k-t">${esc(x.area)}</div>
+        <div class="k-v">${esc(moneyMN(x.monto))}</div>
+        <div class="k-s">cerrado en el periodo</div></div>`).join("")}
+    </div>
+
+    <h3 class="sec">Por ejecutivo</h3>
+    ${ejes.length ? `<div style="overflow:auto"><table class="data">
+      <thead><tr><th>Ejecutivo</th><th class="num">Documentos</th>
+        <th class="num">Cerrado</th><th class="num">En la mesa</th><th></th></tr></thead>
+      <tbody>${ejes.map(([n, v]) => `<tr>
+        <td><b>${esc(n)}</b></td>
+        <td class="num">${v.n}</td>
+        <td class="num"><b>${esc(moneyMN(v.cerrado))}</b></td>
+        <td class="num">${esc(moneyMN(v.mesa))}</td>
+        <td style="width:36%"><div class="barra"><i style="width:${
+          Math.round(v.cerrado / Math.max(1, ejes[0][1].cerrado) * 100)}%"></i></div></td>
+      </tr>`).join("")}
+        <tr class="ct-tot"><td><b>Total</b></td><td class="num"><b>${filas.length}</b></td>
+          <td class="num"><b>${esc(moneyMN(suma(cerrado)))}</b></td>
+          <td class="num"><b>${esc(moneyMN(suma(enMesa)))}</b></td><td></td></tr>
+      </tbody></table></div>` : `<div class="vacio">Sin ingresos en el periodo.</div>`}
+
+    ${meses.length ? `<h3 class="sec">Por mes</h3>
+      <div class="rep-meses">${meses.map(([m, v]) => `
+        <div class="rep-mes" title="${esc(moneyMN(v.cerrado))} cerrado · ${esc(moneyMN(v.mesa))} en la mesa">
+          <div class="rep-barras">
+            <i class="mesa" style="height:${Math.round(v.mesa / tope * 100)}%"></i>
+            <i class="cerr" style="height:${Math.round(v.cerrado / tope * 100)}%"></i>
+          </div>
+          <div class="rep-et">${esc(MESES_L[Number(m.slice(5,7)) - 1].slice(0,3))}</div>
+        </div>`).join("")}</div>` : ""}
+
+    <h3 class="sec">Detalle</h3>
+    ${filas.length ? `<div style="overflow:auto"><table class="data">
+      <thead><tr><th>Fecha</th><th>Área</th><th>Folio</th><th>Cliente</th><th>Concepto</th>
+        <th>Ejecutivo</th><th>Estado</th><th class="num">Monto</th></tr></thead>
+      <tbody>${filas.map((f, i) => `<tr class="row-link" data-i="${i}">
+        <td class="nowrap">${esc(fechaCorta(f.fecha))}</td>
+        <td>${esc(f.area)}</td>
+        <td><b>${esc(f.folio || "—")}</b></td>
+        <td>${esc(f.cliente)}</td>
+        <td>${esc(f.concepto)}</td>
+        <td class="nowrap">${esc(f.ejecutivo)}</td>
+        <td><span class="estado-chip" style="background:${f.cerrado ? "var(--ok-soft)" : "var(--col)"};
+          color:${f.cerrado ? "var(--ok)" : "var(--muted)"}">${f.cerrado ? "Cerrado" : "En la mesa"}</span></td>
+        <td class="num nowrap"><b>${esc(moneyMN(f.monto))}</b></td>
+      </tr>`).join("")}</tbody></table></div>`
+      : `<div class="vacio">Nada que reportar en estas fechas.</div>`}`;
+
+  cont.querySelector("#repD").onchange = e => { repDesde = e.target.value; render(); };
+  cont.querySelector("#repH").onchange = e => { repHasta = e.target.value; render(); };
+  cont.querySelector("#repAnio").onclick = () => {
+    const a = new Date().getFullYear();
+    repDesde = `${a}-01-01`; repHasta = `${a}-12-31`; render();
+  };
+  cont.querySelector("#repCsv").onclick = () => {
+    descargar(`ingresos-${desde}-a-${hasta}.csv`, toCSV(
+      [["Fecha","Área","Tipo","Folio","Cliente","Concepto","Ejecutivo","Estado","Monto"]]
+      .concat(filas.map(f => [f.fecha, f.area, f.tipo, f.folio, f.cliente, f.concepto,
+        f.ejecutivo, f.cerrado ? "Cerrado" : "En la mesa", f.monto]))), "text/csv");
+  };
+  cont.querySelectorAll("tr[data-i]").forEach(tr =>
+    tr.onclick = () => filas[Number(tr.dataset.i)].abre());
 }
 
 /* ==========================================================================

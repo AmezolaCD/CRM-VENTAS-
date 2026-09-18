@@ -348,6 +348,21 @@ queda su línea en la bitácora. Una cotización o un contrato externo caen en *
 > avisa y no deja seguir subiendo. Para archivar muchos escaneados de años pasados hace falta
 > guardarlos fuera de la fila —Supabase Storage—, que todavía no está montado.
 
+### Banquetes: eventos, contratos, calendario y reportes
+
+Banquetes no vende noches: vende eventos. Tiene sus propias pestañas —**Eventos** para las
+cotizaciones, **Contratos banquetes** para el legal— con su estructura y sus cuentas: IVA del
+8% para todo y cargo por servicio del 15% sólo en los renglones de alimentos y bebidas, que se
+marcan uno por uno.
+
+El **Calendario** muestra el mes con los eventos y las actividades agendadas del equipo, y los
+**Reportes** dan el ingreso cerrado y el que sigue en la mesa, por área, por ejecutivo y por
+mes, contando cada documento en el mes en que ocurre el evento.
+
+Hay un papel de usuario **Banquetes** que ve todo eso y comparte la cartera de clientes con
+ventas, pero no los convenios ni los contratos de hospedaje. El detalle, y los datos legales
+que hay que capturar antes del primer contrato, en **[BANQUETES.md](BANQUETES.md)**.
+
 ### Formulario de prospección
 
 Pestaña **Formulario**. Para levantar contactos en una expo, una feria o un evento del hotel,
@@ -498,10 +513,12 @@ lo que no, y cómo apagarlo están en **[IA.md](IA.md)**.
 
 ## Quién ve qué
 
-Cuatro papeles: **administrador** (todo, y el único con Ajustes), **gerencia de ventas** (la
+Cinco papeles: **administrador** (todo, y el único con Ajustes), **gerencia de ventas** (la
 cartera y la actividad de todo el equipo, sin Ajustes), **ejecutivo** (sólo lo suyo, más las
-actividades que él mismo hizo) y **sólo prospección** (nada más la pestaña *Formulario* y lo
-que esa cuenta capturó). Se administran en *Ajustes → Usuarios y permisos*.
+actividades que él mismo hizo), **banquetes** (sus eventos y contratos, el calendario y los
+reportes; comparte la cartera con ventas, pero no ve el hospedaje) y **sólo prospección** (nada
+más la pestaña *Formulario* y lo que esa cuenta capturó). Se administran en *Ajustes → Usuarios
+y permisos*.
 
 Lo que amarra a una persona con su cartera es el **nombre**, no el correo: se compara contra
 el campo *Ejecutivo* de cada cliente. Escribirlos distinto es el error más fácil de cometer y
