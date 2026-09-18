@@ -229,6 +229,8 @@
   table.data td.num, table.data th.num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
   .row-link{cursor:pointer}
   table.data tr.row-err > td{background:var(--bad-soft)}
+  /* Un campo con algo que hay que mirar antes de guardar. */
+  .field.campo-err{border-color:var(--bad); background:var(--bad-soft)}
   .field.err{border-color:var(--bad); box-shadow:0 0 0 1px var(--bad)}
   .errbox{background:var(--bad-soft); color:var(--bad); border:1px solid var(--bad);
     border-radius:6px; padding:10px 13px; margin-bottom:14px; font-size:13px}
@@ -709,7 +711,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.18-45";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.18-46";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -6061,6 +6063,101 @@ function folioLibre(anio, excluirId){
 /** ¿Tiene la forma que arma la aplicación sola? */
 const folioAutomatico = f => /^CV-\d{4}-\d+$/i.test(String(f || "").trim());
 
+/* ==========================================================================
+   EL CONSECUTIVO, DEL LADO DEL SERVIDOR
+
+   El siguiente folio salía de los convenios que este equipo tiene bajados, y
+   eso deja de ser cierto en cuanto el servidor reparte por dueño: un ejecutivo
+   que sólo recibe los suyos cuenta desde el suyo más alto y propone un número
+   que en el hotel ya existe. Y la renumeración automática tampoco lo agarra,
+   porque trabaja con lo mismo que ve.
+
+   Por eso el contador vive en el servidor —folios.sql—, que es el único que
+   los ve todos. Aquí nada más se le pregunta y se le pide turno.
+
+   Si no se ha corrido folios.sql, todo esto se hace a un lado y la aplicación
+   cuenta como siempre: mejor un consecutivo aproximado que no poder trabajar.
+   ========================================================================== */
+
+/** Se anota a la primera negativa del servidor y ya no se vuelve a molestar. */
+const hayContador = () => nubeActiva() && !nube.sinFolios;
+
+/** ¿Es un "esto no existe" —y no un problema de paso— lo que contestó? */
+function noExisteLaFuncion(e){
+  return /PGRST202|PGRST205|not find the function|does not exist|404/i.test(e.message || "");
+}
+
+/**
+ * El número más alto que el hotel entero lleva en ese año.
+ *
+ * Es para ENSEÑAR el consecutivo al abrir el editor. No aparta nada: si dos
+ * personas abren el editor a la vez, las dos ven el mismo número, y cada una
+ * se lleva el suyo al guardar.
+ */
+async function ultimoFolioNube(tipo, anio){
+  if (!hayContador()) return 0;
+  try{
+    const filas = await api(`/rest/v1/crm_folios?tipo=eq.${encodeURIComponent(tipo)}` +
+      `&anio=eq.${Number(anio)}&select=numero&order=numero.desc&limit=1`);
+    return (filas && filas[0] && Number(filas[0].numero)) || 0;
+  }catch(e){
+    if (noExisteLaFuncion(e)) nube.sinFolios = true;
+    else console.warn("No se pudo consultar el contador de folios:", e.message);
+    return 0;
+  }
+}
+
+/**
+ * Pide turno: devuelve un folio que nadie más va a recibir.
+ *
+ * Devuelve "" cuando no hay contador montado, y entonces manda lo que la
+ * aplicación haya calculado con lo que tiene.
+ */
+async function apartarFolio(tipo, prefijo, anio){
+  if (!hayContador()) return "";
+  try{
+    const r = await api("/rest/v1/rpc/crm_aparta_folio", {
+      method:"POST",
+      body: JSON.stringify({ p_tipo:tipo, p_anio:Number(anio),
+                             p_prefijo:prefijo, p_quien:miNombre() })
+    });
+    return typeof r === "string" ? r : "";
+  }catch(e){
+    if (noExisteLaFuncion(e)) nube.sinFolios = true;
+    else console.warn("No se pudo apartar folio:", e.message);
+    return "";
+  }
+}
+
+/**
+ * Anota un folio que no salió del contador: el que venía en un papel, o el que
+ * alguien escribió a mano. Si no se anotara, el contador lo volvería a repartir.
+ */
+async function anotarFolio(tipo, folio){
+  if (!hayContador()) return;
+  const m = /^([A-Za-z]+)-(\d{4})-(\d+)$/.exec(String(folio || "").trim());
+  if (!m) return;   // formato de la casa: no entra a la cuenta
+  try{
+    await api("/rest/v1/rpc/crm_anota_folio", {
+      method:"POST",
+      body: JSON.stringify({ p_tipo:tipo, p_anio:Number(m[2]), p_numero:Number(m[3]),
+                             p_folio:folio.toUpperCase(), p_quien:miNombre() })
+    });
+  }catch(e){
+    if (noExisteLaFuncion(e)) nube.sinFolios = true;
+    else console.warn("No se pudo anotar el folio:", e.message);
+  }
+}
+
+/** ¿Quién trae ya este folio? Sirve para avisar antes de que se repita. */
+function duenioDelFolio(folio, excluirId){
+  const f = String(folio || "").trim().toUpperCase();
+  if (!f) return null;
+  const v = state.convenios.find(x => x.id !== excluirId &&
+    String(x.folio || "").trim().toUpperCase() === f);
+  return v || null;
+}
+
 /**
  * Dos ejecutivos capturando a la vez, cada uno en su equipo, pueden tomar el
  * mismo folio: cada quien cuenta con lo que tiene bajado en ese momento y
@@ -6169,7 +6266,8 @@ function editarConvenio(id, clientePre, alCerrar){
             ${selectEjecutivo(v.ejecutivo || (cliente(v.clienteId) || {}).ejecutivo || miNombre(), "cEje")}
             <div class="hint">Quien firma la carta por el hotel y a quien se le avisa cuando el
               cliente la firma. La lista sale de <i>Ajustes → Usuarios y permisos</i>.</div></div>
-          <div><label class="lbl">Folio</label><input class="field" id="cFolio" value="${esc(v.folio)}"></div>
+          <div><label class="lbl">Folio</label><input class="field" id="cFolio" value="${esc(v.folio)}">
+            <div class="hint" id="cFolioNota"></div></div>
           <div><label class="lbl">Fecha de la carta</label><input class="field" type="date" id="cFecha" value="${esc(v.fecha)}"></div>
           <div><label class="lbl">Vigencia desde</label><input class="field" type="date" id="cDesde" value="${esc(v.vigenciaDesde)}"></div>
           <div><label class="lbl">Vigencia hasta</label><input class="field" type="date" id="cHasta" value="${esc(v.vigenciaHasta)}"></div>
@@ -6253,14 +6351,61 @@ function editarConvenio(id, clientePre, alCerrar){
   // hacer en cuanto alguien lo escribe a mano: ahí manda lo que escribió.
   {
     const fFolio = ov.querySelector("#cFolio"), fDesde = ov.querySelector("#cDesde");
+    const nota = ov.querySelector("#cFolioNota");
     let ultimoAuto = existente ? null : fFolio.value;
-    fFolio.addEventListener("input", () => { if (fFolio.value !== ultimoAuto) ultimoAuto = null; });
+
+    /* El aviso de que ese folio ya es de alguien. Se dice mientras se escribe,
+       no al guardar: enterarse después de llenar toda la carta es tarde. */
+    const revisar = () => {
+      const ya = duenioDelFolio(fFolio.value, v.id);
+      fFolio.classList.toggle("campo-err", !!ya);
+      if (ya){
+        nota.innerHTML = `<b style="color:var(--bad)">Ese folio ya es del convenio de
+          ${esc(nombreCli(ya.clienteId))}.</b> Si lo dejas así, quedan dos con el mismo
+          número.`;
+        return;
+      }
+      nota.textContent = ultimoAuto !== null && fFolio.value === ultimoAuto
+        ? notaAuto : "";
+    };
+
+    let notaAuto = "";
+    /* El consecutivo del hotel, no el de lo que este equipo alcanza a ver. Se
+       pregunta al servidor y se acomoda cuando conteste; mientras, queda el
+       que se calculó aquí, que es el bueno si esta persona los ve todos. */
+    const alDia = async () => {
+      if (ultimoAuto === null) return;      // lo escribieron a mano: no se toca
+      const anio = String(fDesde.value || hoyISO()).slice(0, 4);
+      if (anio.length !== 4) return;
+      const alto = await ultimoFolioNube("convenios", anio);
+      if (ultimoAuto === null || fFolio.value !== ultimoAuto) return;   // cambió en el camino
+      const local = Number((new RegExp("^CV-" + anio + "-(\\d+)$", "i")
+        .exec(ultimoAuto) || [])[1]) || 0;
+      if (alto >= local){
+        fFolio.value = ultimoAuto = `CV-${anio}-${String(alto + 1).padStart(3, "0")}`;
+        notaAuto = `Sigue al último del hotel, el CV-${anio}-${String(alto).padStart(3, "0")}.`;
+      } else if (!hayContador() && nubeActiva()){
+        notaAuto = "";
+      }
+      revisar();
+    };
+
+    fFolio.addEventListener("input", () => {
+      if (fFolio.value !== ultimoAuto) ultimoAuto = null;
+      revisar();
+    });
     fDesde.addEventListener("change", () => {
       if (ultimoAuto === null || fFolio.value !== ultimoAuto) return;
       const anio = String(fDesde.value || "").slice(0, 4);
       if (anio.length !== 4) return;
       fFolio.value = ultimoAuto = folioAuto(anio);
+      notaAuto = "";
+      revisar();
+      alDia();
     });
+
+    revisar();
+    if (!existente) alDia();
   }
 
   // El ejecutivo sigue al cliente mientras nadie lo haya cambiado a mano.
@@ -6275,12 +6420,22 @@ function editarConvenio(id, clientePre, alCerrar){
     });
   }
 
-  ov.querySelector("#bOk").onclick = () => { if (recoger()){ ov.remove(); if (alCerrar) alCerrar(); } };
-  ov.querySelector("#bFirmar").onclick = () => {
-    if (!recoger()) return;
+  // Guardar espera al servidor: es ahí donde se aparta el folio. Se bloquea el
+  // botón mientras tanto para que dos clics no levanten dos convenios.
+  const guardando = async (b, fn) => {
+    const antes = b.textContent;
+    b.disabled = true; b.textContent = "Guardando\u2026";
+    try{ return await fn(); }
+    finally{ b.disabled = false; b.textContent = antes; }
+  };
+  ov.querySelector("#bOk").onclick = e => guardando(e.currentTarget, async () => {
+    if (await recoger()){ ov.remove(); if (alCerrar) alCerrar(); }
+  });
+  ov.querySelector("#bFirmar").onclick = e => guardando(e.currentTarget, async () => {
+    if (!await recoger()) return;
     ov.remove();
     verConvenio(v.id, alCerrar, true);
-  };
+  });
 
   /** Filas que cuentan: las de un bloque vigente (Recovery sólo si está activo). */
   function filasVigentes(){
@@ -6352,16 +6507,31 @@ function editarConvenio(id, clientePre, alCerrar){
    * sigue siendo el que puso la aplicación: si lo escribieron a mano, manda
    * lo que escribieron aunque se repita.
    */
-  function folioAlGuardar(){
+  async function folioAlGuardar(){
     const escrito = ov.querySelector("#cFolio").value.trim();
-    if (!folioAutomatico(escrito)) return escrito;
+    const anio = String(ov.querySelector("#cDesde").value || escrito.slice(3, 7) ||
+                        hoyISO()).slice(0, 4);
+
+    // Uno que ya existía conserva su folio. Cambiárselo por detrás sería peor
+    // que el problema: puede andar impreso en el correo de un cliente.
+    if (existente && escrito === String(v.folio || "").trim()) return escrito;
+
+    // Escrito a mano manda lo que escribieron. Sólo se anota, para que el
+    // contador no vuelva a repartir ese número.
+    if (!folioAutomatico(escrito)){ anotarFolio("convenios", escrito); return escrito; }
+
+    // El turno lo da el servidor, que es el único que ve los folios de todo el
+    // hotel. Dos personas al mismo segundo reciben números distintos.
+    const apartado = await apartarFolio("convenios", "CV", anio);
+    if (apartado) return apartado;
+
+    // Sin contador montado: como siempre, con lo que este equipo alcanza a ver.
     const chocado = state.convenios.some(x =>
       x.id !== v.id && String(x.folio || "").trim().toUpperCase() === escrito.toUpperCase());
-    if (!chocado) return escrito;
-    return folioLibre(String(ov.querySelector("#cDesde").value || escrito.slice(3, 7)).slice(0, 4), v.id);
+    return chocado ? folioLibre(anio, v.id) : escrito;
   }
 
-  function recoger(){
+  async function recoger(){
     const cid = ov.querySelector("#cCli").value;
     if (!cid){
       pintaErrores(["Selecciona el cliente del convenio."]);
@@ -6379,10 +6549,13 @@ function editarConvenio(id, clientePre, alCerrar){
     }
     pintaErrores([]);
 
+    const pedido = ov.querySelector("#cFolio").value.trim();
+    const folio = await folioAlGuardar();
+
     Object.assign(v, {
       clienteId: cid,
       ejecutivo: ov.querySelector('[name="cEje"]').value.trim(),
-      folio: folioAlGuardar(),
+      folio,
       fecha: ov.querySelector("#cFecha").value || hoyISO(),
       vigenciaDesde: desde, vigenciaHasta: hasta,
       incluyeRecovery: ov.querySelector("#cRec").checked,
@@ -6392,6 +6565,13 @@ function editarConvenio(id, clientePre, alCerrar){
       updatedAt: new Date().toISOString()
     });
     if (!existente){ v.createdAt = new Date().toISOString(); state.convenios.push(v); }
+    // Si entre abrir el editor y guardar alguien más se llevó ese número, el
+    // que quedó no es el que se vio en pantalla. Queda dicho en la bitácora
+    // para que nadie ande buscando un folio que nunca existió.
+    if (pedido && folio.toUpperCase() !== pedido.toUpperCase())
+      registrarAuto(cid, `El convenio quedó con el folio ${folio}`,
+        `Al abrir el editor se propuso el ${pedido}, pero al guardar ya estaba tomado. ` +
+        "El consecutivo lo lleva el servidor, así que se le dio el siguiente libre.", "");
     guardar(); render();
     return true;
   }
@@ -7705,6 +7885,9 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
           firmaManual: manual, createdAt:new Date().toISOString()
         });
         state.convenios.push(v);
+        // Se anota en el contador del servidor: si no, volvería a repartir ese
+        // número y el convenio de papel quedaría repetido con uno nuevo.
+        anotarFolio("convenios", v.folio);
         cerrarConvenio(v, null, `Documento externo. Se subió el archivo "${f.name}".`, quien);
         v.avisado = true;     // lo registró el propio equipo: no hay novedad que avisar
       } else if (tipo === "cotizacionbq" || tipo === "contratobq"){

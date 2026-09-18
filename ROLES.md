@@ -91,6 +91,40 @@ El **convenio** fija las tarifas de empresa de todo el año. El **contrato** —
 dos se firman y los dos se reparten igual: cada uno guarda su propio ejecutivo, se le muestra a
 quien lo trae asignado y al dueño del cliente, y gerencia y administración los ven todos.
 
+## El folio no se repite
+
+Al crear un convenio, el folio sale ya puesto con **el siguiente del año**: después del
+CV-2026-015 propone el CV-2026-016. Si se mueve la vigencia a otro año, se acomoda al
+consecutivo de ese año. Escrito a mano manda lo que se escriba, y si ese número ya es de otro
+convenio se avisa ahí mismo, mientras se escribe, con el nombre del cliente que lo trae.
+
+### Por qué el contador vive en el servidor
+
+El consecutivo salía de los convenios que ese equipo tiene **bajados**, y eso deja de ser
+cierto en cuanto el servidor reparte por dueño: un ejecutivo que sólo recibe los suyos cuenta
+desde el suyo más alto y propone un número que en el hotel ya existe. La renumeración
+automática tampoco lo agarra, porque trabaja con lo mismo que ve. Así es como se repiten dos
+convenios sin que nadie se entere.
+
+Con `folios.sql` corrido, el contador vive en el servidor, que es el único que los ve todos:
+
+- Al **abrir** el editor se le pregunta cuál es el último del hotel y el folio se acomoda solo,
+  aunque esa persona no alcance a ver los convenios de los demás.
+- Al **guardar** se le pide turno. Es una sola operación indivisible, así que dos personas
+  capturando al mismo segundo reciben números distintos.
+- Los folios que vienen **de un papel** —los que se registran como externos— se anotan también,
+  para que el contador no los vuelva a repartir.
+
+La tabla del contador guarda **nada más el número**: ni cliente, ni tarifas, ni importes. Por
+eso la puede leer todo el equipo sin que eso abra la cartera de nadie.
+
+Si entre abrir el editor y guardar alguien más se llevó ese número, el convenio queda con el
+siguiente libre y **se anota en la bitácora del cliente**, para que nadie ande buscando un folio
+que nunca existió.
+
+**Sin correr `folios.sql` el CRM funciona igual** que hasta ahora: cuenta con lo que ese equipo
+tiene bajado. Es el comportamiento de siempre, con su renumeración automática al sincronizar.
+
 ## El convenio dice de quién es
 
 Cada convenio guarda **su propio ejecutivo**, que se escoge de la misma lista al crearlo. Por
