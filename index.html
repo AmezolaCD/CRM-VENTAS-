@@ -2368,8 +2368,9 @@ async function primeraSincronizacion(){
   // Se dan por sincronizadas SÓLO las filas que de verdad llegaron. Marcarlo
   // todo dejaba fuera para siempre lo que este equipo puso de su cosecha —el
   // catálogo y, sobre todo, la lista de usuarios— y una nube sin esa lista no
-  // sabe quién es quién: con roles.sql corrido trata a todos como ejecutivos
-  // sin nombre, y entonces nadie ve un solo convenio.
+  // sabe quién es quién: con roles.sql corrido no reconoce a nadie, y a quien
+  // no reconoce no le entrega nada. El equipo entero se queda con la pantalla
+  // vacía, no nada más sin convenios.
   marcarSincronizado(remotas);
   // Salvo para quien no tiene permiso de escribir esas tablas: a un ejecutivo
   // el servidor le rebotaría el intento y le tumbaría la subida entera.
@@ -2457,11 +2458,32 @@ function pantallaPermisos(){
 
   revisarPermisos().then(r => {
     const problemas = [];
-    if (r.conDuenio && !r.usuariosNube)
+    // Cero registros y cero usuarios es otra cosa que cero usuarios a secas, y
+    // conviene no confundirlas: con roles.sql corrido, a quien no está en la
+    // lista el servidor no le entrega NADA —ni el catálogo—, así que la lista
+    // tampoco le llega, y de ahí que parezca que la nube no la tiene. Si
+    // bajaron filas pero ninguna de usuarios, ahí sí es que la lista nunca se
+    // subió.
+    if (r.conDuenio && !r.total)
+      problemas.push(`<b>Tu correo no está en la lista de usuarios de la nube.</b>
+        El servidor no te entregó ni un registro —ni siquiera el catálogo—, que es
+        lo que le hace a una cuenta que no da de alta: entra, pero no es del equipo
+        de ventas. Está ${esc(r.correo)}, y hay que agregarlo en
+        <i>Ajustes → Usuarios y permisos</i> escrito igual.
+        <br>La otra explicación, que desde aquí se ve idéntica, es que la lista de
+        usuarios nunca haya llegado a la nube; si al equipo entero le pasa lo
+        mismo, es ésa.
+        ${esAdmin() ? `<br><button class="btn primary sm" id="bSubirUsr"
+            style="margin-top:8px">Subir la lista de usuarios ahora</button>`
+          : `<br>Pídele a ${esc(nombresDeRol("admin") || "el administrador")} que te
+             dé de alta y suba la lista desde aquí mismo.`}`);
+    else if (r.conDuenio && !r.usuariosNube)
       problemas.push(`<b>La nube no tiene la lista de usuarios.</b> Corrieron
         <code>roles.sql</code>, y esas reglas leen de esa lista para saber quién es quién.
-        Sin ella el servidor trata a todos como ejecutivos sin nombre, y por eso no
-        entrega los convenios ni los clientes que tengan dueño.
+        Están bajando ${r.total} registro(s) y ni uno es de usuarios: sin esa lista
+        el servidor no reconoce a nadie, y a quien no reconoce deja de entregarle
+        primero lo que tenga dueño marcado y, con las reglas al día, absolutamente
+        todo.
         ${esAdmin() ? `<br><button class="btn primary sm" id="bSubirUsr"
             style="margin-top:8px">Subir la lista de usuarios ahora</button>`
           : `<br>Pídele a ${esc(nombresDeRol("admin") || "el administrador")} que entre y
