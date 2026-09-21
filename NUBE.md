@@ -294,6 +294,30 @@ quedó bien.
 **Sin correrlo el CRM funciona igual**: los escaneados se siguen guardando como
 hasta ahora, con su aviso de que ya casi no cabe.
 
+## Si un .sql dice que no encuentra `crm_datos`
+
+Esa tabla la crea **`nube.sql`**, y es la primera de todas. Que falte quiere decir una de
+dos cosas, y conviene descartarlas en este orden:
+
+1. **Estás en otro proyecto.** Arriba a la izquierda del tablero de Supabase se cambia de
+   proyecto y es fácil acabar en el que no es. Si el CRM está sincronizando datos, la tabla
+   existe en algún lado: el que falla es el proyecto, no el archivo.
+2. **Nunca se corrió `nube.sql`** en ese proyecto. Córrelo y luego los demás.
+
+`archivos.sql` no la necesita. `folios.sql` sí, pero sólo para ponerse al día con los folios
+que ya existan: sin ella se monta igual, arranca en 001 y avisa; al correrlo otra vez después
+de `nube.sql` se pone al corriente solo. `roles.sql` no puede trabajar sin ella y lo dice con
+todas sus letras en vez de soltar un error de base de datos.
+
+## Un error de "syntax error at end of input"
+
+Casi siempre es un **pegado incompleto**: se copió nada más una parte del archivo y la última
+instrucción quedó cortada. Estos archivos llevan bloques largos entre `$$`, y copiar "lo que
+se ve en pantalla" deja fuera el resto.
+
+Abre el archivo, **selecciona todo** (Ctrl+A / Cmd+A), cópialo, y en el SQL Editor **selecciona
+todo otra vez antes de pegar**, para no dejar pedazos de la corrida anterior.
+
 ## Los archivos .sql se corren en el orden que sea
 
 `nube.sql` va primero, porque crea la tabla. Los demás —`roles.sql`, `firmas.sql`,

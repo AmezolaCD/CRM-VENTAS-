@@ -177,19 +177,36 @@ grant execute on function public.crm_anota_folio(text, int, int, text, text) to 
 --    la aplicación; los escritos a mano con otro formato no entran a la cuenta
 --    y se quedan como están.
 -- ---------------------------------------------------------------------------
-insert into public.crm_folios (tipo, anio, numero, folio, quien)
-select d.tipo,
-       (m[2])::int                             as anio,
-       (m[3])::int                             as numero,
-       upper(d.datos ->> 'folio')              as folio,
-       'al montar el contador'                 as quien
-  from public.crm_datos d,
-       lateral regexp_match(upper(coalesce(d.datos ->> 'folio', '')),
-                            '^([A-Z]+)-(\d{4})-(\d+)$') as m
- where d.borrado = false
-   and d.tipo in ('convenios', 'contratos', 'eventos')
-   and m is not null
-on conflict (tipo, anio, numero) do nothing;
+--    Va dentro de un bloque con EXECUTE a propósito. La tabla crm_datos la crea
+--    nube.sql, y si todavía no se ha corrido, nombrarla aquí directamente
+--    tumbaría el archivo entero —PostgreSQL revisa los nombres al leer, no al
+--    ejecutar— y el contador se quedaría sin crear. Así, si no está, lo dice y
+--    sigue: el contador queda montado y arranca en 001.
+do $relleno$
+begin
+  if to_regclass('public.crm_datos') is null then
+    raise notice 'No se encontró la tabla crm_datos, así que el contador arranca vacío. %',
+                 'Corre nube.sql y después este archivo otra vez para ponerlo al día.';
+    return;
+  end if;
+
+  execute $sql$
+    insert into public.crm_folios (tipo, anio, numero, folio, quien)
+    select d.tipo,
+           (m[2])::int                             as anio,
+           (m[3])::int                             as numero,
+           upper(d.datos ->> 'folio')              as folio,
+           'al montar el contador'                 as quien
+      from public.crm_datos d,
+           lateral regexp_match(upper(coalesce(d.datos ->> 'folio', '')),
+                                '^([A-Z]+)-(\d{4})-(\d+)$') as m
+     where d.borrado = false
+       and d.tipo in ('convenios', 'contratos', 'eventos')
+       and m is not null
+    on conflict (tipo, anio, numero) do nothing
+  $sql$;
+end;
+$relleno$;
 
 -- ---------------------------------------------------------------------------
 -- 6. Para deshacer

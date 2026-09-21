@@ -24,6 +24,27 @@
 -- ===========================================================================
 
 -- ---------------------------------------------------------------------------
+-- 0. Lo que tiene que estar antes
+--
+--    Este archivo pone reglas SOBRE la tabla del CRM, así que la tabla tiene
+--    que existir. La crea nube.sql. Si falta, más vale decirlo con todas sus
+--    letras que soltar un error de base de datos a media corrida.
+-- ---------------------------------------------------------------------------
+do $revision$
+begin
+  if to_regclass('public.crm_datos') is null then
+    raise exception E'Falta correr nube.sql primero.\n\n'
+      'Este archivo pone las reglas de quién ve qué sobre la tabla crm_datos, y '
+      'esa tabla no existe en este proyecto.\n\n'
+      'Dos cosas que revisar:\n'
+      '  1. Que sea el proyecto correcto. Arriba a la izquierda del tablero de '
+      'Supabase se cambia de proyecto, y es fácil acabar en otro.\n'
+      '  2. Si es el correcto, corre nube.sql y luego éste.';
+  end if;
+end;
+$revision$;
+
+-- ---------------------------------------------------------------------------
 -- 1. De quién es cada registro
 --
 --    Lo llena la aplicación al subir: el nombre del ejecutivo del cliente al
