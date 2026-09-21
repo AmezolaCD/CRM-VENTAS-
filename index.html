@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.21-49";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.21-50";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1598,7 +1598,7 @@ function saneaCampana(c){
   const o = Object.assign({ id:"", nombre:"", canal:"meta", objetivo:"",
     desde:"", hasta:"", presupuesto:0, gastos:[], estado:"borrador",
     responsable:"", notas:"", utmSource:"", utmMedium:"", utmCampaign:"",
-    createdAt:"", updatedAt:"" }, c || {});
+    metaIds:[], createdAt:"", updatedAt:"" }, c || {});
   o.id = o.id || nuevoId("mk");
   for (const k of ["nombre","objetivo","responsable","notas","utmSource","utmMedium","utmCampaign"])
     o[k] = String(o[k] || "").trim();
@@ -1608,6 +1608,14 @@ function saneaCampana(c){
   o.hasta = String(o.hasta || "").slice(0, 10);
   o.presupuesto = Number(o.presupuesto) || 0;
   o.gastos = Array.isArray(o.gastos) ? o.gastos.map(saneaGasto).filter(g => g.mes) : [];
+  /* Las campañas de Meta que le corresponden. Es una LISTA porque una campaña
+     del hotel suele ser dos o tres de Meta —prospección y remarketing—, y
+     sumarlas por separado no diría lo que costó traer a esa gente. Son ids de
+     Meta, de puros dígitos: se escogen de una lista, nunca se teclean. */
+  o.metaIds = (Array.isArray(o.metaIds) ? o.metaIds : [])
+    .map(x => String(x || "").trim())
+    .filter((x, i, a) => x && /^\d+$/.test(x) && a.indexOf(x) === i)
+    .slice(0, 20);
   return o;
 }
 
@@ -2423,6 +2431,12 @@ async function salir(){
   // La cartera del que se va no se queda esperando al siguiente.
   sincronizado = new Map();
   state = sanear({});
+  /* Ni las cuentas que pidió prestadas al servidor: el ingreso por campaña y
+     las cifras de Meta son de marketing, y quien entre después puede no ser
+     de marketing. No se ven en su pantalla de todos modos, pero no tienen por
+     qué seguir en la memoria de este equipo. */
+  mkIngresos = null; mkIngresosError = "";
+  metaMetricas = null; metaObjetos = []; metaSync = null; metaError = "";
   try{ localStorage.setItem(STORE, JSON.stringify(state)); }catch(e){}
   vista = "tablero";
   filtros = { q:"", ejecutivo:"" };
@@ -6868,11 +6882,15 @@ function renderCampanas(){
   const cont = document.getElementById("tblCampanas");
   const cs = campanasVisibles();
 
+  const [mDesde, mHasta] = rangoMkt();
+  const conMeta = cs.some(c => (c.metaIds || []).length);
+
   const cab = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
       <b style="font-size:15px">Campañas</b>
       <span class="hint">${cs.length} en total</span>
       <span style="flex:1"></span>
       <button class="btn primary" id="bNuevaCamp">+ Nueva campaña</button></div>
+    ${tiraMeta()}
     <div class="note">Una campaña es lo que el hotel sale a hacer para que llegue gente.
       Lo que se mide es <b>cuánto costó y qué trajo</b>, así que de aquí cuelgan los
       prospectos: la liga que se genera en <i>Atribución &amp; UTMs</i> es la que los amarra.</div>`;
@@ -6883,6 +6901,7 @@ function renderCampanas(){
     cont.innerHTML = cab + `<table class="data">
       <thead><tr><th>Campaña</th><th>Canal</th><th>Periodo</th>
         <th class="num">Presupuesto</th><th class="num">Gastado</th>
+        ${conMeta ? `<th class="num" title="Lo que dice Meta en el mismo periodo">Según Meta</th>` : ""}
         <th class="num">Leads</th><th>Estado</th><th>Responsable</th></tr></thead>
       <tbody>${cs.map(c => {
         const ec = ESTADOS_CAMP[c.estado], gasto = gastoCampana(c);
@@ -6896,6 +6915,7 @@ function renderCampanas(){
           <td class="num nowrap">${c.presupuesto ? esc(moneyMN(c.presupuesto)) : "—"}</td>
           <td class="num nowrap"${sobre ? ' style="color:var(--bad)"' : ""}>${
             gasto ? esc(moneyMN(gasto)) : "—"}${sobre ? " ⚠" : ""}</td>
+          ${conMeta ? `<td class="num nowrap">${celdaMeta(c, gasto, mDesde, mHasta)}</td>` : ""}
           <td class="num">${leadsDeCampana(c.id) || "—"}</td>
           <td><span class="estado-chip" style="background:${ec.bg};color:${ec.fg}">${esc(ec.name)}</span></td>
           <td class="nowrap">${esc(c.responsable || "—")}</td>
@@ -6905,6 +6925,9 @@ function renderCampanas(){
     cont.querySelectorAll("tr[data-id]").forEach(tr =>
       tr.addEventListener("click", () => editarCampana(tr.dataset.id)));
   }
+
+  enganchaTiraMeta(cont, () => renderCampanas());
+  cargaMeta(() => { if (vista === "campanas") renderCampanas(); });
   cont.querySelector("#bNuevaCamp").onclick = () => editarCampana(null);
 }
 
@@ -6955,13 +6978,23 @@ function editarCampana(id, alCerrar){
 
         <h3 class="sec">Gasto</h3>
         <div class="note">Se captura a mano, mes por mes, como lo cobra la plataforma.
-          Conectarse solo a Meta o a Google necesita permisos de desarrollador y tiene costo;
-          por ahora no compensa.</div>
+          Con Meta conectado, abajo se ve al lado lo que dice Meta: lo capturado aquí
+          <b>manda siempre</b> y no se pisa, porque es lo que de verdad se pagó.</div>
         <div style="overflow:auto"><table class="data"><thead><tr>
           <th>Mes</th><th class="num">Monto</th><th>Nota</th><th></th></tr></thead>
           <tbody id="mkGastos">${(c.gastos.length ? c.gastos : []).map(filaGasto).join("")}</tbody></table></div>
         <p style="margin:8px 0 0"><button class="btn sm" id="bAddGasto">+ Agregar mes</button>
           <span class="hint" id="mkTotalGasto"></span></p>
+
+        <h3 class="sec">Enlace con Meta</h3>
+        <div class="note">Una campaña del hotel suele ser <b>dos o tres campañas de Meta</b>
+          —prospección y remarketing—, así que se pueden enlazar varias: el gasto y las
+          impresiones se suman. Se escogen de la lista que manda Meta; el número no se
+          teclea, porque un dígito de más amarra la campaña equivocada y nadie lo nota.</div>
+        <div id="mkMetaLista" style="margin:8px 0"></div>
+        <p style="margin:8px 0 0">
+          <button class="btn sm" id="bMetaEscoger">Escoger de Meta</button>
+          <span class="hint" id="mkMetaDicho"></span></p>
 
         <h3 class="sec">Etiquetas de la liga</h3>
         <div class="note">Con esto se arman las ligas en <i>Atribución &amp; UTMs</i>. Si se dejan
@@ -7017,6 +7050,65 @@ function editarCampana(id, alCerrar){
   q("#mkPresupuesto").addEventListener("input", pintaTotal);
   pintaTotal();
 
+  /* ---- El enlace con Meta ----
+     Se trabaja sobre una copia: si la persona cancela el formulario, la
+     campaña se queda como estaba. */
+  let metaIds = (c.metaIds || []).slice();
+  const cajaMeta = q("#mkMetaLista");
+  const dichoMeta = q("#mkMetaDicho");
+
+  const pintaEnlace = () => {
+    if (!metaIds.length){
+      cajaMeta.innerHTML = `<span class="hint">Todavía no está enlazada.
+        Sin enlace, el gasto de esta campaña sale sólo de lo capturado a mano.</span>`;
+      return;
+    }
+    cajaMeta.innerHTML = metaIds.map(id => `<span class="estado-chip"
+      style="background:var(--col);color:var(--tinta);margin:0 6px 6px 0;display:inline-block">
+      ${esc(nombreMeta(id))} <span class="hint">${esc(id)}</span>
+      <a href="#" data-quitameta="${esc(id)}" style="margin-left:6px">✕</a></span>`).join("");
+    cajaMeta.querySelectorAll("[data-quitameta]").forEach(a => a.onclick = ev => {
+      ev.preventDefault();
+      metaIds = metaIds.filter(x => x !== a.dataset.quitameta);
+      pintaEnlace();
+    });
+  };
+  pintaEnlace();
+
+  q("#bMetaEscoger").onclick = async () => {
+    const b = q("#bMetaEscoger");
+    b.disabled = true; dichoMeta.textContent = "Preguntándole a Meta…";
+    let lista = [];
+    try{
+      const j = await llamaMeta({ accion: "catalogo" });
+      lista = j.campanas || [];
+      dichoMeta.textContent = "";
+    }catch(e){
+      /* Si no se puede preguntar en este momento, se ofrece lo que ya se
+         conocía de la última vez: es mejor que dejar a la persona sin poder
+         enlazar nada. */
+      lista = metaObjetos.map(o => ({ id: o.objeto, nombre: o.nombre, estado: o.estado }));
+      dichoMeta.textContent = lista.length
+        ? "No se pudo preguntar ahorita; ésta es la lista de la última vez."
+        : e.message;
+    }finally{ b.disabled = false; }
+
+    if (!lista.length){ pintaEnlace(); return; }
+
+    cajaMeta.innerHTML = `<div style="max-height:230px;overflow:auto;border:1px solid var(--linea);
+        border-radius:8px;padding:8px">
+      ${lista.map(x => `<label style="display:block;padding:3px 0">
+        <input type="checkbox" value="${esc(x.id)}"${metaIds.includes(String(x.id)) ? " checked" : ""}>
+        ${esc(x.nombre || "(sin nombre)")}
+        <span class="hint">${esc(x.estado || "")} · ${esc(x.id)}</span></label>`).join("")}
+    </div>
+    <p style="margin:8px 0 0"><button class="btn sm primary" id="bMetaListo">Listo</button></p>`;
+    cajaMeta.querySelector("#bMetaListo").onclick = () => {
+      metaIds = [...cajaMeta.querySelectorAll("input:checked")].map(i => i.value);
+      pintaEnlace();
+    };
+  };
+
   // Los marcadores de posición siguen al canal, para que se vea qué va a salir.
   q("#mkCanal").addEventListener("change", () => {
     const k = infoCanal(q("#mkCanal").value);
@@ -7060,6 +7152,7 @@ function editarCampana(id, alCerrar){
       utmSource: q("#mkSource").value.trim(),
       utmMedium: q("#mkMedium").value.trim(),
       utmCampaign: q("#mkCampaign").value.trim(),
+      metaIds,
       gastos: [...cuerpoGastos.querySelectorAll("tr[data-gasto]")].map(tr => saneaGasto({
         mes: tr.querySelector(".g-mes").value,
         monto: parseMoney(tr.querySelector(".g-monto").value) || 0,
@@ -7443,6 +7536,243 @@ async function recogerAltas(){
 
 
 /* ==========================================================================
+   LO QUE META NOS CUENTA DE LOS ANUNCIOS
+
+   El gasto se captura a mano, mes por mes, y así va a seguir: esto NO lo
+   pisa. Lo que hace es traer, al lado, lo que dice Meta —por día y por
+   campaña— para que cuando los dos números no cuadren, se vea.
+
+   El acceso de Meta no vive aquí. Vive en los secretos de Supabase y lo usa
+   únicamente la función meta-sync, del lado del servidor. Esta página es
+   pública: cualquier cosa que se guardara en ella se puede leer.
+   ========================================================================== */
+
+/* Las cifras de Meta NO viven en state ni pasan por COLECCIONES, a propósito.
+   No son documentos del hotel: son copia de lo que Meta ya tiene. Si entraran
+   al costal de la sincronización, cada equipo intentaría subirlas de regreso a
+   crm_datos, las reglas rechazarían el lote ENTERO y el hotel se quedaría sin
+   sincronizar nada. Se piden cuando hacen falta y se quedan aquí, en la
+   memoria de esta pestaña. */
+let metaMetricas = null;     // una fila por campaña de Meta y día
+let metaObjetos = [];        // el catálogo: id de Meta → nombre
+let metaSync = null;         // el último renglón de la bitácora
+let metaError = "";
+let metaPidiendo = null;
+
+const hayMeta = () => nubeActiva() && !nube.sinMeta;
+const ligaFuncionMeta = () =>
+  nube.url ? nube.url.replace(/\/+$/, "") + "/functions/v1/meta-sync" : "";
+
+/** ¿Ese error quiere decir que meta.sql todavía no se corre? */
+const faltaMetaSql = m =>
+  /crm_meta|PGRST2\d\d|schema cache|does not exist|relation|404/i.test(String(m));
+
+/**
+ * Las cifras de Meta que ya están guardadas, para un periodo.
+ *
+ * Trae también el catálogo de nombres y la última anotación de la bitácora,
+ * que es lo único que le dice a una persona si la conexión sigue viva.
+ */
+async function pedirMeta(desde, hasta){
+  if (!hayMeta()) return null;
+  try{
+    const [met, obj, bit] = await Promise.all([
+      api("/rest/v1/crm_meta_metricas?select=objeto,fecha,gasto,impresiones,clics,leads,moneda"
+          + "&nivel=eq.campana&fecha=gte." + desde + "&fecha=lte." + hasta + "&limit=20000"),
+      api("/rest/v1/crm_meta_objetos?select=objeto,nombre,estado&nivel=eq.campana&limit=1000"),
+      api("/rest/v1/crm_meta_sync?select=cuando,quien,cuenta,desde,hasta,filas,ok,detalle"
+          + "&order=cuando.desc&limit=1")
+    ]);
+    metaError = "";
+    metaObjetos = Array.isArray(obj) ? obj : [];
+    metaSync = Array.isArray(bit) && bit.length ? bit[0] : null;
+    return Array.isArray(met) ? met : [];
+  }catch(e){
+    if (faltaMetaSql(e.message)){ nube.sinMeta = true; metaError = ""; }
+    else metaError = e.message;
+    return null;
+  }
+}
+
+/** Una llamada a la función del servidor, la única que sabe el acceso. */
+async function llamaMeta(cuerpo){
+  if (!nubeActiva()) throw new Error("Sin conexión a la nube.");
+  const r = await fetch(ligaFuncionMeta(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + nube.sesion.access_token,
+      "apikey": nube.anon
+    },
+    body: JSON.stringify(cuerpo)
+  });
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 404)
+    throw new Error("La función meta-sync todavía no está subida a Supabase. " +
+      "Se sube una vez, pegando el archivo en Edge Functions. Viene en META.md.");
+  if (!r.ok) throw new Error(j.error || ("El servidor contestó " + r.status + "."));
+  return j;
+}
+
+/** El nombre que Meta le puso a esa campaña, si lo sabemos. */
+const nombreMeta = id => {
+  const o = metaObjetos.find(x => String(x.objeto) === String(id));
+  return o && o.nombre ? o.nombre : String(id);
+};
+
+/**
+ * Lo que Meta dice de una campaña del CRM, sumando las suyas.
+ *
+ * Devuelve null cuando la campaña no está enlazada o cuando no hay ni un día
+ * con datos: null es "no sabemos", y se pinta con una raya. Un cero aquí
+ * sería otra cosa —"no se gastó"— y no es lo que está pasando.
+ */
+function metricasMeta(c, desde, hasta){
+  const ids = (c.metaIds || []).map(String);
+  if (!metaMetricas || !ids.length) return null;
+  const busca = new Set(ids);
+  let gasto = 0, impresiones = 0, clics = 0, leads = 0, moneda = "", dias = 0;
+  for (const f of metaMetricas){
+    if (!busca.has(String(f.objeto))) continue;
+    const d = String(f.fecha || "").slice(0, 10);
+    if (desde && d < desde) continue;
+    if (hasta && d > hasta) continue;
+    gasto += Number(f.gasto) || 0;
+    impresiones += Number(f.impresiones) || 0;
+    clics += Number(f.clics) || 0;
+    leads += Number(f.leads) || 0;
+    moneda = moneda || String(f.moneda || "");
+    dias++;
+  }
+  return dias ? { gasto: Math.round(gasto * 100) / 100, impresiones, clics, leads,
+                  moneda, dias } : null;
+}
+
+/**
+ * La casilla del gasto según Meta, al lado del capturado a mano.
+ *
+ * Los dos se enseñan, nunca se pisan. Cuando no cuadran por más de un 10%
+ * se marca: casi siempre es que falta capturar un mes, o que la campaña del
+ * CRM está enlazada a menos campañas de Meta de las que en realidad corrió.
+ */
+function celdaMeta(c, gastoManual, desde, hasta){
+  if (!(c.metaIds || []).length)
+    return `<span class="hint" title="Esta campaña todavía no está enlazada con Meta">—</span>`;
+  const m = metricasMeta(c, desde, hasta);
+  if (!m)
+    return `<span class="hint" title="Meta no reportó gasto de esta campaña en el periodo">—</span>`;
+  const dispar = gastoManual && m.gasto &&
+    Math.abs(m.gasto - gastoManual) / Math.max(m.gasto, gastoManual) > 0.10;
+  return esc(moneyMN(m.gasto)) + (dispar
+    ? ` <b style="color:var(--warn)" title="No cuadra con lo capturado a mano (${
+        esc(moneyMN(gastoManual))}). Revise si falta capturar un mes.">≠</b>` : "");
+}
+
+/** "hace 3 horas", que es como lo diría una persona. */
+function haceCuanto(iso){
+  const t = Date.parse(iso || "");
+  if (!t) return "";
+  const min = Math.round((Date.now() - t) / 60000);
+  if (min < 2) return "hace un momento";
+  if (min < 60) return "hace " + min + " minutos";
+  const h = Math.round(min / 60);
+  if (h < 24) return "hace " + h + (h === 1 ? " hora" : " horas");
+  const d = Math.round(h / 24);
+  return "hace " + d + (d === 1 ? " día" : " días");
+}
+
+/**
+ * La tira de estado de la conexión con Meta.
+ *
+ * Es lo único de toda esta entrega que le sirve a alguien que no sabe qué es
+ * un token: dice si sigue viva, de cuándo son las cifras y, si se cayó, por
+ * qué. Sin esto, el día que el acceso caduque las cifras se congelarían y
+ * nadie se enteraría hasta la junta.
+ */
+function tiraMeta(){
+  if (!nubeActiva())
+    return `<div class="note" style="margin-bottom:12px">Sin conexión a la nube, el gasto
+      se captura a mano. Traerlo de Meta lo hace el servidor.</div>`;
+  if (nube.sinMeta)
+    return `<div class="note warn" style="margin-bottom:12px">
+      <b>Meta todavía no está conectado.</b> Se conecta una vez: se corre
+      <code>meta.sql</code> en Supabase y se sube la función <code>meta-sync</code>.
+      Mientras tanto el gasto se captura a mano, como hasta hoy, y todo lo demás
+      funciona igual. El paso a paso está en <b>META.md</b>.</div>`;
+
+  const s = metaSync;
+  const bien = s && s.ok;
+  const punto = !s ? "○" : bien ? "●" : "▲";
+  const color = !s ? "var(--muted)" : bien ? "var(--ok)" : "var(--bad)";
+  const dicho = !s
+    ? "Nunca se ha traído nada todavía."
+    : bien
+      ? "Al día · " + esc(haceCuanto(s.cuando)) +
+        (s.filas ? " · " + s.filas + " días de cifras" : "")
+      : "La última vez falló " + esc(haceCuanto(s.cuando));
+
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <span style="color:${color};font-size:13px">${punto}</span>
+      <b>Meta Ads</b>
+      <span class="hint">${dicho}</span>
+      ${s && s.cuenta ? `<span class="hint">· ${esc(s.cuenta)}</span>` : ""}
+      <span style="flex:1"></span>
+      <span class="hint" id="metaDicho"></span>
+      <button class="btn sm" id="bMetaSync">Sincronizar</button>
+    </div>
+    ${s && !s.ok && s.detalle ? `<div class="errbox" style="margin-bottom:12px">
+      ${esc(s.detalle)}</div>` : ""}
+    ${metaError ? `<div class="errbox" style="margin-bottom:12px">
+      No se pudieron leer las cifras de Meta.<br>
+      <span class="hint">${esc(metaError)}</span></div>` : ""}`;
+}
+
+/**
+ * Pide las cifras si todavía no se han pedido, y vuelve a pintar cuando lleguen.
+ *
+ * Se llama desde las dos pantallas que las enseñan. Se pregunta UNA vez: si el
+ * servidor contestó vacío, vacío se queda hasta que alguien sincronice, en vez
+ * de estar preguntando en cada dibujo.
+ */
+function cargaMeta(vuelveAPintar){
+  if (metaMetricas !== null || !hayMeta() || metaPidiendo) return;
+  const [d, h] = rangoMkt();
+  metaPidiendo = pedirMeta(d, h).then(r => {
+    metaPidiendo = null;
+    metaMetricas = r || [];
+    vuelveAPintar();
+  });
+}
+
+/** Engancha el botón de la tira. Se llama desde cada pantalla que la pinta. */
+function enganchaTiraMeta(cont, alTerminar){
+  const b = cont.querySelector("#bMetaSync");
+  if (!b) return;
+  b.onclick = async () => {
+    const dicho = cont.querySelector("#metaDicho");
+    b.disabled = true;
+    const antes = b.textContent;
+    b.textContent = "Trayendo…";
+    try{
+      const j = await llamaMeta({ accion: "sincroniza" });
+      if (dicho) dicho.textContent = j.filas
+        ? j.filas + " días de cifras, del " + j.desde + " al " + j.hasta
+        : "Meta no reportó gasto en esos días";
+      metaMetricas = null;              // se vuelve a leer con lo recién bajado
+      metaError = "";
+    }catch(e){
+      /* Si falla, NO se toca una sola cifra de las que ya estaban: un cero se
+         leería como "no gastamos" y lo viejo se lee como "esto es de antier",
+         que es la verdad. */
+      metaError = e.message;
+    }finally{
+      b.disabled = false; b.textContent = antes;
+      if (alTerminar) alTerminar();
+    }
+  };
+}
+
+/* ==========================================================================
    EL TABLERO DE MARKETING
 
    Contesta tres preguntas, en este orden: cuántos llegaron, cuánto costó
@@ -7578,6 +7908,7 @@ function filasMkt(){
     const callado = !!(ing && ing.ocultos === ing.meses);
     return {
       c, gasto, leads,
+      meta: metricasMeta(c, desde, hasta),
       cpl: (leads && gasto) ? gasto / leads : null,
       cierres: ing ? ing.cierres : null,
       ingreso: ing && !callado ? ing.ingreso : null,
@@ -7597,6 +7928,9 @@ function renderMktDash(){
 
   const suma = k => filas.reduce((a, f) => a + (Number(f[k]) || 0), 0);
   const gastoTotal = suma("gasto"), leadsTotal = suma("leads");
+  const conMeta = filas.filter(f => f.meta);
+  const metaGasto = conMeta.reduce((a, f) => a + f.meta.gasto, 0);
+  const metaLeads = conMeta.reduce((a, f) => a + f.meta.leads, 0);
   const conIngreso = filas.filter(f => f.ingreso !== null);
   const ingresoTotal = conIngreso.reduce((a, f) => a + f.ingreso, 0);
   const hayDinero = mkIngresos && conIngreso.length;
@@ -7627,6 +7961,10 @@ function renderMktDash(){
       <div class="kpi"><div class="k-t">Costo por lead</div>
         <div class="k-v">${leadsTotal ? esc(moneyMN(gastoTotal / leadsTotal)) : "—"}</div>
         <div class="k-s">${leadsTotal ? "inversión entre leads" : "sin leads todavía"}</div></div>
+      ${conMeta.length ? `
+        <div class="kpi"><div class="k-t">Según Meta</div>
+          <div class="k-v">${esc(moneyMN(metaGasto))}</div>
+          <div class="k-s">bajado de la plataforma</div></div>` : ""}
       ${hayDinero ? `
         <div class="kpi"><div class="k-t">Ingreso atribuido</div>
           <div class="k-v">${esc(moneyMN(ingresoTotal))}</div>
@@ -7669,6 +8007,44 @@ function renderMktDash(){
           : `<b>${f.roas.toFixed(1)}×</b>`}</td>
       </tr>`).join("")}</tbody></table></div>`}
 
+    ${conMeta.length ? `
+      <h3 class="sec">Lo que dice Meta</h3>
+      <div style="overflow:auto"><table class="data">
+        <thead><tr><th>Campaña</th>
+          <th class="num">Inversión en Meta</th><th class="num">Capturado a mano</th>
+          <th class="num">Impresiones</th><th class="num">Clics</th>
+          <th class="num" title="Los que Meta contó de su lado, no los que llegaron al CRM">Leads (Meta)</th>
+          <th class="num">Costo por lead</th></tr></thead>
+        <tbody>${conMeta.map(f => {
+          const m = f.meta;
+          const dispar = f.gasto && m.gasto &&
+            Math.abs(m.gasto - f.gasto) / Math.max(m.gasto, f.gasto) > 0.10;
+          return `<tr>
+            <td><b>${esc(f.c.nombre)}</b>
+              <div class="hint">${esc(f.c.metaIds.map(nombreMeta).join(" · "))}</div></td>
+            <td class="num nowrap">${esc(moneyMN(m.gasto))}${m.moneda && m.moneda !== "MXN"
+              ? ` <span class="hint">${esc(m.moneda)}</span>` : ""}</td>
+            <td class="num nowrap"${dispar ? ' style="color:var(--warn)"' : ""}>${
+              f.gasto ? esc(moneyMN(f.gasto)) : "—"}${dispar ? " ≠" : ""}</td>
+            <td class="num">${m.impresiones.toLocaleString("es-MX")}</td>
+            <td class="num">${m.clics.toLocaleString("es-MX")}</td>
+            <td class="num">${m.leads || "—"}</td>
+            <td class="num nowrap">${m.leads ? esc(moneyMN(m.gasto / m.leads)) : "—"}</td>
+          </tr>`;
+        }).join("")}</tbody></table></div>
+      ${conMeta.some(f => f.gasto && f.meta.gasto &&
+          Math.abs(f.meta.gasto - f.gasto) / Math.max(f.meta.gasto, f.gasto) > 0.10)
+        ? `<div class="note" style="margin-top:12px">Donde aparece <b>≠</b>, lo capturado a mano
+            y lo que dice Meta no cuadran por más de un 10%. Casi siempre falta capturar un mes,
+            o la campaña está enlazada a menos campañas de Meta de las que en realidad corrieron.
+            <b>No se corrige solo a propósito</b>: lo capturado es lo que se pagó, y esa cifra
+            manda.</div>` : ""}
+      ${metaLeads && leadsTotal && metaLeads > leadsTotal * 1.5 ? `<div class="note"
+        style="margin-top:12px">Meta reporta <b>${metaLeads}</b> leads y al CRM llegaron
+        <b>${leadsTotal}</b>. La diferencia es normal mientras los formularios de Meta no entren
+        solos al CRM —eso es la siguiente entrega—: hoy los captura alguien a mano.</div>` : ""}`
+      : ""}
+
     ${filas.some(f => f.suprimido) ? `<div class="note" style="margin-top:12px">
       Las campañas con una raya en <b>Ingreso</b> todavía tienen muy pocos cierres.
       El monto se reserva a propósito: con uno o dos, la cifra dejaría de ser un total
@@ -7695,6 +8071,8 @@ function renderMktDash(){
     mkDesde = `${a}-01-01`; mkHasta = `${a}-12-31`;
     recargar();
   };
+
+  cargaMeta(() => { if (vista === "mktdash") renderMktDash(); });
 
   // La primera vez se pide al servidor y se vuelve a pintar cuando conteste.
   if (mkIngresos === null && hayIngresos() && !mkIngresosError && !mkPidiendo)

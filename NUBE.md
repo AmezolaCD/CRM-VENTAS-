@@ -349,12 +349,28 @@ persona en concreto. Dirección, gerencia y administración lo ven siempre.
 **Sin correrlo el tablero sirve igual**: los leads, la conversión y el costo por lead salen
 desde el primer día, y donde iría el dinero aparece un aviso que dice qué falta.
 
+## Las cifras de los anuncios
+
+`meta.sql` monta las tres tablas donde caen el gasto, las impresiones y los clics que baja el
+CRM de Meta. Se corre una vez y se puede repetir.
+
+Lo importante de cómo está hecho: **nadie las escribe desde el navegador**. No hay una sola
+regla de escritura, a propósito. La única que escribe es la función `meta-sync`, que corre del
+lado del servidor con la llave de servicio. Si alguien pudiera escribirlas desde el CRM,
+también podría inventarse el gasto de una campaña —y el retorno con él—.
+
+Las leen marketing, dirección y administración. Un ejecutivo de ventas no recibe ni un
+renglón.
+
+Sin correrlo, el CRM funciona igual y el gasto se captura a mano, como hasta hoy. El paso a
+paso completo —incluido cómo sacar el acceso de Meta— está en **META.md**.
+
 ## Los archivos .sql se corren en el orden que sea
 
 `nube.sql` va primero, porque crea la tabla. Los demás —`roles.sql`, `firmas.sql`,
-`archivos.sql`, `folios.sql`, `prospectos.sql`, `marketing.sql`— no dependen unos de otros: se
-corren en cualquier orden, cuantas veces haga falta, y cada uno se reemplaza entero en vez de
-acumularse.
+`archivos.sql`, `folios.sql`, `prospectos.sql`, `marketing.sql`, `meta.sql`— no dependen unos
+de otros: se corren en cualquier orden, cuantas veces haga falta, y cada uno se reemplaza
+entero en vez de acumularse.
 
 Eso incluye correr `archivos.sql` o `folios.sql` **antes** que `roles.sql`. Los dos
 preguntan por el papel de quien entra, pero lo hacen de una manera que no exige que

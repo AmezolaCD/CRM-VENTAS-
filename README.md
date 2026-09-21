@@ -431,6 +431,9 @@ decidió así—: ve sus campañas, sus ligas y los prospectos, y nada más.
   **liga pública de registro**: quien ve el anuncio deja sus datos sin tener cuenta y cae en el
   CRM sabiendo de qué campaña vino.
 - **Tablero.** El embudo —de lead a cierre—, el costo por lead y el retorno por campaña.
+- **Meta Ads.** Con la conexión puesta, el gasto, las impresiones y los clics **bajan solos**,
+  por campaña y por día. Lo capturado a mano no se pisa: los dos se enseñan y, cuando no
+  cuadran, se marca. El procedimiento está en **[META.md](META.md)**.
 
 El dinero del tablero lo suma **el servidor** y entrega cuentas, no renglones: ni un contrato
 baja a esas computadoras. Y mientras una campaña tenga menos de tres cierres, el monto se

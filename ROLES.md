@@ -52,6 +52,10 @@ Son dos negocios distintos y cada uno ve el suyo:
   eventos. Lo suyo son sus campañas y los prospectos. Y las campañas no le bajan a nadie más.
   El detalle está en `MARKETING.md`.
 
+  Las cifras de los anuncios —lo que baja de Meta— las leen marketing, dirección y
+  administración, y **nadie las escribe desde el CRM**: las llena una función del servidor.
+  El detalle está en `META.md`.
+
   Lo único que cruza esa pared es **una suma**. Con `marketing.sql` corrido, el tablero de
   marketing pide al servidor cuánto dejó cada campaña y recibe cuentas —cuántos clientes,
   cuántos cierres y un total por mes—, nunca los documentos. Y mientras una campaña tenga

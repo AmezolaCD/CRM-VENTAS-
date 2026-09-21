@@ -4,10 +4,10 @@ Marketing no vende noches ni eventos: consigue que llegue gente. Lo que mide es 
 —cuánto costó traerla y qué trajo—, así que tiene su propio departamento, sus pestañas y su
 gente.
 
-> **Van tres de seis entregas.** Hoy hay Campañas, el armador de ligas con UTMs, la liga
-> pública de registro con su atribución y el **tablero**. Falta la conexión con Meta —métricas
-> primero, Lead Ads después—, el lead scoring, la biblioteca de activos y las
-> automatizaciones.
+> **Van cuatro de seis entregas.** Hoy hay Campañas, el armador de ligas con UTMs, la liga
+> pública de registro con su atribución, el **tablero** y la **conexión con Meta**, que baja
+> sola el gasto de los anuncios. Faltan los Lead Ads —que el lead de Meta entre al CRM en el
+> momento—, el lead scoring, la biblioteca de activos y las automatizaciones.
 
 ---
 
@@ -52,12 +52,13 @@ búsqueda pagada, una feria.
 - **Leads**: la columna dice cuántos prospectos trajo. Hoy se llena cuando el prospecto se
   amarra a la campaña; en la entrega 2 lo hará solo la liga pública.
 
-Hoy el gasto **se captura a mano**. Antes escribí aquí que conectarse a Meta «tiene costo»:
-**eso es falso y lo corrijo**. La Marketing API de Meta no cobra por usarla. Lo que cuesta es
-el trámite —una app de desarrollador, el permiso `ads_read` y la verificación del negocio—, y
-el hotel **ya tiene eso andando**, porque la misma conexión estuvo en Odoo. Traer el gasto de
-Meta es la entrega 4, y el gasto capturado a mano **no se pisa**: cuando los dos números no
-cuadren, se van a ver lado a lado.
+El gasto **se captura a mano**, y con Meta conectado **baja solo al lado**. Los dos se
+enseñan: lo capturado manda siempre, porque es lo que de verdad se pagó, y cuando no cuadran
+por más de un 10% el CRM lo marca con un **≠** en vez de escoger uno.
+
+Conectar Meta **no cuesta**: su API es gratuita —antes escribí aquí lo contrario y lo
+corrijo—. Lo que cuesta es el trámite de permisos, y el hotel ya lo tiene andando desde que la
+conexión estuvo en Odoo. Todo el procedimiento está en **[META.md](META.md)**.
 
 Al **eliminar** una campaña, los prospectos que trajo **se quedan** —pierden nada más de qué
 campaña vinieron—, y el aviso lo dice con el número antes de borrar.
@@ -217,7 +218,7 @@ del hotel, no del programa.
 | ~~1~~ | ~~Departamento, accesos, Campañas, armador de UTMs~~ ✅ |
 | ~~2~~ | ~~Liga pública de registro y atribución de punta a punta~~ ✅ |
 | ~~3~~ | ~~Tablero: embudo, costo por lead y retorno~~ ✅ |
-| 4 | Meta Ads: gasto, impresiones y costo por lead, bajados solos |
+| ~~4~~ | ~~Meta Ads: gasto, impresiones y costo por lead, bajados solos~~ ✅ |
 | 5 | Lead Ads: el lead de Meta entra al CRM en el momento |
 | 6 | Lead Scoring, Biblioteca de Activos y Automatizaciones |
 
