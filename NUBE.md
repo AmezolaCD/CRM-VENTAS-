@@ -318,6 +318,20 @@ se ve en pantalla" deja fuera el resto.
 Abre el archivo, **selecciona todo** (Ctrl+A / Cmd+A), cópialo, y en el SQL Editor **selecciona
 todo otra vez antes de pegar**, para no dejar pedazos de la corrida anterior.
 
+## La liga pública de registro
+
+`prospectos.sql` monta el buzón donde cae quien llena la liga de un anuncio. Se corre una vez,
+después de `nube.sql`, y se puede repetir.
+
+Lo importante de cómo está hecho: **el visitante no lee nada**. No tiene permiso de leer
+ninguna tabla —ni la cartera, ni el buzón, ni siquiera lo que él mismo acaba de escribir—, y lo
+único que puede hacer es depositar con la clave buena. El equipo recoge del buzón, y quien no
+está en *Ajustes → Usuarios y permisos* tampoco lo alcanza.
+
+Sin correrlo, el CRM funciona igual: el formulario de adentro sigue trabajando y las ligas con
+UTMs se pueden armar apuntando a la página del hotel. Lo único que falta es el registro desde
+fuera, y el propio CRM lo avisa donde se nota.
+
 ## Los archivos .sql se corren en el orden que sea
 
 `nube.sql` va primero, porque crea la tabla. Los demás —`roles.sql`, `firmas.sql`,

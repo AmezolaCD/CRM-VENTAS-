@@ -61,22 +61,27 @@ on conflict (id) do update
 --
 --  Es la misma función en archivos.sql y en folios.sql, a propósito: cada
 --  archivo se vale solo y no importa cuál se corra primero.
+--
+--  OJO: firmas.sql define esta MISMA función. Las dos versiones tienen que ser
+--  idénticas palabra por palabra, porque "create or replace" hace que la última
+--  que se corra gane. Si alguna vez hay que cambiarla, se cambia en los tres
+--  archivos a la vez.
 -- ---------------------------------------------------------------------------
 create or replace function public.crm_del_equipo()
 returns boolean
 language plpgsql
 stable
-as $ayudante$
-declare
-  v_rol text;
+set search_path = public
+as $$
+declare papel text;
 begin
   if to_regprocedure('public.crm_rol()') is null then
-    return true;
+    return true;  -- sin roles.sql corrido no hay papeles que mirar
   end if;
-  execute 'select public.crm_rol()' into v_rol;
-  return coalesce(v_rol, '') <> 'ninguno';
+  execute 'select public.crm_rol()' into papel;
+  return coalesce(papel, '') <> 'ninguno';
 end;
-$ayudante$;
+$$;
 
 grant execute on function public.crm_del_equipo() to authenticated;
 

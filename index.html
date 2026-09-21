@@ -715,7 +715,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.21-47";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.21-48";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -823,6 +823,7 @@ const HOTEL_DEF = {
   telReservaciones: "664 374 2487",
   emailReservaciones: "reservaciones@quartzhotel.mx",
   sitio: "",                 // la página del hotel, para armar las ligas de campaña
+  tokenAlta: "",             // la clave de la liga pública de registro
   logo: "",                 // data URI; si está vacío se usa el monograma
   marcaAgua: "monograma",   // monograma | logo | ninguna
 
@@ -1520,9 +1521,13 @@ function catalogo(guardadas){
 
 function saneaCliente(c){
   const o = Object.assign({ id:"", empresa:"", contacto:"", telefono:"", email:"", ubicacion:"",
-    tarifa:0, ejecutivo:"", estatus:"contactado", notas:"", createdAt:"", updatedAt:"" }, c || {});
+    tarifa:0, ejecutivo:"", estatus:"contactado", notas:"", campanaId:"",
+    createdAt:"", updatedAt:"" }, c || {});
   o.id = o.id || nuevoId("c");
   o.tarifa = Number(o.tarifa) || 0;
+  // De qué campaña salió, si es que salió de alguna. Los clientes de antes no
+  // lo traen, y está bien: no todos llegan por un anuncio.
+  o.campanaId = String(o.campanaId || "");
   if (!ESTATUS.some(e => e.id === o.estatus)) o.estatus = "contactado";
   return o;
 }
@@ -2677,6 +2682,9 @@ async function sincronizar(){
     // Las firmas que dejaron los clientes se recogen antes de subir, para que
     // el convenio cerrado viaje a los demás equipos en esta misma tanda.
     if ((await recogerFirmas()).hubo) render();
+    // Los registros que dejaron en la liga entran antes de subir, para que
+    // viajen a los demás equipos en esta misma tanda.
+    if (!nube.sinBuzonAltas && (await recogerAltas()).hubo) render();
     if (resolverFoliosRepetidos()) render();
 
     const actuales = filasDeEstado();
@@ -3194,9 +3202,10 @@ function pantallaEntrada(){
  * render(), para que no haya manera de dejarlo abierto por descuido.
  */
 function candado(){
-  // El cliente que viene a firmar no entra al CRM: su pantalla es otra cosa y
-  // no tiene por qué pedirle una contraseña que no tiene.
-  if (enlaceDeFirma()) return false;
+  // Ni el cliente que viene a firmar ni quien viene de un anuncio entran al
+  // CRM: su pantalla es otra cosa y no tienen por qué dar una contraseña que
+  // no tienen.
+  if (enlaceDeFirma() || enlaceDeAlta()) return false;
   const cerrado = !!(nube.url && nube.anon) && !nube.sesion;
   document.body.classList.toggle("sin-sesion", cerrado);
   if (cerrado && !document.getElementById("entrada")) pantallaEntrada();
@@ -3215,7 +3224,7 @@ async function arrancarNube(){
   // cualquier espera. Si se dejara para después, un equipo con cartera
   // guardada y sin sesión la enseñaría unos segundos —y con "reducir
   // movimiento" no hay animación que la tape—.
-  if (nube.url && nube.anon && !nube.sesion && !enlaceDeFirma())
+  if (nube.url && nube.anon && !nube.sesion && !enlaceDeFirma() && !enlaceDeAlta())
     document.body.classList.add("sin-sesion");
   const invitacion = leerInvitacion();   // se limpia la barra de direcciones ya
   pintarNube();
@@ -4574,10 +4583,15 @@ function pasarACartera(pr){
       return;
     }
     const eje = ov.querySelector('[name="pcEje"]').value.trim();
+    const camp = campana(pr.campanaId);
     const c = saneaCliente({
       empresa, contacto: nombreProspecto(pr), telefono: pr.telefono, email: pr.email,
       ejecutivo: eje, estatus: "contactado",
-      notas: [pr.evento ? `Prospecto levantado en ${pr.evento}.` : "Prospecto de evento.",
+      // De qué campaña salió. Es el eslabón que permite seguirle la pista al
+      // dinero: de aquí cuelgan sus convenios, contratos y eventos.
+      campanaId: pr.campanaId,
+      notas: [camp ? `Llegó por la campaña "${camp.nombre}".`
+                   : pr.evento ? `Prospecto levantado en ${pr.evento}.` : "Prospecto de evento.",
               pr.notas].filter(Boolean).join(" "),
       createdAt: new Date().toISOString()
     });
@@ -7066,13 +7080,14 @@ function renderUtms(){
       <b>No se escriben a mano</b>: basta cambiar el destino y el contenido.</div>
 
     <div class="grid">
-      <div class="full"><label class="lbl">A dónde llega</label>
+      <div class="full"><label class="lbl">¿A dónde mandas a la gente?</label>
+        <div class="subtabs" id="utmDestino" style="margin:0 0 8px">
+          <button data-dest="registro" aria-current="true">La liga de registro</button>
+          <button data-dest="sitio">La página del hotel</button>
+        </div>
+        <div id="utmDestNota" class="hint" style="margin-bottom:8px"></div>
         <input class="field" id="utmBase" value="${esc(sitio)}"
-          placeholder="https://www.quartzhotel.mx/bodas" style="width:100%">
-        <div class="hint">${sitio
-          ? `Sale de <i>Ajustes → Datos del hotel</i>. Se puede cambiar aquí para una liga suelta.`
-          : `Todavía no hay página guardada. Escríbela aquí, o déjala fija en
-             <i>Ajustes → Datos del hotel</i> para no repetirla cada vez.`}</div></div>
+          placeholder="https://www.quartzhotel.mx/bodas" style="width:100%"></div>
       <div><label class="lbl">utm_source <span class="hint">de dónde</span></label>
         <input class="field" id="utmS" value="${esc(c.utmSource || k.utm)}"></div>
       <div><label class="lbl">utm_medium <span class="hint">cómo</span></label>
@@ -7086,6 +7101,11 @@ function renderUtms(){
     <h3 class="sec">La liga</h3>
     <div id="utmSalida"></div>
 
+    ${nube.sinBuzonAltas ? `<div class="note warn" style="margin-top:12px">
+      <b>La liga de registro todavía no está lista del lado del hotel.</b>
+      Falta correr <code>prospectos.sql</code> una vez en Supabase. Mientras tanto la liga
+      se puede armar, pero quien la abra no va a poder mandar sus datos.</div>` : ""}
+
     <h3 class="sec">Para qué sirve utm_content</h3>
     <div class="note">Cuando la misma campaña corre con dos piezas distintas —un video y
       un carrusel, dos textos— se les pone <b>utm_content</b> diferente y después se ve cuál
@@ -7093,12 +7113,25 @@ function renderUtms(){
   </div>`;
 
   const q = sel => cont.querySelector(sel);
+  let destino = "registro";
 
   const pinta = () => {
-    const liga = armaLiga(q("#utmBase").value, {
-      source: q("#utmS").value, medium: q("#utmM").value,
-      campaign: q("#utmC").value, content: q("#utmCt").value
-    });
+    const utm = { source: q("#utmS").value, medium: q("#utmM").value,
+                  campaign: q("#utmC").value, content: q("#utmCt").value };
+    const alRegistro = destino === "registro";
+
+    q("#utmBase").style.display = alRegistro ? "none" : "";
+    q("#utmDestNota").innerHTML = alRegistro
+      ? `El anuncio lleva directo al formulario del hotel. <b>Funciona desde hoy</b> y la
+         campaña se amarra sola: no hay que tocar la página.`
+      : (sitio
+          ? `El anuncio lleva a la página del hotel. Para que la campaña se amarre, la
+             página tiene que mandar a la gente a la liga de registro <b>conservando las
+             etiquetas</b>; quien lleve el sitio sabrá hacerlo.`
+          : `Falta la página del hotel. Escríbela aquí, o déjala fija en
+             <i>Ajustes → Datos del hotel</i>.`);
+
+    const liga = alRegistro ? ligaDeAlta(utm) : armaLiga(q("#utmBase").value, utm);
     q("#utmSalida").innerHTML = liga
       ? `<div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap">
            <textarea class="field mono" id="utmLiga" readonly rows="2"
@@ -7122,8 +7155,240 @@ function renderUtms(){
 
   ["#utmBase","#utmS","#utmM","#utmC","#utmCt"].forEach(sel =>
     q(sel).addEventListener("input", pinta));
+  cont.querySelectorAll("#utmDestino button").forEach(b => b.onclick = () => {
+    destino = b.dataset.dest;
+    cont.querySelectorAll("#utmDestino button").forEach(x =>
+      x.setAttribute("aria-current", String(x === b)));
+    pinta();
+  });
   q("#utmCamp").onchange = e => { utmCampSel = e.target.value; renderUtms(); };
   pinta();
+}
+
+
+/* ==========================================================================
+   LA LIGA PÚBLICA DE REGISTRO
+
+   Quien vio un anuncio abre esta liga y deja sus datos. No tiene cuenta ni
+   tiene por qué tenerla, así que esta pantalla no es el CRM: es un formulario
+   con el membrete del hotel y nada más.
+
+   Lo que deja cae en un buzón —prospectos.sql— del que el CRM lo recoge. El
+   visitante no lee nada: ni la cartera, ni el buzón, ni siquiera lo que él
+   mismo acaba de escribir.
+
+   La campaña viaja en la propia dirección, en las etiquetas utm_. Por eso la
+   liga se arma desde Atribución & UTMs y no se escribe a mano.
+   ========================================================================== */
+
+/** ¿La dirección trae una liga de registro? */
+function enlaceDeAlta(){
+  const m = String(location.hash || "").match(/[#&]alta=([A-Za-z0-9_-]+)/);
+  if (!m) return null;
+  const p = new URLSearchParams(String(location.search || "").replace(/^\?/, ""));
+  const h = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
+  const dame = k => (p.get("utm_" + k) || h.get("utm_" + k) || "").trim();
+  return {
+    token: m[1],
+    utm: { source:dame("source"), medium:dame("medium"), campaign:dame("campaign"),
+           content:dame("content"), term:dame("term") }
+  };
+}
+
+/** La clave de la liga. Se crea sola la primera vez que alguien la pide. */
+function tokenAlta(){
+  const h = state.ajustes.hotel;
+  if (!h.tokenAlta){
+    h.tokenAlta = nuevoToken();
+    guardar();
+  }
+  return h.tokenAlta;
+}
+
+/** La dirección de esta misma aplicación, sin lo que traiga pegado. */
+const ligaDeAltaBase = () =>
+  location.origin + location.pathname + "#alta=" + tokenAlta();
+
+/** La liga de registro ya con las etiquetas de una campaña. */
+function ligaDeAlta(utm){
+  const pares = Object.entries(utm || {})
+    .filter(([, v]) => String(v || "").trim())
+    .map(([k, v]) => `utm_${k}=${encodeURIComponent(String(v).trim())}`);
+  return ligaDeAltaBase() + (pares.length ? "&" + pares.join("&") : "");
+}
+
+/**
+ * Deja el registro en el buzón.
+ *
+ * Va con return=minimal a propósito: el visitante no tiene permiso de LEER la
+ * tabla —ni lo suyo—, y si la petición pidiera de vuelta el renglón guardado,
+ * el servidor la rechazaría entera aunque el registro estuviera bien.
+ */
+async function depositarAlta(token, datos){
+  const r = await fetch(nube.url + "/rest/v1/crm_altas", {
+    method: "POST",
+    headers: { apikey: nube.anon, "Content-Type": "application/json",
+               "Prefer": "return=minimal" },
+    body: JSON.stringify(Object.assign({ token, aplicada: false }, datos))
+  });
+  if (!r.ok){
+    const detalle = await r.text().catch(() => "");
+    // La clave mala va PRIMERO: el aviso de que la regla lo rechazó nombra la
+    // tabla, así que si se preguntara antes por la tabla, una clave inventada
+    // se reportaría como "falta montar el buzón" y nadie entendería nada.
+    if (/row-level security/i.test(detalle))
+      throw new Error("Esta liga ya no está vigente. Pídele una nueva a quien te la mandó.");
+    if (/schema cache|PGRST205|does not exist/i.test(detalle))
+      throw new Error("La liga todavía no está lista del lado del hotel.");
+    throw new Error(detalle || ("Error " + r.status));
+  }
+}
+
+/**
+ * La pantalla que ve quien abre la liga.
+ *
+ * Es la MISMA del modo tableta, a propósito: ya está probada en teléfono, ya
+ * respeta el membrete del hotel y ya sabe reclamar en el idioma de quien la
+ * llena. Lo único que cambia es a dónde va lo que se escribe —al buzón de la
+ * nube en vez de a este equipo— y que aquí sí viaja de qué campaña vino.
+ */
+function pantallaAltaPublica(datos){
+  document.documentElement.classList.add("modo-firma");
+  document.documentElement.classList.remove("intro-activa");
+  for (const el of [document.documentElement, document.body]){
+    el.style.height = "auto"; el.style.overflow = "visible";
+  }
+  document.body.classList.add("con-kiosco");
+
+  const caja = document.createElement("div");
+  caja.id = "kiosco";
+  document.body.appendChild(caja);
+  pintarKiosco(caja, "", "");
+
+  // El botón de la tableta guarda en este equipo; aquí tiene que ir al buzón.
+  const err = caja.querySelector("#kErr");
+  caja.querySelector("#kEnviar").onclick = () => mandarAlta(caja, err, datos);
+  caja.querySelectorAll("input").forEach(el =>
+    el.addEventListener("keydown", ev => {
+      if (ev.key === "Enter" && el.id === "kTel"){
+        ev.preventDefault(); mandarAlta(caja, err, datos);
+      }
+    }));
+}
+
+async function mandarAlta(caja, err, datos){
+  const val = id => caja.querySelector("#" + id).value.trim();
+  const marca = id => caja.querySelector("#" + id).classList.add("err");
+  const faltan = [];
+
+  // Las mismas reglas que la tableta: un registro sin manera de volver a
+  // contactar a la persona no sirve de nada.
+  if (!val("kNom")){ faltan.push("su nombre"); marca("kNom"); }
+  if (!val("kApe")){ faltan.push("su apellido"); marca("kApe"); }
+  const email = val("kMail").toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)){
+    faltan.push("un correo electrónico válido"); marca("kMail");
+  }
+  if (val("kTel").replace(/\D/g, "").length < 10){
+    faltan.push("un teléfono de 10 dígitos"); marca("kTel");
+  }
+  if (faltan.length){
+    err.innerHTML = `<div class="k-err"><b>Nos falta un dato:</b>
+      <ul>${faltan.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
+    err.scrollIntoView({ block:"center", behavior:"smooth" });
+    return;
+  }
+
+  const b = caja.querySelector("#kEnviar");
+  b.disabled = true; b.textContent = "Enviando…"; err.innerHTML = "";
+  try{
+    await depositarAlta(datos.token, {
+      nombre: val("kNom"), apellido: val("kApe"), email,
+      telefono: val("kTel"), compania: val("kEmp"),
+      interes: "", utm: datos.utm
+    });
+    caja.querySelector(".k-hoja").innerHTML = `
+      <div class="k-marca">${membreteKiosco(state.ajustes.hotel)}</div>
+      <div class="k-gracias"><div class="k-tick">✓</div>
+        <h1 class="k-titulo">¡Gracias!</h1>
+        <p class="k-sub">Ya tenemos sus datos. Alguien del hotel le contacta muy pronto.</p></div>`;
+  }catch(ex){
+    err.innerHTML = `<div class="k-err">${esc(ex.message)}</div>`;
+    b.disabled = false; b.textContent = "Enviar mis datos";
+  }
+}
+
+/**
+ * Recoge del buzón lo que dejaron en la liga y lo vuelve prospecto.
+ *
+ * La campaña se resuelve por la etiqueta utm_campaign, que es la que el CRM
+ * mismo generó. Si no la reconoce, el prospecto entra igual: más vale un lead
+ * sin campaña que un lead perdido.
+ */
+async function recogerAltas(){
+  const parte = { hubo:false, buzon:true, pendientes:0, aplicadas:0, notas:[] };
+  if (!nubeActiva()){ parte.buzon = false; return parte; }
+
+  let filas;
+  try{
+    filas = await api("/rest/v1/crm_altas?select=id,nombre,apellido,email,telefono,compania,interes,utm,creado&aplicada=is.false");
+  }catch(e){
+    if (/crm_altas|schema cache|does not exist|404|PGRST205/i.test(e.message)){
+      nube.sinBuzonAltas = true;
+      parte.buzon = false;
+      parte.notas.push("El buzón de registros no existe todavía: falta correr prospectos.sql en Supabase.");
+      return parte;
+    }
+    parte.notas.push("No se pudo leer el buzón de registros: " + e.message);
+    return parte;
+  }
+
+  parte.pendientes = (filas || []).length;
+  const aplicadas = [];
+  for (const f of filas || []){
+    const utm = f.utm || {};
+    const etiqueta = String(utm.campaign || "").trim().toLowerCase();
+    const c = etiqueta
+      ? state.campanas.find(x => etiquetaUtm(x).toLowerCase() === etiqueta)
+      : null;
+    // El canal sale de la campaña si se reconoció; si no, de utm_source.
+    const canal = c ? c.canal
+      : (CANALES.find(x => x.utm === String(utm.source || "").toLowerCase()) || {}).id || "";
+
+    state.prospectos.push(saneaProspecto({
+      nombre: f.nombre, apellido: f.apellido, email: f.email, telefono: f.telefono,
+      compania: f.compania,
+      evento: String(f.interes || "").trim(),
+      notas: "Se registró desde la liga del hotel.",
+      capturadoPor: c ? c.responsable : "",
+      fecha: String(f.creado || new Date().toISOString()).slice(0, 16),
+      canal, campanaId: c ? c.id : "",
+      utm: { source:utm.source, medium:utm.medium, campaign:utm.campaign,
+             content:utm.content, term:utm.term },
+      createdAt: new Date().toISOString()
+    }));
+    aplicadas.push(f.id);
+    parte.aplicadas++;
+    if (etiqueta && !c)
+      parte.notas.push(`Llegó un registro de la campaña "${utm.campaign}", que este equipo no tiene dada de alta.`);
+  }
+
+  if (aplicadas.length){
+    // Se marcan DESPUÉS de crearlos: si se cortara la luz entre una cosa y la
+    // otra, más vale recoger dos veces al mismo que perderlo.
+    try{
+      await api(`/rest/v1/crm_altas?id=in.(${aplicadas.join(",")})`, {
+        method: "PATCH",
+        headers: { "Prefer": "return=minimal" },
+        body: JSON.stringify({ aplicada: true })
+      });
+    }catch(e){
+      parte.notas.push("Se recogieron los registros pero no se pudieron marcar: " + e.message);
+    }
+    parte.hubo = true;
+    guardar();
+  }
+  return parte;
 }
 
 /* ----- La carta-convenio ----- */
@@ -11161,7 +11426,15 @@ render();
 // Si el enlace es el de un cliente que viene a firmar, la aplicación se
 // convierte en su documento y no arranca nada del CRM.
 const _firma = enlaceDeFirma();
+const _alta  = enlaceDeAlta();
 if (_firma){ terminarEntrada(); pantallaFirmaCliente(_firma); }
+else if (_alta){
+  // Quien viene de un anuncio no entra al CRM: llena su registro y ya. Hace
+  // falta la nube para depositarlo, así que se carga la configuración antes.
+  terminarEntrada();
+  cargarNube();
+  pantallaAltaPublica(_alta);
+}
 else {
   arrancarNube();
   // A quien alcanza más de un departamento se le pregunta en cuanto se puede

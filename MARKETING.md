@@ -4,8 +4,8 @@ Marketing no vende noches ni eventos: consigue que llegue gente. Lo que mide es 
 —cuánto costó traerla y qué trajo—, así que tiene su propio departamento, sus pestañas y su
 gente.
 
-> **Esta es la entrega 1 de cinco.** Hoy hay Campañas y el armador de ligas con UTMs. Faltan
-> la liga pública de registro con su atribución, el tablero, el lead scoring, la biblioteca de
+> **Van dos de cinco entregas.** Hoy hay Campañas, el armador de ligas con UTMs y la liga
+> pública de registro con su atribución. Faltan el tablero, el lead scoring, la biblioteca de
 > activos y las automatizaciones.
 
 ---
@@ -86,12 +86,66 @@ rompe.
 
 ---
 
+## La liga pública de registro
+
+Es lo que hace que la medición sea real. Quien ve un anuncio abre la liga, deja sus datos y
+**cae en el CRM sabiendo de qué campaña vino** — sin cuenta, sin contraseña y sin que nadie
+teclee nada.
+
+Se corre **`prospectos.sql`** una vez en Supabase y ya. Sin correrlo, el armador de ligas
+avisa y el resto del CRM funciona igual.
+
+### Los dos destinos
+
+En *Atribución & UTMs* se escoge a dónde manda el anuncio:
+
+- **La liga de registro** (por omisión). El anuncio lleva directo al formulario del hotel.
+  **Funciona desde el día uno** y la campaña se amarra sola: nadie tiene que tocar la página.
+- **La página del hotel.** El anuncio lleva al sitio. Para que la campaña se amarre, la página
+  tiene que mandar a la gente a la liga de registro **conservando las etiquetas**; quien lleve
+  el sitio sabrá hacerlo.
+
+### Qué ve y qué no ve el visitante
+
+La pantalla es **la misma del modo tableta**: ya está probada en teléfono, respeta el membrete
+del hotel y reclama en el idioma de quien la llena, no en el del sistema. Lo único que cambia
+es a dónde va lo que escribe.
+
+El visitante **no lee nada**. Ni la cartera, ni el buzón, ni siquiera lo que él mismo acaba de
+escribir. Lo único que puede hacer es depositar. Está comprobado contra un PostgreSQL de
+verdad, no de vista.
+
+La clave de la liga es del hotel y va en la dirección, porque es una liga pública que se pega
+en un anuncio. Lo único que abre es el derecho a **depositar**: si alguien la copia, lo peor
+que puede hacer es mandar registros de mentira, que se borran de un clic. Cambiarla invalida
+las ligas viejas.
+
+### La cadena completa
+
+```
+anuncio → liga con UTMs → formulario → buzón → prospecto → cliente → convenio / evento → dinero
+```
+
+El CRM recoge del buzón en cada sincronización y crea el prospecto con **su canal, su campaña
+y sus etiquetas completas**. Si la etiqueta de campaña no se reconoce, el prospecto entra de
+todos modos: más vale un lead sin campaña que un lead perdido.
+
+Al pasarlo a la cartera, **el cliente se queda con la campaña**, y la nota lo dice con todas
+sus letras. Ése es el eslabón que permitirá, en la entrega 3, decir cuánto dinero trajo cada
+anuncio.
+
+Un registro **no se recoge dos veces**: el buzón se marca después de crear el prospecto, nunca
+antes. Si se cortara la luz entre una cosa y la otra, más vale recoger dos veces al mismo que
+perderlo.
+
+---
+
 ## Lo que falta, y en qué orden
 
 | | Qué entra |
 |---|---|
 | ~~1~~ | ~~Departamento, accesos, Campañas, armador de UTMs~~ ✅ |
-| 2 | Liga pública de registro y atribución de punta a punta |
+| ~~2~~ | ~~Liga pública de registro y atribución de punta a punta~~ ✅ |
 | 3 | Dashboard con costo por lead, conversión y retorno |
 | 4 | Lead Scoring |
 | 5 | Biblioteca de Activos y Automatizaciones |
