@@ -421,6 +421,24 @@ entregarle el aparato al cliente y que se registre él mismo.
 - **Para salir** hay que mantener pulsada la esquina de arriba a la derecha dos segundos. Un
   toque no basta: así nadie se sale de curioso y no hay otra contraseña que recordar.
 
+### Marketing: campañas, ligas con UTMs y tablero
+
+Su propio departamento, con sus cuentas y sus pestañas. **Marketing no alcanza la cartera** —se
+decidió así—: ve sus campañas, sus ligas y los prospectos, y nada más.
+
+- **Campañas.** Canal, presupuesto y el gasto mes por mes, con aviso en rojo al pasarse.
+- **Atribución & UTMs.** Las ligas de los anuncios no se escriben a mano, se arman. Y hay una
+  **liga pública de registro**: quien ve el anuncio deja sus datos sin tener cuenta y cae en el
+  CRM sabiendo de qué campaña vino.
+- **Tablero.** El embudo —de lead a cierre—, el costo por lead y el retorno por campaña.
+
+El dinero del tablero lo suma **el servidor** y entrega cuentas, no renglones: ni un contrato
+baja a esas computadoras. Y mientras una campaña tenga menos de tres cierres, el monto se
+reserva, porque con uno solo la cifra señalaría al cliente de ese contrato.
+
+El detalle —quién entra, qué se corre en Supabase y qué falta— está en
+**[MARKETING.md](MARKETING.md)**.
+
 ### Confirmaciones de hospedaje
 
 Pestaña **Confirmaciones**. Genera la carta que acredita la reservación de un huésped ante

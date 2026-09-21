@@ -10,7 +10,7 @@ El CRM tiene nueve papeles:
 | **Ejecutivo de ventas** | Las de hospedaje, menos Ajustes | Sólo sus propios clientes, convenios, actividades y prospectos |
 | **Gerencia de banquetes** | Tablero, Clientes, Actividades, Eventos, Contratos banquetes, Calendario, Reportes y Formulario | Los eventos y contratos de **todo el equipo de banquetes**; la cartera la comparte con ventas |
 | **Ejecutivo de banquetes** | Las mismas que su gerencia | Sólo sus propios eventos y contratos de banquetes |
-| **Coordinación de marketing** | Campañas, Atribución & UTMs y Formulario | Las campañas del área y los prospectos de todos. **No alcanza la cartera** |
+| **Coordinación de marketing** | Tablero de marketing, Campañas, Atribución & UTMs y Formulario | Las campañas del área y los prospectos de todos. **No alcanza la cartera** |
 | **Marketing** | Las mismas que su coordinación | Lo mismo: las campañas son del área, no de una persona |
 | **Sólo prospección** | Únicamente *Formulario* | Sólo los prospectos que esa cuenta capturó |
 
@@ -51,6 +51,12 @@ Son dos negocios distintos y cada uno ve el suyo:
 - **Marketing no ve la cartera en absoluto**: ni clientes, ni convenios, ni contratos, ni
   eventos. Lo suyo son sus campañas y los prospectos. Y las campañas no le bajan a nadie más.
   El detalle está en `MARKETING.md`.
+
+  Lo único que cruza esa pared es **una suma**. Con `marketing.sql` corrido, el tablero de
+  marketing pide al servidor cuánto dejó cada campaña y recibe cuentas —cuántos clientes,
+  cuántos cierres y un total por mes—, nunca los documentos. Y mientras una campaña tenga
+  menos de tres cierres, ni siquiera el total: con uno solo, la cifra señalaría con el dedo al
+  cliente de ese contrato. Ningún renglón de la cartera baja a esas computadoras.
 
 Lo único que comparten es **la cartera de clientes, la bitácora y los prospectos**: una empresa
 que hace su convención en el hotel y además renta salón para la cena es un solo cliente, no

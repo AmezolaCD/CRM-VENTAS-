@@ -26,6 +26,11 @@
     --logo-morado:#39104e;
     --oro:#b2aa6d; --oro-tinta:#6d6634; --oro-suave:#f4f2e4;
     --ok:#6d6634; --ok-soft:#f2efdf;
+    /* El embudo: cuatro escalones del morado de la casa, de claro a oscuro.
+       Son etapas ORDENADAS, no categorías sueltas, así que les toca una rampa
+       de un solo tono y no cuatro colores distintos. Los pasos están medidos
+       —no escogidos a ojo— para que se distingan entre sí y contra el papel. */
+    --emb-1:#ab8fc0; --emb-2:#8258a0; --emb-3:#5a2d78; --emb-4:#39104e;
     --bad:#a33b3b; --bad-soft:#fbeaea;
     --warn:#8a5a2b; --warn-soft:#f9efe4;
     --shadow:0 1px 2px rgba(57,16,78,.14);
@@ -38,6 +43,7 @@
       --logo-morado:#cbb0de;
       --oro:#b2aa6d; --oro-tinta:#cec68c; --oro-suave:#2c2a17;
       --ok:#cec68c; --ok-soft:#2c2a17;
+      --emb-1:#6b4d85; --emb-2:#8460a3; --emb-3:#9e78c0; --emb-4:#b98fd6;
       --bad:#f08b8b; --bad-soft:#331616;
       --warn:#d79a5e; --warn-soft:#33210f;
       --shadow:0 1px 2px rgba(0,0,0,.5);
@@ -50,6 +56,7 @@
     --logo-morado:#cbb0de;
     --oro:#b2aa6d; --oro-tinta:#cec68c; --oro-suave:#2c2a17;
     --ok:#cec68c; --ok-soft:#2c2a17;
+    --emb-1:#6b4d85; --emb-2:#8460a3; --emb-3:#9e78c0; --emb-4:#b98fd6;
     --bad:#f08b8b; --bad-soft:#331616;
     --warn:#d79a5e; --warn-soft:#33210f;
     --shadow:0 1px 2px rgba(0,0,0,.5);
@@ -318,6 +325,17 @@
   }
 
   /* Reportes */
+  /* El embudo. Barras horizontales: la etapa se lee en la etiqueta y el tamaño
+     en el largo, que es lo que el ojo compara bien. */
+  .emb{display:flex; flex-direction:column; gap:10px; max-width:640px}
+  .emb-f{display:grid; grid-template-columns:132px 1fr auto; gap:10px; align-items:center}
+  .emb-et{color:var(--muted); font-size:12px; text-transform:uppercase;
+    letter-spacing:.04em; text-align:right}
+  .emb-pista{background:var(--col); border-radius:6px; height:22px; overflow:hidden}
+  .emb-pista i{display:block; height:100%; border-radius:6px; min-width:3px;
+    transition:width .25s}
+  .emb-v{font-weight:700; font-variant-numeric:tabular-nums; min-width:92px}
+  .emb-v small{color:var(--muted); font-weight:400; margin-left:5px}
   .barra{background:var(--col); border-radius:999px; height:9px; overflow:hidden}
   .barra i{display:block; height:100%; background:var(--accent); border-radius:999px}
   .rep-meses{display:flex; gap:8px; align-items:flex-end; height:150px; padding:10px 0 0;
@@ -653,6 +671,7 @@ window.CORE_NUBE = { url:"", anon:"" };
     <button data-view="contratos">Contratos</button>
     <button data-view="eventos">Eventos</button>
     <button data-view="contratosbq">Contratos banquetes</button>
+    <button data-view="mktdash">Tablero de marketing</button>
     <button data-view="campanas">Campañas</button>
     <button data-view="utms">Atribución &amp; UTMs</button>
     <button data-view="calendario">Calendario</button>
@@ -688,6 +707,7 @@ window.CORE_NUBE = { url:"", anon:"" };
   <section class="view" id="v-contratos"><div class="table-wrap" id="tblContratos"></div></section>
   <section class="view" id="v-eventos"><div class="table-wrap" id="tblEventos"></div></section>
   <section class="view" id="v-contratosbq"><div class="table-wrap" id="tblContratosBq"></div></section>
+  <section class="view" id="v-mktdash"><div class="table-wrap" id="tblMktDash"></div></section>
   <section class="view" id="v-campanas"><div class="table-wrap" id="tblCampanas"></div></section>
   <section class="view" id="v-utms"><div class="table-wrap" id="tblUtms"></div></section>
   <section class="view" id="v-calendario"><div class="table-wrap" id="tblCalendario"></div></section>
@@ -715,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.21-48";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.21-49";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1128,7 +1148,7 @@ const USUARIOS_DEF = [
  * otra pestaña a la que pueda irse.
  */
 const VISTAS = ["tablero","clientes","actividades","convenios","contratos",
-                "eventos","contratosbq","campanas","utms","calendario","reportes",
+                "eventos","contratosbq","mktdash","campanas","utms","calendario","reportes",
                 "confirmaciones","formulario","ajustes"];
 /* Lo de banquetes es de banquetes. Gerencia de ventas ve toda la cartera y
    todo el hospedaje, pero los eventos son de otro departamento: no le
@@ -1137,7 +1157,7 @@ const VISTAS = ["tablero","clientes","actividades","convenios","contratos",
 const SOLO_BANQUETES = ["eventos","contratosbq"];
 /* Y lo de marketing es de marketing: ventas y banquetes no tienen por qué
    cargar con las campañas ni con el armador de ligas. */
-const SOLO_MARKETING = ["campanas","utms"];
+const SOLO_MARKETING = ["mktdash","campanas","utms"];
 
 /**
  * Los departamentos del hotel.
@@ -1161,7 +1181,7 @@ const DEPARTAMENTOS = [
             "calendario","reportes","formulario"] },
   { id:"marketing", name:"Marketing", icono:"📣",
     sub:"Campañas, ligas con UTMs y los prospectos que traen",
-    vistas:["campanas","utms","formulario"] }
+    vistas:["mktdash","campanas","utms","formulario"] }
 ];
 
 /** Qué departamentos alcanza cada papel. Vacío = no aplica, no se le pregunta. */
@@ -1194,8 +1214,8 @@ const VISTAS_ROL = {
                   "calendario","reportes","formulario"],
   /* Marketing no alcanza la cartera: lo suyo son las campañas, las ligas y los
      prospectos que ellos mismos levantan. Se decidió así a propósito. */
-  marketing:     ["campanas","utms","formulario"],
-  gte_marketing: ["campanas","utms","formulario"]
+  marketing:     ["mktdash","campanas","utms","formulario"],
+  gte_marketing: ["mktdash","campanas","utms","formulario"]
 };
 
 /** ¿A esta persona le toca ver los eventos de banquetes? */
@@ -1689,7 +1709,7 @@ function saneaEvento(e){
     iva:IVA_BANQ, cargoServicio:SERV_BANQ, observaciones:"", cotizacionId:"",
     anticipo:"", fechaLimitePago:"", garantiaPax:"",
     estado:"borrador", firmaHotel:null, firmaCliente:null, enviado:null, destinatario:null,
-    firmaManual:null, externo:false, createdAt:"", updatedAt:"" }, e || {});
+    total:0, firmaManual:null, externo:false, createdAt:"", updatedAt:"" }, e || {});
   o.id = o.id || nuevoId("e");
   if (!TIPOS_EVENTO.some(t => t.id === o.tipo)) o.tipo = "cotizacion";
   if (!ESTADOS_EV[o.estado]) o.estado = "borrador";
@@ -1749,7 +1769,7 @@ function saneaContrato(k){
     titulo:"", fecha:"", vigencia:"", moneda:"MXN", tipoCambio:"", impuestos:IMPUESTOS_DEF,
     hospedaje:[], eventos:[], adicionales:[], notas:"",
     estado:"borrador", firmaHotel:null, firmaCliente:null, enviado:null, destinatario:null,
-    firmaManual:null, externo:false, createdAt:"", updatedAt:"" }, k || {});
+    total:0, firmaManual:null, externo:false, createdAt:"", updatedAt:"" }, k || {});
   o.externo = !!o.externo;
   o.firmaManual = saneaManual(o.firmaManual);
   o.id = o.id || nuevoId("k");
@@ -1903,7 +1923,36 @@ function saneaGrupos(g){
   return out;
 }
 
+/**
+ * El total de cada documento, guardado dentro del propio documento.
+ *
+ * El dinero se calcula aquí, en JavaScript: el IVA del 8%, el cargo por
+ * servicio renglón por renglón, los impuestos de hospedaje. Si el tablero de
+ * marketing lo volviera a calcular del lado del servidor —que es el único que
+ * ve los documentos de todas las áreas—, la misma regla viviría en dos idiomas,
+ * y el día que cambie una tasa se separarían sin que nadie lo note. Es la clase
+ * de error que sale a los seis meses, en una junta.
+ *
+ * Así que se calcula UNA vez, donde vive la regla, y el servidor nada más suma.
+ *
+ * Va al guardar, que es el único momento en que algo pudo cambiar. Cuesta unas
+ * cuantas multiplicaciones, y de pasada pone al día los documentos viejos en
+ * cuanto alguien abre el CRM: no hace falta una migración aparte.
+ */
+function sellarTotales(){
+  const redondo = n => Math.round((Number(n) || 0) * 100) / 100;
+  for (const e of state.eventos){
+    const t = redondo(cuentasEvento(e).total);
+    if (e.total !== t) e.total = t;
+  }
+  for (const k of state.contratos){
+    const t = redondo(cuentasContrato(k).total);
+    if (k.total !== t) k.total = t;
+  }
+}
+
 function guardar(){
+  sellarTotales();
   try{ localStorage.setItem(STORE, JSON.stringify(state)); }
   catch(e){
     console.warn("No se pudo guardar:", e);
@@ -3781,6 +3830,7 @@ function render(){
   if (vista === "contratos") renderContratos();
   if (vista === "eventos") renderEventos();
   if (vista === "contratosbq") renderContratosBq();
+  if (vista === "mktdash") renderMktDash();
   if (vista === "campanas") renderCampanas();
   if (vista === "utms") renderUtms();
   if (vista === "calendario") renderCalendario();
@@ -7389,6 +7439,269 @@ async function recogerAltas(){
     guardar();
   }
   return parte;
+}
+
+
+/* ==========================================================================
+   EL TABLERO DE MARKETING
+
+   Contesta tres preguntas, en este orden: cuántos llegaron, cuánto costó
+   traerlos, y cuánto dejaron.
+
+   Lo del dinero no sale de aquí. Marketing no alcanza la cartera —así lo
+   decidió el hotel—, así que el ingreso lo suma el servidor y devuelve nada
+   más el resultado: crm_ingresos_campana, en marketing.sql. Sin ese archivo
+   corrido, el tablero enseña lo demás y dice por qué falta el dinero.
+   ========================================================================== */
+
+let mkDesde = "", mkHasta = "";
+/* Lo que contestó el servidor la última vez. No va en state ni en el
+   almacenamiento: son cuentas de otro, se piden cuando hacen falta. */
+let mkIngresos = null, mkIngresosError = "";
+/* La pregunta que ya va en camino. Dibujar el tablero dos veces seguidas
+   —entrar y cambiar de pestaña— no tiene por qué preguntarle dos veces al
+   servidor: la segunda se cuelga de la primera. */
+let mkPidiendo = null;
+
+const rangoMkt = () => {
+  const a = new Date().getFullYear();
+  return [mkDesde || `${a}-01-01`, mkHasta || `${a}-12-31`];
+};
+
+/** ¿Está montada la función que suma el dinero? */
+const hayIngresos = () => nubeActiva() && !nube.sinIngresos;
+
+/**
+ * El ingreso por campaña, del servidor.
+ *
+ * Devuelve null mientras no se sepa. Un error no tumba el tablero: se anota y
+ * el resto sigue, que es lo que de verdad usa marketing todos los días.
+ */
+async function pedirIngresos(){
+  if (!hayIngresos()) return null;
+  const [desde, hasta] = rangoMkt();
+  try{
+    const r = await api("/rest/v1/rpc/crm_ingresos_campana", {
+      method:"POST",
+      body: JSON.stringify({ p_desde: desde, p_hasta: hasta })
+    });
+    mkIngresosError = "";
+    return Array.isArray(r) ? r : [];
+  }catch(e){
+    if (/crm_ingresos_campana|schema cache|PGRST202|does not exist|404/i.test(e.message)){
+      nube.sinIngresos = true;
+      mkIngresosError = "";
+    } else {
+      mkIngresosError = e.message;
+    }
+    return null;
+  }
+}
+
+/**
+ * ¿Esta persona tiene bajado ese tipo de documento?
+ *
+ * No es lo mismo que puedeVer(): esa pregunta se acota al departamento en el
+ * que está parada, y administración metida en marketing no tiene enfrente la
+ * pestaña de actividades aunque la bitácora sí le baje. Para el embudo manda
+ * lo que alcanza su papel, no la pestaña donde anda.
+ */
+const alcanzaPorPapel = v => (VISTAS_ROL[rolActual()] || VISTAS_ROL.ejecutivo).includes(v);
+
+/**
+ * El embudo, de arriba abajo.
+ *
+ *   Lead      · todo el que dejó sus datos
+ *   Contactado· ya tiene al menos una actividad registrada
+ *   En cartera· alguien lo pasó a cliente
+ *   Cerrado   · ese cliente firmó algo
+ *
+ * El último escalón necesita la cartera, así que para marketing sale del
+ * resumen del servidor; para ventas y dirección, de lo que ya tienen bajado.
+ */
+function embudoMkt(){
+  const [desde, hasta] = rangoMkt();
+  const enRango = f => { const d = String(f || "").slice(0,10); return d >= desde && d <= hasta; };
+
+  const leads = state.prospectos.filter(p => enRango(p.fecha));
+  const ids = new Set(leads.map(p => p.clienteId).filter(Boolean));
+
+  // "Contactado" se mide con la bitácora, que es la que dice si alguien hizo
+  // algo. Marketing no la ve, así que para ellos el escalón no aplica y se
+  // omite en vez de mentir con un cero.
+  const conActividad = alcanzaPorPapel("actividades")
+    ? leads.filter(p => p.clienteId &&
+        state.actividades.some(a => a.clienteId === p.clienteId)).length
+    : null;
+
+  let cerrados = null;
+  if (mkIngresos) cerrados = mkIngresos.reduce((a, r) => a + (Number(r.cierres) || 0), 0);
+  else if (alcanzaPorPapel("contratos") || alcanzaPorPapel("eventos"))
+    cerrados = state.clientes.filter(c => ids.has(c.id) && (
+      state.contratos.some(k => k.clienteId === c.id && k.estado === "aceptado") ||
+      state.eventos.some(e => e.clienteId === c.id && e.estado === "confirmado"))).length;
+
+  return [
+    { et:"Leads",      n:leads.length, ayuda:"Dejaron sus datos" },
+    { et:"Contactados", n:conActividad, ayuda:"Ya tienen actividad registrada" },
+    { et:"En cartera", n:ids.size,     ayuda:"Alguien los pasó a cliente" },
+    { et:"Cerrados",   n:cerrados,     ayuda:"Firmaron convenio, contrato o evento" }
+  ];
+}
+
+/** Lo que cada campaña costó y trajo, en un solo renglón por campaña. */
+function filasMkt(){
+  const [desde, hasta] = rangoMkt();
+  /* El servidor contesta un renglón por campaña Y MES, y puede reservar el
+     monto de un mes y no el de otro: un agosto recién empezado, con un solo
+     cierre, no tiene por qué borrar el dinero de julio. Por eso se cuentan los
+     meses reservados aparte: si son todos, la campaña sale con raya; si son
+     algunos, sale lo que sí se puede y la cifra se marca como parcial. */
+  const porCamp = new Map();
+  for (const r of mkIngresos || []){
+    const k = porCamp.get(r.campana_id) || { cierres:0, ingreso:0, meses:0, ocultos:0 };
+    k.cierres += Number(r.cierres) || 0;
+    k.meses++;
+    if (r.suprimido) k.ocultos++;
+    else k.ingreso += Number(r.ingreso) || 0;
+    porCamp.set(r.campana_id, k);
+  }
+
+  return campanasVisibles().map(c => {
+    const gasto = (c.gastos || [])
+      .filter(g => g.mes >= desde.slice(0,7) && g.mes <= hasta.slice(0,7))
+      .reduce((a, g) => a + (Number(g.monto) || 0), 0);
+    const leads = state.prospectos.filter(p => p.campanaId === c.id &&
+      String(p.fecha || "").slice(0,10) >= desde &&
+      String(p.fecha || "").slice(0,10) <= hasta).length;
+    const ing = porCamp.get(c.id) || null;
+    const callado = !!(ing && ing.ocultos === ing.meses);
+    return {
+      c, gasto, leads,
+      cpl: (leads && gasto) ? gasto / leads : null,
+      cierres: ing ? ing.cierres : null,
+      ingreso: ing && !callado ? ing.ingreso : null,
+      suprimido: callado,
+      parcial: !!(ing && ing.ocultos && !callado),
+      roas: (ing && !callado && gasto) ? ing.ingreso / gasto : null
+    };
+  });
+}
+
+function renderMktDash(){
+  const cont = document.getElementById("tblMktDash");
+  const [desde, hasta] = rangoMkt();
+  const filas = filasMkt();
+  const emb = embudoMkt();
+  const tope = Math.max(1, ...emb.map(x => Number(x.n) || 0));
+
+  const suma = k => filas.reduce((a, f) => a + (Number(f[k]) || 0), 0);
+  const gastoTotal = suma("gasto"), leadsTotal = suma("leads");
+  const conIngreso = filas.filter(f => f.ingreso !== null);
+  const ingresoTotal = conIngreso.reduce((a, f) => a + f.ingreso, 0);
+  const hayDinero = mkIngresos && conIngreso.length;
+
+  const raya = `<span class="hint" title="Muy pocos cierres todavía para decir el ingreso sin señalar a un cliente">—</span>`;
+  /* Un mes de la campaña se reservó y otro no: la cifra es de verdad, pero le
+     falta un pedazo. Decirlo es más honesto que enseñarla como si fuera todo. */
+  const parcial = ` <small class="hint" title="Falta el ingreso de un mes con muy pocos cierres todavía">parcial</small>`;
+
+  cont.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <b style="font-size:15px">Tablero de marketing</b>
+      <span style="flex:1"></span>
+      <label class="hint">Del</label>
+      <input class="field" type="date" id="mkD" value="${esc(desde)}">
+      <label class="hint">al</label>
+      <input class="field" type="date" id="mkH" value="${esc(hasta)}">
+      <button class="btn" id="mkAnio">Este año</button>
+    </div>
+
+    <div class="kpis" style="margin-bottom:18px">
+      <div class="kpi"><div class="k-t">Leads</div>
+        <div class="k-v">${leadsTotal}</div>
+        <div class="k-s">en el periodo</div></div>
+      <div class="kpi"><div class="k-t">Inversión</div>
+        <div class="k-v">${esc(moneyMN(gastoTotal))}</div>
+        <div class="k-s">capturada a mano</div></div>
+      <div class="kpi"><div class="k-t">Costo por lead</div>
+        <div class="k-v">${leadsTotal ? esc(moneyMN(gastoTotal / leadsTotal)) : "—"}</div>
+        <div class="k-s">${leadsTotal ? "inversión entre leads" : "sin leads todavía"}</div></div>
+      ${hayDinero ? `
+        <div class="kpi"><div class="k-t">Ingreso atribuido</div>
+          <div class="k-v">${esc(moneyMN(ingresoTotal))}</div>
+          <div class="k-s">de lo que ya cerró</div></div>
+        <div class="kpi"><div class="k-t">Retorno</div>
+          <div class="k-v">${gastoTotal ? (ingresoTotal / gastoTotal).toFixed(1) + "×" : "—"}</div>
+          <div class="k-s">por cada peso invertido</div></div>` : ""}
+    </div>
+
+    <h3 class="sec">El embudo</h3>
+    <div class="emb">
+      ${emb.map((x, i) => x.n === null ? "" : `
+        <div class="emb-f" title="${esc(x.ayuda)}">
+          <div class="emb-et">${esc(x.et)}</div>
+          <div class="emb-pista"><i style="width:${Math.round(x.n / tope * 100)}%;
+            background:var(--emb-${i + 1})"></i></div>
+          <div class="emb-v">${x.n}${i && emb[0].n
+            ? `<small>${Math.round(x.n / emb[0].n * 100)}%</small>` : ""}</div>
+        </div>`).join("")}
+    </div>
+    ${emb.some(x => x.n === null) ? `<div class="hint" style="margin-top:8px">
+      Falta un escalón porque marketing no alcanza la bitácora de ventas.</div>` : ""}
+
+    <h3 class="sec">Por campaña</h3>
+    ${!filas.length ? `<div class="vacio">Todavía no hay campañas.</div>` : `
+    <div style="overflow:auto"><table class="data">
+      <thead><tr><th>Campaña</th><th>Canal</th>
+        <th class="num">Inversión</th><th class="num">Leads</th><th class="num">Costo por lead</th>
+        <th class="num">Cierres</th><th class="num">Ingreso</th><th class="num">Retorno</th></tr></thead>
+      <tbody>${filas.map(f => `<tr>
+        <td><b>${esc(f.c.nombre)}</b></td>
+        <td>${esc(infoCanal(f.c.canal).name)}</td>
+        <td class="num nowrap">${f.gasto ? esc(moneyMN(f.gasto)) : "—"}</td>
+        <td class="num">${f.leads || "—"}</td>
+        <td class="num nowrap">${f.cpl === null ? "—" : esc(moneyMN(f.cpl))}</td>
+        <td class="num">${f.cierres === null ? "—" : f.cierres}</td>
+        <td class="num nowrap">${f.suprimido ? raya
+          : f.ingreso === null ? "—" : esc(moneyMN(f.ingreso)) + (f.parcial ? parcial : "")}</td>
+        <td class="num nowrap">${f.roas === null ? "—"
+          : `<b>${f.roas.toFixed(1)}×</b>`}</td>
+      </tr>`).join("")}</tbody></table></div>`}
+
+    ${filas.some(f => f.suprimido) ? `<div class="note" style="margin-top:12px">
+      Las campañas con una raya en <b>Ingreso</b> todavía tienen muy pocos cierres.
+      El monto se reserva a propósito: con uno o dos, la cifra dejaría de ser un total
+      y pasaría a decir cuánto pagó un cliente en concreto.</div>` : ""}
+
+    ${mkIngresosError ? `<div class="errbox" style="margin-top:12px">
+      No se pudo traer el ingreso del servidor.<br>
+      <span class="hint">${esc(mkIngresosError)}</span></div>` : ""}
+    ${nube.sinIngresos && !mkIngresos ? `<div class="note warn" style="margin-top:12px">
+      <b>Falta el ingreso por campaña.</b> Se monta corriendo <code>marketing.sql</code>
+      una vez en Supabase. Mientras tanto, los leads y el costo por lead funcionan igual.</div>`
+    : !nubeActiva() && !mkIngresos ? `<div class="note" style="margin-top:12px">
+      Sin conexión a la nube no hay ingreso por campaña: esa cuenta la hace el servidor.</div>` : ""}`;
+
+  const q = sel => cont.querySelector(sel);
+  const recargar = async () => {
+    mkIngresos = await pedirIngresos();
+    renderMktDash();
+  };
+  q("#mkD").onchange = e => { mkDesde = e.target.value; recargar(); };
+  q("#mkH").onchange = e => { mkHasta = e.target.value; recargar(); };
+  q("#mkAnio").onclick = () => {
+    const a = new Date().getFullYear();
+    mkDesde = `${a}-01-01`; mkHasta = `${a}-12-31`;
+    recargar();
+  };
+
+  // La primera vez se pide al servidor y se vuelve a pintar cuando conteste.
+  if (mkIngresos === null && hayIngresos() && !mkIngresosError && !mkPidiendo)
+    mkPidiendo = pedirIngresos().then(r => {
+      mkPidiendo = null;
+      if (r){ mkIngresos = r; renderMktDash(); }
+    });
 }
 
 /* ----- La carta-convenio ----- */

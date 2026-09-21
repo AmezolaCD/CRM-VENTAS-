@@ -332,11 +332,28 @@ Sin correrlo, el CRM funciona igual: el formulario de adentro sigue trabajando y
 UTMs se pueden armar apuntando a la página del hotel. Lo único que falta es el registro desde
 fuera, y el propio CRM lo avisa donde se nota.
 
+## El ingreso por campaña
+
+`marketing.sql` monta la cuenta que le dice al tablero de marketing cuánto dejó cada campaña.
+Se corre una vez, después de `nube.sql`, y se puede repetir.
+
+Hace falta porque **marketing no alcanza la cartera** y el retorno necesita saber qué se
+cerró. La salida es que sume el servidor —el único que ve los documentos de todas las áreas—
+y devuelva **cuentas, no renglones**: por campaña y mes, cuántos clientes, cuántos cierres y
+un total. Ni el nombre del cliente, ni el folio, ni la tarifa.
+
+A quien no alcanza la cartera se le **reserva el monto mientras la campaña tenga menos de tres
+cierres**, porque con uno solo la cifra deja de ser un total y pasa a decir cuánto pagó una
+persona en concreto. Dirección, gerencia y administración lo ven siempre.
+
+**Sin correrlo el tablero sirve igual**: los leads, la conversión y el costo por lead salen
+desde el primer día, y donde iría el dinero aparece un aviso que dice qué falta.
+
 ## Los archivos .sql se corren en el orden que sea
 
 `nube.sql` va primero, porque crea la tabla. Los demás —`roles.sql`, `firmas.sql`,
-`archivos.sql`, `folios.sql`— no dependen unos de otros: se corren en cualquier
-orden, cuantas veces haga falta, y cada uno se reemplaza entero en vez de
+`archivos.sql`, `folios.sql`, `prospectos.sql`, `marketing.sql`— no dependen unos de otros: se
+corren en cualquier orden, cuantas veces haga falta, y cada uno se reemplaza entero en vez de
 acumularse.
 
 Eso incluye correr `archivos.sql` o `folios.sql` **antes** que `roles.sql`. Los dos

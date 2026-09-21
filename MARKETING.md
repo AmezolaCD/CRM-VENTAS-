@@ -4,9 +4,10 @@ Marketing no vende noches ni eventos: consigue que llegue gente. Lo que mide es 
 —cuánto costó traerla y qué trajo—, así que tiene su propio departamento, sus pestañas y su
 gente.
 
-> **Van dos de cinco entregas.** Hoy hay Campañas, el armador de ligas con UTMs y la liga
-> pública de registro con su atribución. Faltan el tablero, el lead scoring, la biblioteca de
-> activos y las automatizaciones.
+> **Van tres de seis entregas.** Hoy hay Campañas, el armador de ligas con UTMs, la liga
+> pública de registro con su atribución y el **tablero**. Falta la conexión con Meta —métricas
+> primero, Lead Ads después—, el lead scoring, la biblioteca de activos y las
+> automatizaciones.
 
 ---
 
@@ -51,8 +52,12 @@ búsqueda pagada, una feria.
 - **Leads**: la columna dice cuántos prospectos trajo. Hoy se llena cuando el prospecto se
   amarra a la campaña; en la entrega 2 lo hará solo la liga pública.
 
-El gasto se captura a mano. Conectarse solo a Meta o a Google necesita permisos de
-desarrollador y tiene costo; por ahora no compensa.
+Hoy el gasto **se captura a mano**. Antes escribí aquí que conectarse a Meta «tiene costo»:
+**eso es falso y lo corrijo**. La Marketing API de Meta no cobra por usarla. Lo que cuesta es
+el trámite —una app de desarrollador, el permiso `ads_read` y la verificación del negocio—, y
+el hotel **ya tiene eso andando**, porque la misma conexión estuvo en Odoo. Traer el gasto de
+Meta es la entrega 4, y el gasto capturado a mano **no se pisa**: cuando los dos números no
+cuadren, se van a ver lado a lado.
 
 Al **eliminar** una campaña, los prospectos que trajo **se quedan** —pierden nada más de qué
 campaña vinieron—, y el aviso lo dice con el número antes de borrar.
@@ -140,15 +145,81 @@ perderlo.
 
 ---
 
+## El tablero
+
+Es la primera pestaña del departamento y contesta tres preguntas en el mismo lugar: cuánta
+gente llegó, cuánto costó traerla y qué dejó.
+
+### El embudo
+
+```
+Leads → Contactados → En cartera → Cerrados
+```
+
+- **Leads** · dejaron sus datos en el periodo.
+- **Contactados** · ya tienen al menos una actividad registrada. **A marketing este escalón no
+  le aparece**, porque la bitácora de ventas no la alcanza; en vez de enseñarle un cero que
+  sería mentira, el tablero omite el escalón y dice por qué.
+- **En cartera** · alguien los pasó a cliente.
+- **Cerrados** · ese cliente firmó convenio, contrato o evento.
+
+### Por campaña
+
+Un renglón por campaña: inversión, leads, costo por lead, cierres, ingreso y retorno.
+
+Donde una cuenta no se puede hacer, **sale una raya, nunca un cero**. Una campaña con gasto y
+sin un solo lead no tiene costo por lead —dividir entre cero no da infinito, da que todavía no
+se sabe—, y un cero ahí se leería como «salió gratis».
+
+### De dónde sale el dinero
+
+Marketing no alcanza la cartera, y el retorno necesita saber qué se cerró. La salida es que
+**marketing vea números, no renglones**: el servidor suma del lado de allá —es el único que ve
+los documentos de todas las áreas— y devuelve por campaña y mes las cuentas y un total. Ni el
+nombre del cliente, ni el folio, ni la tarifa, ni el ejecutivo.
+
+Se monta corriendo **`marketing.sql`** una vez en Supabase. **Sin correrlo el tablero sirve
+igual**: los leads, la conversión y el costo por lead funcionan desde el primer día, y donde
+iría el dinero aparece un aviso que dice qué falta.
+
+El importe **no se calcula en el servidor**. Cada evento y cada contrato guarda su propio total
+al momento de guardarlo, con el mismo cálculo que ve el cliente en su carta —IVA, cargo por
+servicio, impuestos de hospedaje—, y el servidor nada más suma. Escribir esa cuenta otra vez en
+SQL sería tener la misma regla en dos idiomas, y el día que cambie una tasa el tablero se
+separaría de la carta sin que nadie se entere.
+
+### Por qué a veces el ingreso sale con una raya
+
+**Un total no es automáticamente anónimo.** Marketing sí ve los prospectos, con nombre y
+correo. Si una campaña trajo un prospecto y ése fue el único que cerró, «el ingreso de la
+campaña» **es el monto del contrato de esa persona**: el número no dice el nombre, pero lo
+señala con el dedo.
+
+Por eso, a quien no alcanza la cartera se le **reserva el monto mientras la campaña tenga menos
+de tres cierres**. Las cuentas —leads, conversión, costo por lead— no se ocultan nunca; lo
+único que espera es el peso. Dirección, gerencia y administración lo ven siempre, porque de
+todos modos pueden abrir el contrato.
+
+El servidor cuenta **por campaña y por mes**, así que puede reservar un mes y no otro: un
+agosto recién empezado, con un solo cierre, no borra el dinero de julio. Cuando eso pasa, la
+cifra sale con la palabra **parcial** al lado —es de verdad, pero le falta un pedazo—. Sólo
+cuando **todos** los meses están reservados el renglón queda en raya.
+
+El umbral es **una sola línea** en `marketing.sql` (`CIERRES_MINIMOS`). Moverlo es una decisión
+del hotel, no del programa.
+
+---
+
 ## Lo que falta, y en qué orden
 
 | | Qué entra |
 |---|---|
 | ~~1~~ | ~~Departamento, accesos, Campañas, armador de UTMs~~ ✅ |
 | ~~2~~ | ~~Liga pública de registro y atribución de punta a punta~~ ✅ |
-| 3 | Dashboard con costo por lead, conversión y retorno |
-| 4 | Lead Scoring |
-| 5 | Biblioteca de Activos y Automatizaciones |
+| ~~3~~ | ~~Tablero: embudo, costo por lead y retorno~~ ✅ |
+| 4 | Meta Ads: gasto, impresiones y costo por lead, bajados solos |
+| 5 | Lead Ads: el lead de Meta entra al CRM en el momento |
+| 6 | Lead Scoring, Biblioteca de Activos y Automatizaciones |
 
 **Las OTAs no se atribuyen igual.** Booking y Expedia no entregan el contacto hasta que hay
 reserva, y no pasan por una liga con UTMs. Para esos canales no hay atribución de lead: entran
