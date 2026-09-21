@@ -46,37 +46,68 @@ on conflict (id) do update
 --    dar una seguridad que no es: el que tiene el registro tiene la ruta.
 -- ---------------------------------------------------------------------------
 
+-- ---------------------------------------------------------------------------
+--  ¿Quien pregunta es del equipo?
+--
+--  Este archivo tiene que poder correrse ANTES que roles.sql, y roles.sql es
+--  el que crea crm_rol(). Escribir "public.crm_rol()" aquí directamente no
+--  sirve: PostgreSQL resuelve el nombre al CREAR la regla, no al usarla, así
+--  que truena con "function public.crm_rol() does not exist" aunque la línea
+--  nunca se fuera a ejecutar. Por eso se busca la función a mano y se llama
+--  con EXECUTE, que sí se resuelve hasta el momento de usarla.
+--
+--  Sin roles.sql corrido contesta que sí a todo el que haya entrado con su
+--  cuenta, que es como trabajaba el CRM antes de que existieran los papeles.
+--
+--  Es la misma función en archivos.sql y en folios.sql, a propósito: cada
+--  archivo se vale solo y no importa cuál se corra primero.
+-- ---------------------------------------------------------------------------
+create or replace function public.crm_del_equipo()
+returns boolean
+language plpgsql
+stable
+as $ayudante$
+declare
+  v_rol text;
+begin
+  if to_regprocedure('public.crm_rol()') is null then
+    return true;
+  end if;
+  execute 'select public.crm_rol()' into v_rol;
+  return coalesce(v_rol, '') <> 'ninguno';
+end;
+$ayudante$;
+
+grant execute on function public.crm_del_equipo() to authenticated;
+
 -- Se tiran primero, para que volver a correrlo no truene.
 drop policy if exists "escaneados lee"    on storage.objects;
 drop policy if exists "escaneados sube"   on storage.objects;
 drop policy if exists "escaneados cambia" on storage.objects;
 drop policy if exists "escaneados borra"  on storage.objects;
 
--- crm_rol() existe sólo si ya se corrió roles.sql. Si no está, el depósito se
--- abre a cualquiera que haya entrado con su cuenta, que es como estaba antes
--- de roles.sql y sigue siendo razonable: hay que tener contraseña del hotel.
 create policy "escaneados lee" on storage.objects for select to authenticated
 using (
   bucket_id = 'escaneados'
-  and (to_regproc('public.crm_rol()') is null or public.crm_rol() <> 'ninguno')
+  and public.crm_del_equipo()
 );
 
 create policy "escaneados sube" on storage.objects for insert to authenticated
 with check (
   bucket_id = 'escaneados'
-  and (to_regproc('public.crm_rol()') is null or public.crm_rol() <> 'ninguno')
+  and public.crm_del_equipo()
 );
 
 create policy "escaneados cambia" on storage.objects for update to authenticated
 using (
   bucket_id = 'escaneados'
-  and (to_regproc('public.crm_rol()') is null or public.crm_rol() <> 'ninguno')
+  and public.crm_del_equipo()
 );
 
 create policy "escaneados borra" on storage.objects for delete to authenticated
 using (
   bucket_id = 'escaneados'
-  and (to_regproc('public.crm_rol()') is null or public.crm_rol() <> 'ninguno')
+  and public.crm_del_equipo()
 );
 
 -- ---------------------------------------------------------------------------

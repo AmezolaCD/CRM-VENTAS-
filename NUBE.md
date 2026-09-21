@@ -259,6 +259,18 @@ quedó bien.
 **Sin correrlo el CRM funciona igual**: los escaneados se siguen guardando como
 hasta ahora, con su aviso de que ya casi no cabe.
 
+## Los archivos .sql se corren en el orden que sea
+
+`nube.sql` va primero, porque crea la tabla. Los demás —`roles.sql`, `firmas.sql`,
+`archivos.sql`, `folios.sql`— no dependen unos de otros: se corren en cualquier
+orden, cuantas veces haga falta, y cada uno se reemplaza entero en vez de
+acumularse.
+
+Eso incluye correr `archivos.sql` o `folios.sql` **antes** que `roles.sql`. Los dos
+preguntan por el papel de quien entra, pero lo hacen de una manera que no exige que
+`roles.sql` ya esté: mientras no lo esté, le abren a cualquiera que haya entrado con
+su cuenta, que es como trabajaba el CRM antes de que existieran los papeles.
+
 ## La liga del hotel, dentro de la aplicación
 
 Arriba de todo en `index.html` hay dos líneas:

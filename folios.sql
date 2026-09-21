@@ -54,9 +54,43 @@ alter table public.crm_folios enable row level security;
 --    abajo, que es la que garantiza que no se repitan. Sin esto, alguien
 --    podría insertar un número a mano y saltarse la cuenta.
 -- ---------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
+--  ¿Quien pregunta es del equipo?
+--
+--  Este archivo tiene que poder correrse ANTES que roles.sql, y roles.sql es
+--  el que crea crm_rol(). Escribir "public.crm_rol()" aquí directamente no
+--  sirve: PostgreSQL resuelve el nombre al CREAR la regla, no al usarla, así
+--  que truena con "function public.crm_rol() does not exist" aunque la línea
+--  nunca se fuera a ejecutar. Por eso se busca la función a mano y se llama
+--  con EXECUTE, que sí se resuelve hasta el momento de usarla.
+--
+--  Sin roles.sql corrido contesta que sí a todo el que haya entrado con su
+--  cuenta, que es como trabajaba el CRM antes de que existieran los papeles.
+--
+--  Es la misma función en archivos.sql y en folios.sql, a propósito: cada
+--  archivo se vale solo y no importa cuál se corra primero.
+-- ---------------------------------------------------------------------------
+create or replace function public.crm_del_equipo()
+returns boolean
+language plpgsql
+stable
+as $ayudante$
+declare
+  v_rol text;
+begin
+  if to_regprocedure('public.crm_rol()') is null then
+    return true;
+  end if;
+  execute 'select public.crm_rol()' into v_rol;
+  return coalesce(v_rol, '') <> 'ninguno';
+end;
+$ayudante$;
+
+grant execute on function public.crm_del_equipo() to authenticated;
+
 drop policy if exists "folios lee" on public.crm_folios;
 create policy "folios lee" on public.crm_folios for select to authenticated
-using (to_regproc('public.crm_rol()') is null or public.crm_rol() <> 'ninguno');
+using (public.crm_del_equipo());
 
 -- ---------------------------------------------------------------------------
 -- 3. Apartar el siguiente
@@ -80,7 +114,7 @@ declare
   v_num   int;
   v_folio text;
 begin
-  if to_regproc('public.crm_rol()') is not null and public.crm_rol() = 'ninguno' then
+  if not public.crm_del_equipo() then
     raise exception 'sin permiso';
   end if;
 
@@ -118,7 +152,7 @@ security definer
 set search_path = public
 as $$
 begin
-  if to_regproc('public.crm_rol()') is not null and public.crm_rol() = 'ninguno' then
+  if not public.crm_del_equipo() then
     raise exception 'sin permiso';
   end if;
 
