@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.21-50";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.21-51";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2436,7 +2436,8 @@ async function salir(){
      de marketing. No se ven en su pantalla de todos modos, pero no tienen por
      qué seguir en la memoria de este equipo. */
   mkIngresos = null; mkIngresosError = "";
-  metaMetricas = null; metaObjetos = []; metaSync = null; metaError = "";
+  metaMetricas = null; metaObjetos = []; metaSync = null;
+  metaError = ""; metaFallo = "";
   try{ localStorage.setItem(STORE, JSON.stringify(state)); }catch(e){}
   vista = "tablero";
   filtros = { q:"", ejecutivo:"" };
@@ -7556,7 +7557,8 @@ async function recogerAltas(){
 let metaMetricas = null;     // una fila por campaña de Meta y día
 let metaObjetos = [];        // el catálogo: id de Meta → nombre
 let metaSync = null;         // el último renglón de la bitácora
-let metaError = "";
+let metaError = "";    // no se pudieron LEER las cifras que ya estaban
+let metaFallo = "";    // no se pudieron TRAER las nuevas de Meta
 let metaPidiendo = null;
 
 const hayMeta = () => nubeActiva() && !nube.sinMeta;
@@ -7594,8 +7596,16 @@ async function pedirMeta(desde, hasta){
   }
 }
 
-/** Una llamada a la función del servidor, la única que sabe el acceso. */
-async function llamaMeta(cuerpo){
+/**
+ * Una llamada a la función del servidor, la única que sabe el acceso.
+ *
+ * El token de entrada dura una hora. Lo mismo que hace api() con la cartera hay
+ * que hacerlo aquí: si el servidor contesta que la sesión ya no vale, se renueva
+ * y se vuelve a llamar UNA vez. Sin esto, dejar el CRM abierto un rato y apretar
+ * Sincronizar contestaba «401» —un número que no le dice nada a nadie— aunque
+ * todo estuviera bien puesto.
+ */
+async function llamaMeta(cuerpo, reintento = true){
   if (!nubeActiva()) throw new Error("Sin conexión a la nube.");
   const r = await fetch(ligaFuncionMeta(), {
     method: "POST",
@@ -7606,10 +7616,21 @@ async function llamaMeta(cuerpo){
     },
     body: JSON.stringify(cuerpo)
   });
+
+  if (r.status === 401 && reintento && nube.sesion && nube.sesion.refresh_token){
+    if (await renovarSesion()) return llamaMeta(cuerpo, false);
+  }
+
   const j = await r.json().catch(() => ({}));
   if (r.status === 404)
     throw new Error("La función meta-sync todavía no está subida a Supabase. " +
       "Se sube una vez, pegando el archivo en Edge Functions. Viene en META.md.");
+  /* Un 401 sin explicación no sale de nuestra función —la nuestra siempre dice
+     por qué—: lo pone Supabase antes, cuando no le cuadra la sesión. */
+  if (r.status === 401 && !j.error)
+    throw new Error("Supabase no aceptó la sesión del CRM. Cierre sesión y vuelva " +
+      "a entrar; si sigue igual, revise que la función meta-sync sea de este mismo " +
+      "proyecto de Supabase.");
   if (!r.ok) throw new Error(j.error || ("El servidor contestó " + r.status + "."));
   return j;
 }
@@ -7724,7 +7745,10 @@ function tiraMeta(){
       ${esc(s.detalle)}</div>` : ""}
     ${metaError ? `<div class="errbox" style="margin-bottom:12px">
       No se pudieron leer las cifras de Meta.<br>
-      <span class="hint">${esc(metaError)}</span></div>` : ""}`;
+      <span class="hint">${esc(metaError)}</span></div>` : ""}
+    ${metaFallo ? `<div class="errbox" style="margin-bottom:12px">
+      No se pudo traer lo de Meta.<br>
+      <span class="hint">${esc(metaFallo)}</span></div>` : ""}`;
 }
 
 /**
@@ -7759,12 +7783,12 @@ function enganchaTiraMeta(cont, alTerminar){
         ? j.filas + " días de cifras, del " + j.desde + " al " + j.hasta
         : "Meta no reportó gasto en esos días";
       metaMetricas = null;              // se vuelve a leer con lo recién bajado
-      metaError = "";
+      metaError = ""; metaFallo = "";
     }catch(e){
       /* Si falla, NO se toca una sola cifra de las que ya estaban: un cero se
          leería como "no gastamos" y lo viejo se lee como "esto es de antier",
          que es la verdad. */
-      metaError = e.message;
+      metaFallo = e.message;
     }finally{
       b.disabled = false; b.textContent = antes;
       if (alTerminar) alTerminar();
