@@ -184,10 +184,45 @@ También se puede hacer a mano, repitiendo el paso 3 en cada equipo.
 - **Sin internet** la aplicación sigue abriendo y dejándote trabajar con lo
   último que bajó; cuando vuelve la señal, sube lo que hiciste.
 
+### Entrar desde Core Quartz
+
+Core Quartz es el portal del hotel: una sola contraseña para el CRM y para el
+CDH, y un solo lugar donde dar de alta y de baja al personal. **Esto no
+sustituye nada**: el CRM sigue teniendo su pantalla de acceso de siempre y
+funciona igual sin el portal.
+
+Cuando alguien abre el CRM desde ahí, el portal manda una dirección con un
+**pase de un solo uso** dentro (`#cq=…`). El CRM lo canjea con Supabase y abre
+**su propia** sesión, la misma que abriría escribiendo correo y contraseña. No
+se comparten contraseñas ni sesiones entre las dos aplicaciones.
+
+Detalles que conviene conocer:
+
+- El pase **sirve una sola vez y dura poco**. Si se abre el mismo enlace dos
+  veces, la segunda pide entrar normal: *«El enlace ya se usó; entra desde Core
+  Quartz otra vez.»* No es un error, es lo esperado.
+- La dirección se limpia sola: ni el pase ni la llave quedan en el historial ni
+  en un favorito.
+- En una **computadora compartida**, si llega el pase de otra persona mientras
+  hay una sesión abierta, primero se sube lo que esa persona tuviera pendiente
+  y luego se borra su copia local, igual que con *Cerrar sesión*. Si no se
+  puede subir, pregunta antes de borrar nada. Si es **la misma persona**, no se
+  toca nada suyo.
+- Para que funcione, este equipo tiene que estar ya conectado a la nube. Un
+  pase que llega a un equipo sin configurar lo dice en lugar de fallar callado.
+
+Y una condición que no está en la aplicación sino en la lista: **el correo debe
+estar dado de alta en Ajustes → Usuarios y permisos**. El portal lo revisa antes
+de dejar pasar; si falta, avisa que primero hay que darlo de alta aquí.
+
 ### Dar de baja a alguien
 
 **Authentication** → **Users** → los tres puntos → *Delete user*. Deja de poder
 entrar; lo que ya había capturado se queda.
+
+Si la persona se administra desde **Core Quartz**, la baja se hace allá: además
+de cerrar su paso al portal, bloquea su cuenta de Supabase, así que tampoco
+puede entrar al CRM por su cuenta.
 
 ### Si algo capturado aquí no aparece en los demás equipos
 

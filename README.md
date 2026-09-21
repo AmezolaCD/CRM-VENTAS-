@@ -564,6 +564,20 @@ ahí, y nada de lo que se capture le llega al resto. Pasa sin querer, porque la 
 guarda **por navegador y por dirección** —otro navegador del mismo aparato, o el modo privado,
 empiezan de cero—, y antes se veía igual que un equipo conectado pero vacío.
 
+## Entrar desde Core Quartz
+
+El CRM puede abrirse desde **Core Quartz**, el portal del hotel: una sola
+contraseña para el CRM y el CDH, y un solo lugar para dar de alta y de baja al
+personal. El portal manda un **pase de un solo uso** en la dirección y el CRM
+lo canjea para abrir su propia sesión, la misma de siempre.
+
+No sustituye nada: la pantalla de acceso con correo y contraseña sigue
+funcionando igual, y sin el portal el CRM se comporta como hoy. El enlace de
+firma que se le manda al cliente (`#firmar=…`) tampoco cambia.
+
+El paso a paso y lo que conviene saber para una computadora compartida están en
+**NUBE.md → Entrar desde Core Quartz**.
+
 ## La misma cartera en todos los equipos
 
 Sin configurar nada, cada computadora guarda lo suyo. En **Ajustes → Nube y equipo** se pega

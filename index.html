@@ -1969,17 +1969,28 @@ const ligaInvitacion = () =>
   b64url(JSON.stringify({ u: nube.url, k: nube.anon }));
 
 /**
- * Saca la configuración del enlace y la borra de la barra de direcciones.
+ * Saca del enlace la configuración y, si viene, el pase de Core Quartz, y
+ * borra el fragmento de la barra de direcciones.
  *
  * Se hace de inmediato, antes que ninguna otra cosa: mientras esté a la vista
- * puede acabar en un favorito o en el historial, y ahí va la llave. Aplicarla
- * —que puede preguntar algo— es aparte y sí puede esperar.
+ * puede acabar en un favorito o en el historial, y ahí van la llave y el pase.
+ * Aplicarlo —que puede preguntar algo— es aparte y sí puede esperar.
+ *
+ * Devuelve `{ cfg, cq }`: `cfg` es la configuración de nube de siempre y `cq`
+ * el token de un solo uso con el que Core Quartz manda a alguien ya
+ * identificado. Cualquiera de los dos puede venir sin el otro.
  */
 function leerInvitacion(){
-  const m = String(location.hash || "").match(/[#&]nube=([A-Za-z0-9_-]+)/);
-  if (!m) return null;
+  const hash = String(location.hash || "");
+  const m  = hash.match(/[#&]nube=([A-Za-z0-9_-]+)/);
+  const mc = hash.match(/[#&]cq=([A-Za-z0-9_.\-~%]+)/);
+  if (!m && !mc) return null;
   try{ history.replaceState(null, "", location.pathname + location.search); }catch(e){}
-  try{ return JSON.parse(deB64url(m[1])); }catch(e){ return {}; }
+  let cfg = null;
+  if (m){ try{ cfg = JSON.parse(deB64url(m[1])); }catch(e){ cfg = {}; } }
+  let cq = null;
+  if (mc){ try{ cq = decodeURIComponent(mc[1]); }catch(e){ cq = mc[1]; } }
+  return { cfg, cq };
 }
 
 function aplicarInvitacion(cfg){
@@ -2155,6 +2166,57 @@ async function entrar(correo, contrasena){
   if (!j.access_token) throw new Error("El servidor respondió sin sesión. Vuelve a intentar.");
   nube.sesion = j;
   guardarSesion();
+}
+
+/**
+ * Entrar con el pase de un solo uso que emite Core Quartz (PRD R5).
+ *
+ * El portal ya comprobó quién es y le pidió a Supabase un enlace mágico; aquí
+ * sólo se canjea su `token_hash`. La sesión que sale es **del CRM**: el mismo
+ * objeto, guardado en el mismo lugar que el acceso con contraseña. No se
+ * comparten tokens entre aplicaciones.
+ *
+ * Si en este navegador quedó abierta la sesión de **otra** persona, primero se
+ * va por el camino de «Cerrar sesión»: sube lo que tenga pendiente y borra su
+ * copia local. Si no logra subirlo, pregunta, y si dice que no, aquí no se
+ * abre nada: más vale quedarse fuera que perderle capturas a alguien.
+ */
+async function entrarConCore(tokenHash){
+  const correoAnterior = correoSesion().trim().toLowerCase();
+
+  // Primero se canjea el pase, pero **sin instalarlo**: hasta no saber de
+  // quién es no se puede decidir si hay que despedir a quien estaba, y
+  // despedirlo a ciegas le borraría la cartera a alguien que sólo volvió a
+  // entrar desde el portal.
+  let r;
+  try{
+    r = await fetch(nube.url + "/auth/v1/verify", {
+      method:"POST", headers:{ apikey:nube.anon, "Content-Type":"application/json" },
+      body: JSON.stringify({ type:"magiclink", token_hash: tokenHash })
+    });
+  }catch(e){
+    throw new Error("No se pudo contactar al servidor para validar tu entrada. " +
+                    "Revisa tu internet y vuelve a abrir el CRM desde Core Quartz.");
+  }
+  let j = {};
+  try{ j = JSON.parse(await r.text()); }catch(e){}
+  if (!r.ok || !j.access_token)
+    throw new Error("El enlace ya se usó; entra desde Core Quartz otra vez");
+
+  const correoNuevo = String((j.user && j.user.email) || "").trim().toLowerCase();
+
+  // Es otra persona: el camino de «Cerrar sesión», y todavía con la sesión de
+  // quien se va puesta, que es la única que puede subir lo suyo.
+  if (correoAnterior && correoNuevo && correoAnterior !== correoNuevo){
+    await salir();
+    if (nube.sesion) return false;       // se arrepintió en el aviso: no se sigue
+  }
+
+  nube.sesion = j;
+  guardarSesion();
+  const ov = document.getElementById("entrada");
+  if (ov) ov.remove();                   // `salir()` la deja puesta; ya no hace falta
+  return true;
 }
 
 /**
@@ -3045,9 +3107,30 @@ async function arrancarNube(){
   // el aviso la congelaría y el logo se quedaría a medio dibujar.
   await entradaLista;
 
-  aplicarInvitacion(invitacion);   // una liga de alta manda sobre lo que hubiera
+  aplicarInvitacion(invitacion && invitacion.cfg);   // una liga de alta manda sobre lo que hubiera
   pintarNube();
-  if (!nube.url || !nube.anon) return;          // sin configurar: modo local de siempre
+
+  const pase = invitacion && invitacion.cq;
+  if (!nube.url || !nube.anon){
+    // Un pase sin dirección de nube no lleva a ninguna parte, y callarlo deja
+    // a la persona mirando la pantalla de siempre sin saber qué pasó.
+    if (pase) alert("Abre el CRM desde Core Quartz.\n\n" +
+                    "Este equipo todavía no tiene configurada la nube, así que el enlace no " +
+                    "puede validarse aquí.");
+    return;                                     // sin configurar: modo local de siempre
+  }
+
+  if (pase){
+    try{
+      if (!await entrarConCore(pase)) return;
+    }catch(ex){
+      pantallaEntrada();
+      const err = document.getElementById("errEntrar");
+      if (err) err.innerHTML = `<div class="errbox">${esc(ex.message)}</div>`;
+      return;
+    }
+  }
+
   if (!nube.sesion){ pantallaEntrada(); return; }
   // Preguntar "¿adopto los datos de la nube?" sólo tiene sentido la primera
   // vez que este equipo se conecta: después ya son los mismos datos, y volver
