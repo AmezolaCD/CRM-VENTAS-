@@ -117,6 +117,8 @@ as $$ select coalesce(public.crm_yo() ->> 'nombre', ''); $$;
 --      no los documentos del otro: los convenios, los contratos de hospedaje y
 --      los huéspedes no le bajan a banquetes, y los eventos de banquetes no le
 --      bajan a ventas.
+--    · Marketing no alcanza la cartera en absoluto: sólo sus campañas y los
+--      prospectos. Y las campañas no le bajan a nadie más.
 --    · El papel 'captura' —la tableta del lobby— sólo levanta prospectos en
 --      eventos: no lee ni escribe nada más, ni siquiera le baja la cartera.
 --    · El papel 'ninguno' —quien no está en la lista— no alcanza nada: ni el
@@ -154,19 +156,26 @@ using (
       then tipo in ('ajustes','usuarios')
         or (tipo = 'prospectos' and lower(coalesce(duenio,'')) = lower(public.crm_nombre()))
 
-    -- Banquetes comparte la cartera con ventas, pero el hospedaje no es suyo.
+    -- Banquetes comparte la cartera con ventas, pero el hospedaje no es suyo
+    -- y las campañas tampoco.
     -- La cartera le baja entera a propósito: un evento cuelga de un cliente, y
     -- sin el cliente el evento no se puede ni abrir. La pantalla le sigue
     -- enseñando nada más los suyos.
     when public.crm_rol() in ('banquetes','gte_banquetes')
-      then tipo not in ('convenios','contratos','huespedes')
+      then tipo not in ('convenios','contratos','huespedes','campanas')
        and (tipo in ('ajustes','habitaciones','usuarios','clientes')
             or public.crm_rol() = 'gte_banquetes'
             or duenio is null
             or lower(duenio) = lower(public.crm_nombre()))
 
-    -- Ventas: todo menos los eventos de banquetes.
-    else tipo <> 'eventos'
+    -- Marketing no alcanza la cartera. Lo suyo son las campañas —que no tienen
+    -- dueño, son del área— y los prospectos, que son el resultado de su
+    -- trabajo y los ven todos, no sólo quien los capturó.
+    when public.crm_rol() in ('marketing','gte_marketing')
+      then tipo in ('ajustes','usuarios','campanas','prospectos')
+
+    -- Ventas: todo menos los eventos de banquetes y las campañas.
+    else tipo not in ('eventos','campanas')
      and (tipo in ('ajustes','habitaciones','usuarios')
           or public.crm_rol() = 'gerente'
           or duenio is null

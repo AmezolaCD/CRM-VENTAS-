@@ -1,6 +1,6 @@
 # Quién ve qué
 
-El CRM tiene siete papeles:
+El CRM tiene nueve papeles:
 
 | Papel | Pestañas que ve | Qué alcanza |
 |---|---|---|
@@ -10,6 +10,8 @@ El CRM tiene siete papeles:
 | **Ejecutivo de ventas** | Las de hospedaje, menos Ajustes | Sólo sus propios clientes, convenios, actividades y prospectos |
 | **Gerencia de banquetes** | Tablero, Clientes, Actividades, Eventos, Contratos banquetes, Calendario, Reportes y Formulario | Los eventos y contratos de **todo el equipo de banquetes**; la cartera la comparte con ventas |
 | **Ejecutivo de banquetes** | Las mismas que su gerencia | Sólo sus propios eventos y contratos de banquetes |
+| **Coordinación de marketing** | Campañas, Atribución & UTMs y Formulario | Las campañas del área y los prospectos de todos. **No alcanza la cartera** |
+| **Marketing** | Las mismas que su coordinación | Lo mismo: las campañas son del área, no de una persona |
 | **Sólo prospección** | Únicamente *Formulario* | Sólo los prospectos que esa cuenta capturó |
 
 Un ejecutivo ve además **las actividades que él mismo registró**, aunque sean de un cliente de
@@ -46,6 +48,9 @@ Son dos negocios distintos y cada uno ve el suyo:
   le cuenta a la IA. No renta habitaciones, así que el hospedaje no le sale por ningún lado.
 - Ventas **no ve** las pestañas *Eventos* ni *Contratos banquetes* —tampoco la gerencia de
   ventas—, ni los eventos en el calendario, ni el dinero de banquetes en los reportes.
+- **Marketing no ve la cartera en absoluto**: ni clientes, ni convenios, ni contratos, ni
+  eventos. Lo suyo son sus campañas y los prospectos. Y las campañas no le bajan a nadie más.
+  El detalle está en `MARKETING.md`.
 
 Lo único que comparten es **la cartera de clientes, la bitácora y los prospectos**: una empresa
 que hace su convención en el hotel y además renta salón para la cena es un solo cliente, no
