@@ -56,9 +56,12 @@ Son dos negocios distintos y cada uno ve el suyo:
   cliente y sin él no se puede ni abrir—, no porque el trabajo de un área sea asunto de la
   otra.
 
-  La administración y la dirección alcanzan los tres departamentos, así que su trabajo se ve
-  desde cualquiera de ellos, y lo que ELLAS ven depende del departamento en el que hayan
-  entrado, no de su papel: al cambiarse de departamento cambia la bitácora que leen.
+  La administración y la dirección alcanzan los tres departamentos, así que lo que ELLAS ven
+  depende del departamento en el que hayan entrado, no de su papel: al cambiarse de
+  departamento cambia la bitácora que leen. En el **filtro por persona no aparecen**, porque no
+  llevan bitácora: miran el trabajo de los demás, no hacen llamadas a nombre suyo, y sería una
+  opción que siempre sale vacía. Si alguna vez quedó una actividad a su nombre, se sigue viendo
+  como cualquier otra: lo que se quita es el nombre del menú, no el renglón.
 
   Lo que quedó a nombre de alguien que **no está dado de alta** —lo importado, o quien ya se
   fue— no se esconde de nadie: esconderlo lo dejaría sin que nadie lo volviera a ver.

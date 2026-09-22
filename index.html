@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.22-60";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.22-61";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1296,6 +1296,23 @@ function miDepto(){
   return ds.length === 1 ? ds[0].id : "";
 }
 
+/**
+ * Los papeles que no llevan bitácora.
+ *
+ * La administración y la dirección no hacen llamadas ni visitas a nombre
+ * suyo: miran el trabajo de los demás. Ponerlas en el filtro por persona es
+ * ofrecer una opción que siempre sale vacía.
+ *
+ * Es sólo la LISTA. Si alguna vez quedó una actividad a su nombre, se sigue
+ * viendo en la bitácora como cualquier otra: lo que se quita es el nombre del
+ * menú, no el renglón.
+ */
+const NO_LLEVAN_BITACORA = ["admin", "direccion"];
+
+const nombresSinBitacora = () => new Set(state.usuarios
+  .filter(u => NO_LLEVAN_BITACORA.includes(u.rol))
+  .map(u => String(u.nombre || "").trim().toLowerCase()).filter(Boolean));
+
 /** Los nombres de quienes trabajan en un departamento. */
 function nombresDelDepto(id){
   if (!id) return nombresEquipo();
@@ -1462,7 +1479,9 @@ function opcionesEjecutivos(valor, todos, soloMiDepto){
     const yo = miNombre().trim();
     return cab + (yo ? op(yo) : "");
   }
-  const equipo = soloMiDepto ? nombresDelDepto(miDepto()) : nombresEquipo();
+  const mandos = soloMiDepto ? nombresSinBitacora() : new Set();
+  const equipo = (soloMiDepto ? nombresDelDepto(miDepto()) : nombresEquipo())
+    .filter(n => !mandos.has(n.trim().toLowerCase()));
   const sueltos = nombresSinDuenio();
   /* Si lo que está filtrado ya no sale en la lista, se le agrega de todos
      modos: sin eso el select se vería en "todos" mientras el filtro sigue
