@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.21-52";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.22-53";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -6897,7 +6897,12 @@ function renderCampanas(){
       prospectos: la liga que se genera en <i>Atribución &amp; UTMs</i> es la que los amarra.</div>`;
 
   if (!cs.length){
-    cont.innerHTML = cab + `<div class="vacio">Todavía no hay campañas.</div>`;
+    cont.innerHTML = cab + (hayMeta()
+      ? `<div class="vacio">Todavía no hay campañas.<br>
+          <span class="hint">Apriete <b>Sincronizar</b> y se traen solas las que Meta
+          tenga activas, ya enlazadas. Las de otros canales —Google, una expo, un
+          convenio con una agencia— se capturan con <b>+ Nueva campaña</b>.</span></div>`
+      : `<div class="vacio">Todavía no hay campañas.</div>`);
   } else {
     cont.innerHTML = cab + `<table class="data">
       <thead><tr><th>Campaña</th><th>Canal</th><th>Periodo</th>
@@ -7768,6 +7773,83 @@ function tiraMeta(){
 }
 
 /**
+ * Cuántas campañas de Meta se pueden traer de una sola sincronizada.
+ *
+ * Una cuenta publicitaria con cientos de campañas activas no tiene por qué
+ * poder llenar la cartera del hotel de un botonazo. Si se pasa, se dice.
+ */
+const TOPE_TRAER = 50;
+
+/** Para comparar nombres sin que estorben acentos, mayúsculas ni dobles espacios. */
+const mismoNombre = n => String(n || "").trim().toLowerCase()
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+
+/**
+ * Trae al CRM las campañas que Meta tiene ACTIVAS.
+ *
+ * La lista del CRM es la del hotel: lleva presupuesto, gasto capturado y de
+ * ella cuelgan los prospectos. La de Meta es otra cosa. Traerlas solas ahorra
+ * capturarlas, pero hay tres cuidados, y son la mitad de esta función:
+ *
+ *   1. Si su id de Meta ya está enlazado en alguna campaña, NO se toca. Es lo
+ *      que hace que sincronizar diez veces no deje diez copias.
+ *   2. Si hay una capturada a mano con el mismo nombre y sin enlace, se le pone
+ *      el enlace en vez de crear otra al lado. Es el caso de quien ya tenía
+ *      "Bodas verano 2026" antes de conectar Meta.
+ *   3. Sólo entran las ACTIVAS. Una cuenta acumula años de campañas apagadas.
+ *
+ * Lo que NO hace, también a propósito: no borra, no apaga y no renombra. El
+ * estado y el nombre de una campaña del CRM son del hotel; si en Meta la pausan
+ * o le cambian el nombre, aquí se queda como está, porque así la conoce la
+ * gente que la trabaja.
+ */
+function traeCampanasDeMeta(lista){
+  const activas = (lista || []).filter(c =>
+    /^ACTIVE$/i.test(String(c.estado || "")) && String(c.id || "").trim());
+
+  const enlazados = new Set();
+  for (const c of state.campanas) for (const id of c.metaIds || []) enlazados.add(String(id));
+
+  const porNombre = new Map();
+  for (const c of state.campanas)
+    if (!(c.metaIds || []).length) porNombre.set(mismoNombre(c.nombre), c);
+
+  let nuevas = 0, enlazadas = 0, cortadas = 0;
+  for (const m of activas){
+    const id = String(m.id);
+    if (enlazados.has(id)) continue;
+
+    const ya = porNombre.get(mismoNombre(m.nombre));
+    if (ya){
+      ya.metaIds = [id];
+      ya.updatedAt = new Date().toISOString();
+      enlazados.add(id);
+      porNombre.delete(mismoNombre(m.nombre));
+      enlazadas++;
+      continue;
+    }
+
+    if (nuevas >= TOPE_TRAER){ cortadas++; continue; }
+
+    const c = saneaCampana({
+      nombre: String(m.nombre || "").slice(0, 120) || "(sin nombre en Meta)",
+      canal: "meta",
+      estado: "activa",
+      metaIds: [id],
+      responsable: miNombre(),
+      notas: "Se trajo de Meta el " + fechaTexto(hoyISO()) + "."
+    });
+    c.createdAt = new Date().toISOString();
+    state.campanas.push(c);
+    enlazados.add(id);
+    nuevas++;
+  }
+
+  if (nuevas || enlazadas) guardar();
+  return { nuevas, enlazadas, cortadas, activas: activas.length };
+}
+
+/**
  * Pide las cifras si todavía no se han pedido, y vuelve a pintar cuando lleguen.
  *
  * Se llama desde las dos pantallas que las enseñan. Se pregunta UNA vez: si el
@@ -7795,9 +7877,29 @@ function enganchaTiraMeta(cont, alTerminar){
     b.textContent = "Trayendo…";
     try{
       const j = await llamaMeta({ accion: "sincroniza" });
-      if (dicho) dicho.textContent = j.filas
+      const partes = [j.filas
         ? j.filas + " días de cifras, del " + j.desde + " al " + j.hasta
-        : "Meta no reportó gasto en esos días";
+        : "Meta no reportó gasto en esos días"];
+
+      /* Y de paso, las campañas que Meta tiene activas. Se pregunta aquí y no
+         en cada dibujo de la pantalla: traer cosas a la cartera es una acción,
+         y las acciones se hacen cuando alguien aprieta un botón. */
+      try{
+        const cat = await llamaMeta({ accion: "catalogo" });
+        const r = traeCampanasDeMeta(cat.campanas);
+        if (r.nuevas) partes.push(r.nuevas + (r.nuevas === 1
+          ? " campaña nueva de Meta" : " campañas nuevas de Meta"));
+        if (r.enlazadas) partes.push(r.enlazadas + (r.enlazadas === 1
+          ? " ya capturada se enlazó" : " ya capturadas se enlazaron"));
+        if (r.cortadas) partes.push("faltaron " + r.cortadas +
+          ", que no caben de una vez; vuelva a sincronizar");
+      }catch(e){
+        /* Que no se puedan traer las campañas no invalida las cifras, que es
+           lo que se vino a buscar. Se dice y ya. */
+        partes.push("(no se pudo traer la lista de campañas: " + e.message + ")");
+      }
+
+      if (dicho) dicho.textContent = partes.join(" · ");
       metaMetricas = null;              // se vuelve a leer con lo recién bajado
       metaError = ""; metaFallo = "";
     }catch(e){

@@ -90,17 +90,37 @@ En **supabase.com**, proyecto del hotel:
 Es el mismo procedimiento con el que se subió la función de la IA; si aquélla ya está, ésta se
 hace igual.
 
-### 4. Enlazar las campañas en el CRM
+### 4. Apretar Sincronizar
 
 En **Campañas** aparece una tira arriba que dice cómo va la conexión. Se aprieta
-**Sincronizar** una vez para traer los últimos siete días.
+**Sincronizar** y pasan dos cosas: se traen los últimos siete días de cifras y **se traen solas
+las campañas que Meta tiene activas**, ya enlazadas.
 
-Después, en cada campaña: **Enlace con Meta → Escoger de Meta**, y se palomean las campañas de
-Meta que le corresponden. **Una campaña del hotel suele ser dos o tres de Meta** —prospección y
-remarketing—: se pueden escoger varias y el gasto se suma.
+Las de otros canales —Google, una expo, un convenio con una agencia— se siguen capturando con
+**+ Nueva campaña**, como hasta ahora.
 
-Los números no se teclean. Se escogen de la lista que manda Meta, porque un dígito de más
-amarra la campaña equivocada y nadie lo nota hasta que los números no cuadran.
+#### Las reglas de lo que se trae, para cuando algo no aparezca
+
+- **Sólo las ACTIVAS en Meta.** Una cuenta publicitaria acumula años de campañas apagadas y no
+  tienen por qué llenar la pantalla. Si hace falta una vieja, se enlaza a mano: en la campaña,
+  **Enlace con Meta → Escoger de Meta**.
+- **Nunca se duplican.** Si el id de Meta ya está enlazado en alguna campaña, no se vuelve a
+  traer. Sincronizar diez veces no deja diez copias.
+- **Si ya estaba capturada a mano con el mismo nombre, se le pone el enlace** en vez de crear
+  otra al lado. El presupuesto y el gasto que ya tenía se quedan.
+- **De 50 en 50.** Si la cuenta trae más campañas activas que eso, se traen las primeras y la
+  tira dice cuántas faltaron; con volver a sincronizar entran las demás.
+
+#### Lo que Meta NO manda en el CRM
+
+El nombre y el estado de una campaña del CRM son **del hotel**. Si en Meta la pausan o le
+cambian el nombre, aquí se queda como está: así la conoce la gente que la trabaja, y así
+aparece en los reportes de meses pasados. Meta manda en las cifras, no en la cartera.
+
+**Una campaña del hotel puede ser dos o tres de Meta** —prospección y remarketing—. Cuando sea
+el caso, se abre la campaña y se agregan las que falten con *Escoger de Meta*: el gasto se
+suma. Los números no se teclean nunca; se escogen de la lista, porque un dígito de más amarra
+la campaña equivocada y nadie lo nota hasta que los números no cuadran.
 
 ---
 
