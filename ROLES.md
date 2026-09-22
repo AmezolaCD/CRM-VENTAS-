@@ -158,10 +158,19 @@ sólo tiene que confirmar; el botón *Trazar otra* sirve para reemplazarla y *Bo
 quitarla. También se ve y se borra desde el menú de la sesión (el chip con su nombre, arriba a
 la derecha).
 
-La firma se guarda **en su ficha de usuario**, así que la trae consigo a cualquier computadora
-en la que entre con su correo. Eso también quiere decir que viaja al servidor junto con el resto
-de los datos, igual que las firmas que ya van estampadas en cada convenio. Sin nube se queda
-nada más en esa máquina, y se borra al cerrar sesión para no dejársela al que se siente después.
+La firma se guarda en **la ficha de usuario y en la computadora**, las dos cosas. Con
+`roles.sql` corrido, la lista de usuarios sólo la escribe el administrador —es lo que impide que
+alguien se cambie el papel a sí mismo—, así que la ficha de un ejecutivo **no viaja al
+servidor**: su firma vive en el equipo donde la trazó. Es la del administrador la única que lo
+sigue a cualquier computadora.
+
+En la práctica se nota poco, porque cada quien trabaja casi siempre en el mismo lugar, y la
+primera vez que firme desde otra máquina se le vuelve a ofrecer guardarla. En todos los casos se
+borra al cerrar sesión, para no dejársela a la mano al que se siente después.
+
+**Nada de esto afecta al documento.** La firma que queda estampada en un convenio o en un
+contrato es parte del documento y sube con él como cualquier otro dato; lo que no sube es la
+copia que se guarda para no volver a trazarla.
 
 ## El formulario de prospección
 
@@ -286,10 +295,20 @@ y por eso está cubierto con pruebas.
 ### La lista de usuarios tiene que estar en la nube
 
 Las reglas de `roles.sql` leen quién es quién de las mismas filas de usuarios que administra
-el CRM. **Si esa lista no llegó a la nube, el servidor no reconoce a nadie**: todos caen en el
-mismo saco que una cuenta ajena —ver *Cuentas que no son de ventas*, aquí abajo— y deja de
-entregar absolutamente todo. Se nota de golpe: al equipo entero se le queda la pantalla vacía de
-un día para otro, aunque nadie haya tocado nada.
+el CRM. **Si esa lista no llegó a la nube, el servidor no reconoce a nadie.**
+
+Mientras la nube no tenga *ni una sola* ficha de usuario, las reglas tratan como administrador a
+quien haya entrado con su cuenta. Suena generoso y no lo es: con la lista vacía no hay a quién
+entregarle qué, así que no se regala nada, y hace falta una cuenta de Supabase del hotel —que
+sólo da el administrador— para llegar siquiera ahí. Lo que evita es que el CRM se trabe: sin esa
+salida, nadie tendría papel, nadie podría escribir, y **la lista que arreglaría el problema
+nunca podría subir**. Quedaría un servidor con todos los datos del hotel al que nadie puede
+entrar, y sin manera de salir de ahí desde la aplicación.
+
+En cuanto la lista sube —que es lo primero que va a pasar— cada quien vuelve a su papel. Ojo con
+el otro caso, que sí duele: si la lista está **incompleta**, a los que faltan el servidor los
+trata como cuentas ajenas y no les entrega nada —ver *Cuentas que no son de ventas*, aquí
+abajo—.
 
 Para saber si es eso, cualquiera puede abrir **el chip con su nombre (arriba a la derecha) →
 *¿Por qué no veo algo?***. Esa pantalla dice cuántos registros de cada tipo le está entregando

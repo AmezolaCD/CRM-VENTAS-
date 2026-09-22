@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.22-56";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.22-57";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1292,7 +1292,7 @@ const FIRMA_LOCAL = "crm-hotel-firma";
 
 function firmaGuardada(){
   const u = usuarioActual();
-  if (u) return u.firma && u.firma.img ? u.firma : null;
+  if (u && u.firma && u.firma.img) return u.firma;
   try{
     const f = JSON.parse(localStorage.getItem(FIRMA_LOCAL) || "null");
     return f && f.img ? f : null;
@@ -1303,13 +1303,19 @@ function guardarFirmaPropia(d){
   const f = { nombre:d.nombre || "", puesto:d.puesto || "", celular:d.celular || "", img:d.img };
   const u = usuarioActual();
   if (u){ u.firma = f; guardar(); }
-  else try{ localStorage.setItem(FIRMA_LOCAL, JSON.stringify(f)); }catch(e){}
+  /* Y también en este equipo, aunque tenga ficha. Con roles.sql corrido el
+     renglón de usuarios sólo lo escribe el administrador, así que la ficha de
+     un ejecutivo NO viaja a la nube: si la firma viviera nada más ahí, se
+     perdería en cuanto se volviera a bajar la lista de usuarios. Se borra al
+     cerrar sesión, como antes, para no dejarle una firma ajena a la mano al
+     siguiente que use la computadora. */
+  try{ localStorage.setItem(FIRMA_LOCAL, JSON.stringify(f)); }catch(e){}
 }
 
 function olvidarFirmaPropia(){
   const u = usuarioActual();
   if (u){ u.firma = null; guardar(); }
-  else try{ localStorage.removeItem(FIRMA_LOCAL); }catch(e){}
+  try{ localStorage.removeItem(FIRMA_LOCAL); }catch(e){}
 }
 
 /** El usuario de la sesión, buscado por el correo con el que entró. */
@@ -2805,9 +2811,21 @@ async function sincronizar(){
     if (resolverFoliosRepetidos()) render();
 
     const actuales = filasDeEstado();
-    const cambios = actuales.filter(f => sincronizado.get(f.id) !== JSON.stringify(f.datos));
+    /* Lo que roles.sql sólo deja escribir al administrador ni se intenta
+       mandar. No es una cortesía con el servidor: PostgREST sube el lote
+       ENTERO en un solo POST, así que UN renglón rebotado tumba la subida
+       completa —y con ella el contrato que acaban de firmar—. Bastaba con que
+       un ejecutivo guardara su firma, que se escribe en su ficha de usuario,
+       para que desde ese momento no le subiera absolutamente nada más.
+       La protección ya existía, pero sólo al enlazar el equipo por primera
+       vez; hacía falta en cada vuelta. */
+    const puedeTodo = esAdmin();
+    const deMiIncumbencia = f => puedeTodo || !SOLO_ADMIN.includes(f.tipo);
+    const cambios = actuales.filter(f =>
+      deMiIncumbencia(f) && sincronizado.get(f.id) !== JSON.stringify(f.datos));
     const vivos = new Set(actuales.map(f => f.id));
-    const borrados = [...sincronizado.keys()].filter(id => !vivos.has(id));
+    const borrados = [...sincronizado.keys()].filter(id =>
+      !vivos.has(id) && deMiIncumbencia({ tipo: String(id).split(":")[0] }));
     if (cambios.length || borrados.length){
       await subir(cambios, borrados);
       marcarSincronizado(actuales);
@@ -7394,13 +7412,37 @@ function renderUtms(){
              <i>Ajustes → Datos del hotel</i>.`);
 
     const liga = alRegistro ? ligaDeAlta(utm) : armaLiga(q("#utmBase").value, utm);
-    q("#utmSalida").innerHTML = liga
+    /* Una liga que se ve bien y no sirve es peor que ninguna: se pega en el
+       anuncio, se paga el anuncio, y los prospectos simplemente no llegan.
+       Así que cuando la clave no está publicada se dice aquí, antes. */
+    const sinClave = alRegistro && !claveAltaPublicada()
+      ? `<div class="note warn" id="utmSinClave" style="margin-top:10px">
+           <b>${liga ? "Esta liga todavía no sirve." : "Todavía no se puede armar la liga."}</b>
+           La clave que la abre no ha llegado al servidor, así que quien la abra no va a
+           poder registrarse.
+           ${esAdmin()
+             ? `<br><br><button class="btn sm primary" id="bPublicarClave">Publicarla ahora</button>`
+             : `<br><br>Pídele al administrador que entre al CRM y abra esta misma pantalla:
+                la clave se publica desde su cuenta, una sola vez, y a partir de ahí todas
+                las ligas funcionan —ésta y las que armes después—.`}
+         </div>`
+      : "";
+    q("#utmSalida").innerHTML = (liga
       ? `<div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap">
            <textarea class="field mono" id="utmLiga" readonly rows="2"
              style="flex:1;min-width:280px">${esc(liga)}</textarea>
            <button class="btn primary" id="bCopiarUtm">Copiar</button></div>
          <div class="hint" id="utmAviso" style="margin-top:6px"></div>`
-      : `<div class="note warn">Falta la dirección a dónde llega la liga.</div>`;
+      : (alRegistro
+          ? ""
+          : `<div class="note warn">Falta la dirección a dónde llega la liga.</div>`)) + sinClave;
+
+    const pub = q("#bPublicarClave");
+    if (pub) pub.onclick = async () => {
+      pub.disabled = true; pub.textContent = "Publicando…";
+      try{ await sincronizar(); }catch(e){}
+      pinta();
+    };
 
     const b = q("#bCopiarUtm");
     if (b) b.onclick = async () => {
@@ -7457,26 +7499,60 @@ function enlaceDeAlta(){
   };
 }
 
-/** La clave de la liga. Se crea sola la primera vez que alguien la pide. */
+/**
+ * La clave de la liga pública de registro. Es UNA sola para todo el hotel.
+ *
+ * La inventa el administrador y nadie más, aunque la liga la arme marketing.
+ * La clave vive en los ajustes, y con roles.sql corrido los ajustes sólo los
+ * escribe el administrador: si la inventara marketing, se quedaría en esa
+ * computadora, el servidor nunca la conocería, y la liga pegada en el anuncio
+ * rebotaría a todo el que la abriera. Peor: el día que el administrador
+ * abriera la pantalla se inventaría OTRA, y la primera quedaría muerta para
+ * siempre sin que nadie supiera por qué.
+ *
+ * Sin nube no hay servidor a quién avisarle y cualquiera la crea, como antes.
+ */
 function tokenAlta(){
   const h = state.ajustes.hotel;
-  if (!h.tokenAlta){
+  if (!h.tokenAlta && (!nubeActiva() || esAdmin())){
     h.tokenAlta = nuevoToken();
     guardar();
   }
-  return h.tokenAlta;
+  return h.tokenAlta || "";
 }
 
+/**
+ * ¿La clave de la liga ya está en el servidor?
+ *
+ * La liga de alta no lleva nada dentro: lleva una clave, y el servidor sólo
+ * deja depositar a quien traiga la que él tiene guardada. La clave vive en los
+ * ajustes del hotel, y con roles.sql corrido los ajustes SÓLO los escribe el
+ * administrador. Así que marketing puede armar una liga preciosa, pegarla en
+ * el anuncio, y que todo el que la abra se estrelle —sin que nadie del hotel
+ * se entere hasta que alguien pregunte por qué no llegan prospectos—.
+ *
+ * Se pregunta contra lo último que el servidor aceptó, que es justo lo que
+ * tiene. Sin nube no hay liga pública que valga y la pregunta no aplica.
+ */
+const claveAltaPublicada = () => {
+  if (!nubeActiva()) return true;
+  const t = tokenAlta();
+  return !!t && String(sincronizado.get("ajustes:global") || "").includes(t);
+};
+
 /** La dirección de esta misma aplicación, sin lo que traiga pegado. */
-const ligaDeAltaBase = () =>
-  location.origin + location.pathname + "#alta=" + tokenAlta();
+const ligaDeAltaBase = () => {
+  const t = tokenAlta();
+  return t ? location.origin + location.pathname + "#alta=" + t : "";
+};
 
 /** La liga de registro ya con las etiquetas de una campaña. */
 function ligaDeAlta(utm){
   const pares = Object.entries(utm || {})
     .filter(([, v]) => String(v || "").trim())
     .map(([k, v]) => `utm_${k}=${encodeURIComponent(String(v).trim())}`);
-  return ligaDeAltaBase() + (pares.length ? "&" + pares.join("&") : "");
+  const base = ligaDeAltaBase();
+  return base ? base + (pares.length ? "&" + pares.join("&") : "") : "";
 }
 
 /**
@@ -9199,6 +9275,7 @@ function enviarContrato(k, c){
                title="Mandar el enlace por WhatsApp" aria-label="Mandar el enlace por WhatsApp">${ICONO_WA}</button>
              <button class="btn sm" id="kCopiar">Copiar el enlace</button></p>
            <p class="hint">El enlace sólo abre este documento y deja de servir en cuanto se firma.</p>
+           ${enlaceYaViajo(k, "contratos") ? "" : avisoSinSubir()}
            <h3 class="sec">O mándale el PDF</h3>`
         : `<div class="note warn"><b>El enlace de firma no está disponible.</b>
              ${!puedeMandarLiga()
@@ -9228,6 +9305,7 @@ function enviarContrato(k, c){
         anotar("whatsapp"); ov.remove();
       }catch(e){ /* si lo cancela, no pasa nada */ }
     };
+    enganchaSubirYa(ov, k, "contratos");
     const cop = ov.querySelector("#kCopiar");
     if (cop) cop.onclick = async () => {
       const liga = ligaFirma(k, "contratos");
@@ -11837,6 +11915,47 @@ const idEnBuzon = (doc, tipo) => tipo === "contratos" ? "contratos:" + doc.id : 
 const puedeMandarLiga = () => !!(nube.url && nube.anon);
 
 /**
+ * ¿El documento ya está en la nube CON ESTE ENLACE?
+ *
+ * El enlace no lleva el documento dentro: lleva la llave para ir por él al
+ * servidor. Si el documento todavía no sube —o subió antes de que se le
+ * generara la clave—, el servidor le contesta al cliente sin un solo renglón
+ * y él lee "este enlace ya no sirve". Desde el hotel se ve un documento
+ * firmado y en orden, así que nadie entiende la queja.
+ *
+ * Se compara contra lo que ya se dio por subido, que es exactamente lo que el
+ * servidor tiene de este documento. Sin nube no hay enlace que valga, y ahí la
+ * pregunta no aplica.
+ */
+const enlaceYaViajo = (doc, tipo) =>
+  !nubeActiva() ||
+  sincronizado.get((tipo === "contratos" ? "contratos:" : "convenios:") + doc.id) ===
+    JSON.stringify(doc);
+
+/** El aviso, y el botón que lo arregla sin tener que explicarle nada a nadie. */
+const avisoSinSubir = () => `<div class="note warn" data-sinsubir="1">
+  <b>Todavía no sube a la nube.</b> Si lo mandas así, el cliente abrirá el enlace y leerá
+  <i>"este enlace ya no sirve"</i>: el documento no ha llegado al servidor.
+  <br><br><button class="btn sm primary" data-subirya="1">Subirlo ahora</button></div>`;
+
+function enganchaSubirYa(ov, doc, tipo){
+  const caja = ov.querySelector("[data-sinsubir]");
+  if (!caja) return;
+  const b = caja.querySelector("[data-subirya]");
+  b.onclick = async () => {
+    b.disabled = true; b.textContent = "Subiendo…";
+    try{ await sincronizar(); }catch(e){}
+    if (enlaceYaViajo(doc, tipo))
+      caja.outerHTML = `<div class="note ok"><b>Listo, ya subió.</b> El enlace ya sirve.</div>`;
+    else {
+      b.disabled = false; b.textContent = "Intentarlo otra vez";
+      caja.insertAdjacentHTML("beforeend",
+        `<p class="hint" style="margin:8px 0 0">No se pudo: ${esc(nube.error || "sin detalle")}</p>`);
+    }
+  };
+}
+
+/**
  * Aplica la firma del cliente, venga de donde venga: de la pantalla, de un
  * PDF escaneado, o capturada a mano por el ejecutivo. Los tres caminos tienen
  * que dejar el convenio y el cliente exactamente igual, o el tablero acabaría
@@ -11959,6 +12078,7 @@ function enviarConvenio(v, c){
          <p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
            <button class="btn sm" id="cCopiar">Copiar el enlace</button>
            <span class="hint">El enlace sólo abre este convenio y deja de servir en cuanto se firma.</span></p>
+         ${enlaceYaViajo(v, "convenios") ? "" : avisoSinSubir()}
          <h3 class="sec">O mándale el PDF</h3>
          <div class="note warn">Para quien prefiera imprimirlo y firmarlo a mano. Cuando te
            lo devuelva, súbelo con <b>Subir convenio firmado</b> en la carta.</div>`
@@ -11979,6 +12099,7 @@ function enviarConvenio(v, c){
          la carta y usa <i>Subir convenio firmado</i>: queda igual de cerrado que si lo hubiera
          firmado en pantalla.</p>`;
 
+    enganchaSubirYa(ov, v, "convenios");
     const cop = ov.querySelector("#cCopiar");
     if (cop) cop.onclick = async () => {
       try{ await navigator.clipboard.writeText(ligaFirma(v)); alert("Enlace copiado."); }

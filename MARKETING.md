@@ -130,6 +130,17 @@ en un anuncio. Lo único que abre es el derecho a **depositar**: si alguien la c
 que puede hacer es mandar registros de mentira, que se borran de un clic. Cambiarla invalida
 las ligas viejas.
 
+**La crea el administrador, no marketing.** Es una sola para todo el hotel y vive en los
+ajustes, que con `roles.sql` corrido sólo escribe el administrador. Si la inventara marketing se
+quedaría en esa computadora: el servidor nunca la conocería y **rebotaría a todo el que abriera
+el anuncio** —después de haberlo pagado—. Y el día que el administrador abriera la pantalla se
+inventaría otra, dejando muerta la del anuncio sin que nadie supiera por qué.
+
+Así que la primera vez, el administrador entra al CRM y abre *Atribución & UTMs*: con eso la
+clave se crea y se publica. A partir de ahí marketing arma todas las ligas que quiera. Mientras
+no esté publicada, la pantalla **no entrega una liga que no sirve**: dice qué falta y a quién
+pedírselo.
+
 ### La cadena completa
 
 ```

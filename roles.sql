@@ -88,14 +88,42 @@ $$;
 -- cuenta vieja— y que entró al servidor por otra puerta. Ésos quedan en
 -- 'ninguno', que abajo no alcanza nada. Quien sí está en la lista pero se quedó
 -- sin papel sigue contando como ejecutivo, como siempre.
+--
+-- El arranque es el caso raro y hay que contemplarlo, porque si no el CRM se
+-- traba para siempre: mientras la nube NO TENGA UNA SOLA ficha de usuario,
+-- nadie aparece en la lista, así que todos quedan en 'ninguno' y 'ninguno' no
+-- alcanza nada —ni siquiera para subir la lista que arreglaría esto—. Queda
+-- un servidor con datos al que nadie puede entrar, y desde la aplicación no
+-- hay manera de salir de ahí.
+--
+-- Con la lista vacía, entonces, quien haya entrado con su cuenta cuenta como
+-- administrador. Es el único momento en que eso no regala nada: con la lista
+-- vacía el CRM no le entrega la cartera a nadie, así que no hay nada que ver;
+-- y en cuanto la lista sube —que es lo primero que va a hacer— cada quien
+-- vuelve a su papel. Tampoco le abre la puerta a un extraño: para llegar aquí
+-- hace falta una cuenta de Supabase del hotel, que las da el administrador.
+create or replace function public.crm_sin_lista()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select not exists (select 1
+                       from public.crm_datos
+                      where tipo = 'usuarios' and borrado = false);
+$$;
+
 create or replace function public.crm_rol()
 returns text
 language sql
 stable
 as $$
   select case
-           when public.crm_yo() = '{}'::jsonb then 'ninguno'
-           else coalesce(public.crm_yo() ->> 'rol', 'ejecutivo')
+           when public.crm_yo() <> '{}'::jsonb
+             then coalesce(public.crm_yo() ->> 'rol', 'ejecutivo')
+           when public.crm_sin_lista() then 'admin'
+           else 'ninguno'
          end;
 $$;
 
@@ -239,6 +267,7 @@ using (public.crm_rol() in ('admin','gerente'));
 --      drop policy if exists "gerencia lee bitacora" on public.crm_bitacora;
 --      drop function if exists public.crm_rol();
 --      drop function if exists public.crm_nombre();
+--      drop function if exists public.crm_sin_lista();
 --      drop function if exists public.crm_yo();
 --
 --    Las tres funciones se van con las políticas, y no es limpieza de adorno:

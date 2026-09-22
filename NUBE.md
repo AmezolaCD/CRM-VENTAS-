@@ -233,6 +233,26 @@ estaba desconectado —o en otra dirección— y se quedó nada más aquí.
 Antes de eso, revisa el semáforo del encabezado: si no dice **En línea**, lo que captures no
 está saliendo de esa computadora.
 
+### El renglón que tumbaba la subida entera
+
+Vale la pena saber por qué esto pasaba, porque el síntoma no se parecía a la causa.
+
+Todo lo que cambia en un equipo sube **en un solo envío**. Eso es lo normal y lo rápido, pero
+tiene un filo: si el servidor rechaza **un** renglón, rechaza el envío **completo**. No la mitad
+—todo—.
+
+Y hay tres cosas que `roles.sql` deja escribir sólo al administrador: los **ajustes**, el
+**catálogo de habitaciones** y la **lista de usuarios**. Como la firma guardada de cada quien
+vivía dentro de su ficha de usuario, bastaba con que un ejecutivo palomeara *guardar mi firma*
+una vez para que, a partir de ese momento, **ya no le subiera nada**: ni el contrato que acababa
+de firmar, ni un cliente nuevo, ni una actividad. En su pantalla todo se veía normal; el resto
+del equipo simplemente dejaba de recibirle.
+
+Ya no pasa: el CRM **no manda lo que sabe que le van a rebotar**, así que un renglón que no le
+toca no se lleva por delante a los demás. Y cuando algo de eso hace falta de verdad —la clave de
+la liga de registro, por ejemplo— la pantalla lo dice y le pide al administrador que lo publique
+él, en vez de dejarlo a medias en silencio.
+
 ### Si dice "Sin conexión"
 
 Pasa el cursor por el semáforo: dice el error.

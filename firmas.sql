@@ -54,6 +54,19 @@ alter table public.crm_firmas enable row level security;
 --    los enlaces que ya se mandaron por WhatsApp siguen sirviendo: si el valor
 --    no trae ':', es un convenio, como antes.
 -- ---------------------------------------------------------------------------
+--
+--    Se TIRA antes de crearla, en vez de reemplazarla nada más. El parámetro
+--    cambió de nombre —antes era p_convenio, ahora es p_doc, que es lo que de
+--    verdad recibe— y PostgreSQL no deja renombrar un parámetro con
+--    "create or replace": contesta 42P13 y no corre nada del archivo.
+--
+--    Y antes de la función hay que quitar la regla que la usa, porque tampoco
+--    deja tirar algo de lo que otra cosa depende. Las dos se vuelven a crear
+--    aquí mismo unas líneas más abajo; entre una y otra el buzón queda
+--    cerrado, que es el lado bueno para equivocarse.
+drop policy if exists "cliente deja su firma" on public.crm_firmas;
+drop function if exists public.crm_token_ok(text, text);
+
 create or replace function public.crm_token_ok(p_doc text, p_token text)
 returns boolean
 language sql
