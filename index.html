@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.22-55";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.22-56";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1067,6 +1067,22 @@ const CAMPOS_HUESPED = [
 
 /* La habitación no va en la carta: no se asigna hasta la llegada del huésped. */
 
+/**
+ * Las ladas que de verdad usa el hotel, y la puerta para las demás.
+ *
+ * Tijuana está pegada a San Diego: una buena parte de la cartera es de
+ * Estados Unidos. Un número de diez dígitos se ve IGUAL en los dos países
+ * —664 de Tijuana, 619 de San Diego—, así que esto no se puede adivinar: se
+ * pregunta una vez por cliente y se acabó.
+ */
+const LADAS = [
+  { id:"52",  name:"México +52" },
+  { id:"1",   name:"Estados Unidos y Canadá +1" },
+  { id:"34",  name:"España +34" },
+  { id:"57",  name:"Colombia +57" },
+  { id:"54",  name:"Argentina +54" }
+];
+
 const CAMPOS_CLIENTE = [
   { key:"empresa",   label:"Empresa",   type:"text", req:true,
     aliases:["empresa","cliente","compania","compañia","compañía","cuenta","razon social","razón social","company","account","negocio","organizacion","organización"] },
@@ -1074,6 +1090,8 @@ const CAMPOS_CLIENTE = [
     aliases:["contacto","nombre contacto","nombre del contacto","persona","atencion","atención","contact"] },
   { key:"telefono",  label:"Teléfono",  type:"tel",
     aliases:["telefono","teléfono","tel","celular","movil","móvil","whatsapp","phone","numero","número","numero de telefono"] },
+  { key:"lada",      label:"País del teléfono", type:"lada",
+    aliases:["lada","pais","país","codigo de pais","código de país","country","country code"] },
   { key:"email",     label:"Correo",    type:"email",
     aliases:["correo","email","e-mail","correo electronico","correo electrónico","mail"] },
   { key:"ubicacion", label:"Ubicación", type:"text",
@@ -1541,9 +1559,13 @@ function catalogo(guardadas){
 
 function saneaCliente(c){
   const o = Object.assign({ id:"", empresa:"", contacto:"", telefono:"", email:"", ubicacion:"",
-    tarifa:0, ejecutivo:"", estatus:"contactado", notas:"", campanaId:"",
+    tarifa:0, ejecutivo:"", estatus:"contactado", notas:"", campanaId:"", lada:"",
     createdAt:"", updatedAt:"" }, c || {});
   o.id = o.id || nuevoId("c");
+  /* La lada de SU teléfono. Vacía quiere decir "la del hotel": así los
+     clientes de siempre no cambian de la noche a la mañana, y los nuevos
+     nacen con la que traiga Ajustes. */
+  o.lada = String(o.lada || "").replace(/\D/g, "").slice(0, 4);
   o.tarifa = Number(o.tarifa) || 0;
   // De qué campaña salió, si es que salió de alguna. Los clientes de antes no
   // lo traen, y está bien: no todos llegan por un anuncio.
@@ -1781,8 +1803,14 @@ function saneaContrato(k){
     titulo:"", fecha:"", vigencia:"", moneda:"MXN", tipoCambio:"", impuestos:IMPUESTOS_DEF,
     hospedaje:[], eventos:[], adicionales:[], notas:"",
     estado:"borrador", firmaHotel:null, firmaCliente:null, enviado:null, destinatario:null,
-    total:0, firmaManual:null, externo:false, createdAt:"", updatedAt:"" }, k || {});
+    tokenFirma:"", avisado:false, total:0, firmaManual:null, externo:false,
+    createdAt:"", updatedAt:"" }, k || {});
   o.externo = !!o.externo;
+  /* La clave del enlace con el que el cliente lo firma en su pantalla, igual
+     que en los convenios. Los contratos de antes no la traen y está bien: se
+     genera al firmar el ejecutivo. */
+  o.tokenFirma = String(o.tokenFirma || "").trim();
+  o.avisado = !!o.avisado;
   o.firmaManual = saneaManual(o.firmaManual);
   o.id = o.id || nuevoId("k");
   if (!TIPOS_CONTRATO.some(t => t.id === o.tipo)) o.tipo = "cotizacion";
@@ -2652,20 +2680,41 @@ async function recogerFirmas(){
 
   parte.pendientes = (filas || []).length;
   for (const f of filas || []){
-    const v = state.convenios.find(x => x.id === f.convenio_id);
+    /* El buzón guarda el documento con su tipo adelante cuando es un contrato
+       —'contratos:k123'—; un convenio va pelado, como se mandó siempre. */
+    const crudo = String(f.convenio_id || "");
+    const esContrato = crudo.startsWith("contratos:");
+    const v = esContrato
+      ? state.contratos.find(x => x.id === crudo.slice("contratos:".length))
+      : state.convenios.find(x => x.id === crudo);
     if (!v){
-      parte.notas.push(`Hay una firma de ${f.nombre || "un cliente"} para un convenio que este equipo no tiene bajado.`);
+      parte.notas.push(`Hay una firma de ${f.nombre || "un cliente"} para un documento que este equipo no tiene bajado.`);
       continue;                                  // no se marca: otro equipo la aplicará
     }
-    if (v.firmaEmpresa){
-      parte.notas.push(`El convenio ${v.folio} ya estaba firmado; se descartó una firma repetida.`);
+    const firma = { nombre:f.nombre, puesto:f.puesto, celular:f.celular,
+                    fecha:f.creado || new Date().toISOString(), img:f.img };
+    if (esContrato ? v.firmaCliente : v.firmaEmpresa){
+      parte.notas.push(`${v.folio} ya estaba firmado; se descartó una firma repetida.`);
     } else if (!v.tokenFirma || v.tokenFirma !== f.token){
       // Suele pasar si se rehizo el enlace: el cliente firmó con el viejo.
       parte.notas.push(`La firma de ${f.nombre || "el cliente"} para ${v.folio} llegó con una clave que ya no corresponde. ` +
         "Vuelve a mandarle el enlace.");
+    } else if (esContrato){
+      v.firmaCliente = saneaFirma(firma);
+      v.estado = "aceptado";
+      /* La clave deja de servir en cuanto se firma: el enlace anda por
+         WhatsApp y por correo, y un documento firmado no tiene por qué seguir
+         abriéndose desde fuera. Igual que en los convenios. */
+      v.tokenFirma = "";
+      v.avisado = false;          // que el ejecutivo se entere al volver
+      v.updatedAt = new Date().toISOString();
+      registrarAuto(v.clienteId, `${infoTipoCt(v.tipo).name} ${v.folio} aceptada por el cliente`,
+        `Firmó ${f.nombre || "el cliente"} desde el enlace que se le envió.`, ejecutivoDeCt(v));
+      guardar();
+      parte.aplicadas++;
+      parte.hubo = true;
     } else {
-      cerrarConvenio(v, { nombre:f.nombre, puesto:f.puesto, celular:f.celular,
-                          fecha:f.creado || new Date().toISOString(), img:f.img },
+      cerrarConvenio(v, firma,
         "Firmado por el cliente desde el enlace que se le envió.", "");
       parte.aplicadas++;
       parte.hubo = true;
@@ -3464,19 +3513,57 @@ function matchEstatus(v){
   return "contactado";
 }
 
-function waLink(tel, texto){
-  let d = String(tel || "").replace(/\D/g, "");
+/** La lada que usa el hotel cuando el cliente no tiene la suya. */
+const ladaHotel = () =>
+  String((state && state.ajustes && state.ajustes.ladaPais) || "52").replace(/\D/g, "") || "52";
+
+/**
+ * El enlace de WhatsApp, con la lada que le toca a ESE número.
+ *
+ * Tijuana está pegada a San Diego y el hotel tiene mucho cliente americano. Un
+ * número de diez dígitos se ve igual en los dos países, así que adivinar no es
+ * una opción: la lada se pregunta una vez en la ficha del cliente.
+ *
+ * Cuatro reglas, en este orden:
+ *
+ *   1. Si el teléfono trae "+", se respeta tal cual: ya viene con su país.
+ *   2. Diez dígitos → se le pone la lada del cliente, o la del hotel si no
+ *      tiene una suya.
+ *   3. Once dígitos que empiezan con 1: AQUÍ ESTÁ EL ENREDO. "1 + diez" es a
+ *      la vez el formato viejo de los celulares mexicanos (+52 1 664…) y el
+ *      de Estados Unidos y Canadá (+1 619…). Escritos así son idénticos, y por
+ *      eso se pregunta el país en la ficha:
+ *        · con lada 52 → es el formato viejo: se le quita el 1 y se le pone 52.
+ *        · con cualquier otra → ya está completo y no se toca.
+ *      Antes esto se decidía con la lada DEL HOTEL, que es 52 para todos, así
+ *      que a un cliente de San Diego se le mandaba el mensaje a un número
+ *      ajeno en Tijuana.
+ *   4. Cualquier otra cosa más larga ya trae su lada: no se toca.
+ */
+function waLink(tel, texto, lada){
+  const crudo = String(tel || "").trim();
+  let d = crudo.replace(/\D/g, "");
   if (!d) return "";
-  const lada = String((state && state.ajustes && state.ajustes.ladaPais) || "52").replace(/\D/g, "");
-  if (d.length === 10) d = lada + d;
-  else if (d.length === 11 && d[0] === "1" && lada === "52") d = lada + d.slice(1);
+  const suya = String(lada || "").replace(/\D/g, "") || ladaHotel();
+
+  if (crudo.startsWith("+")){
+    // Tal como lo capturaron: quien escribió el + sabe de dónde es.
+  } else if (d.length === 10){
+    d = suya + d;
+  } else if (d.length === 11 && d[0] === "1" && suya === "52"){
+    d = "52" + d.slice(1);
+  }
   return "https://wa.me/" + d + (texto ? "?text=" + encodeURIComponent(texto) : "");
 }
+
+/** La lada de un cliente, de un huésped o de quien sea que tenga ficha. */
+const ladaDe = o => String((o && o.lada) || "").replace(/\D/g, "") || ladaHotel();
 
 function abrirWhatsApp(c){
   if (!c) return;
   const url = waLink(c.telefono,
-    `Hola${c.contacto ? " " + c.contacto.split(" ")[0] : ""}, le escribo de ${state.ajustes.hotel.nombre}.`);
+    `Hola${c.contacto ? " " + c.contacto.split(" ")[0] : ""}, le escribo de ${state.ajustes.hotel.nombre}.`,
+    ladaDe(c));
   if (!url){ alert("Este cliente no tiene teléfono registrado."); return; }
   window.open(url, "_blank", "noopener");
 }
@@ -5182,7 +5269,7 @@ function enviarConfirmacion(id, via){
     const abrir = () => {
       if (via === "correo")
         window.location.href = `mailto:${encodeURIComponent(g.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
-      else window.open(waLink(g.telefono, cuerpo), "_blank", "noopener");
+      else window.open(waLink(g.telefono, cuerpo, ladaDe(g)), "_blank", "noopener");
       marcarEnviada(g.id, via);
     };
 
@@ -5207,7 +5294,7 @@ function enviarConfirmacion(id, via){
     ov.querySelector("#bAbrir2").onclick = () => {
       if (via === "correo")
         window.location.href = `mailto:${encodeURIComponent(g.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
-      else window.open(waLink(g.telefono, cuerpo), "_blank", "noopener");
+      else window.open(waLink(g.telefono, cuerpo, ladaDe(g)), "_blank", "noopener");
       marcarEnviada(g.id, via);
     };
   });
@@ -5407,8 +5494,10 @@ function renderAjustes(){
           <div class="hint">De aquí sale el destino de las ligas de campaña, en
             <i>Atribución &amp; UTMs</i>, para no volver a escribirla cada vez.</div></div>
         <div><label class="lbl">Moneda (código ISO)</label><input class="field" id="hMoneda" value="${esc(a.moneda)}"></div>
-        <div><label class="lbl">Lada del país para WhatsApp</label><input class="field" id="hLada" value="${esc(a.ladaPais)}">
-          <div class="hint">Se antepone a los teléfonos de 10 dígitos. México = 52.</div></div>
+        <div><label class="lbl">Lada por omisión para WhatsApp</label><input class="field" id="hLada" value="${esc(a.ladaPais)}">
+          <div class="hint">La que se les pone a los clientes que no tengan la suya. México = 52.
+            Cada cliente puede traer otra —en su ficha, junto al teléfono—, y un teléfono
+            capturado con su <b>+</b> adelante manda siempre.</div></div>
 
         <div class="full"><label class="lbl">Logotipo del membrete</label>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -5911,6 +6000,19 @@ function abrirCliente(id, estatusInicial, pane){
     else if (f.type === "estatus") ctl = `<select class="field" name="estatus">${
         ESTATUS.map(e => `<option value="${e.id}"${e.id===c.estatus?" selected":""}>${esc(e.name)}</option>`).join("")}</select>`;
     else if (f.type === "money") ctl = `<input class="field" type="text" inputmode="decimal" name="tarifa" value="${esc(val)}" placeholder="0.00">`;
+    else if (f.type === "lada"){
+      const suya = String(val || "");
+      const conocida = !suya || LADAS.some(x => x.id === suya);
+      ctl = `<select class="field" name="lada" style="max-width:100%">
+          <option value=""${!suya ? " selected" : ""}>La del hotel (+${esc(ladaHotel())})</option>
+          ${LADAS.map(x => `<option value="${x.id}"${x.id === suya ? " selected" : ""}>${esc(x.name)}</option>`).join("")}
+          <option value="otra"${conocida ? "" : " selected"}>Otra…</option>
+        </select>
+        <input class="field" name="ladaOtra" inputmode="numeric" placeholder="Lada, sólo números"
+          value="${conocida ? "" : esc(suya)}" style="margin-top:6px${conocida ? ";display:none" : ""}">
+        <div class="hint">Se antepone a los teléfonos de 10 dígitos. Si el teléfono ya se
+          capturó con su + adelante, manda ése.</div>`;
+    }
     else if (f.key === "ejecutivo") ctl = selectEjecutivo(val);
     else ctl = `<input class="field" type="${f.type}" name="${f.key}" value="${esc(val)}">`;
     return `<div class="${ancho.trim()}"><label class="lbl">${esc(f.label)}</label>${ctl}</div>`;
@@ -5943,6 +6045,12 @@ function abrirCliente(id, estatusInicial, pane){
     </div>`);
 
   const form = ov.querySelector("#fCliente");
+  const selLada = form.querySelector('[name="lada"]');
+  const otraLada = form.querySelector('[name="ladaOtra"]');
+  if (selLada && otraLada) selLada.onchange = () => {
+    otraLada.style.display = selLada.value === "otra" ? "" : "none";
+    if (selLada.value === "otra") otraLada.focus();
+  };
   form.querySelector('[name="empresa"]').focus();
   form.addEventListener("submit", e => { e.preventDefault(); guardarCliente(); });
   ov.querySelector("#bOk").onclick = guardarCliente;
@@ -6054,6 +6162,7 @@ function abrirCliente(id, estatusInicial, pane){
     for (const f of CAMPOS_CLIENTE){
       let v = (fd.get(f.key) ?? "").toString().trim();
       if (f.key === "tarifa") v = parseMoney(v);
+      if (f.key === "lada" && v === "otra") v = (fd.get("ladaOtra") ?? "").toString();
       obj[f.key] = v;
     }
     if (!obj.empresa){ alert("El nombre de la empresa es obligatorio."); form.querySelector('[name="empresa"]').focus(); return; }
@@ -8944,6 +9053,8 @@ function verContrato(id, alCerrar, pedirFirma){
         ${k.firmaHotel && !k.firmaCliente
           ? `<button class="btn primary" id="bCtEnviar">Enviar al cliente</button>
              <button class="btn ok" id="bCtF2">Registrar firma del cliente</button>` : ""}
+        ${k.firmaHotel && !k.firmaCliente && !k.tokenFirma && puedeMandarLiga()
+          ? `<button class="btn" id="bCtLiga">Rehacer enlace de firma</button>` : ""}
         ${k.firmaCliente ? `<span class="hint">Aceptado por el cliente.</span>` : ""}
       </div>
     </div>`);
@@ -8987,6 +9098,16 @@ function verContrato(id, alCerrar, pedirFirma){
   const en = ov.querySelector("#bCtEnviar");
   if (en) en.onclick = () => enviarContrato(k, c);
 
+  /* Los contratos que se firmaron antes de que existiera el enlace no tienen
+     clave. Se les hace una y ya se pueden mandar a firmar en pantalla. */
+  const bl = ov.querySelector("#bCtLiga");
+  if (bl) bl.onclick = () => {
+    k.tokenFirma = nuevoToken();
+    k.updatedAt = new Date().toISOString();
+    guardar(); render(); ov.remove();
+    verContrato(k.id, alCerrar);
+  };
+
   if (pedirFirma && !k.firmaHotel && f1) setTimeout(() => f1.click(), 60);
 }
 
@@ -9000,6 +9121,7 @@ function firmarContrato(k, quien, d){
   if (quien === "hotel"){
     k.firmaHotel = firma;
     if (k.estado === "borrador") k.estado = "firmado_hotel";
+    k.tokenFirma = k.tokenFirma || nuevoToken();   // habilita el enlace del cliente
     // El destinatario se congela: el documento tiene que poder leerse igual
     // dentro de un año, aunque la ficha del cliente haya cambiado.
     if (c) k.destinatario = { empresa:c.empresa, contacto:c.contacto, ubicacion:c.ubicacion,
@@ -9030,6 +9152,18 @@ function enviarContrato(k, c){
     (k.vigencia ? ` Tiene vigencia hasta el ${fechaTexto(k.vigencia)}.` : "") +
     `\n\nQuedo al pendiente de sus comentarios.\n\nSaludos cordiales,\n${firmante}\n${h.nombre}`;
 
+  /* El enlace para que la firme en su pantalla, igual que en los convenios.
+     Hace falta la nube —el enlace vive ahí— y que el ejecutivo ya haya
+     firmado, porque es al firmar cuando se genera la clave. */
+  const conLiga = !!(k.tokenFirma && puedeMandarLiga());
+  const msgLiga = `Estimado(a) ${(c && c.contacto) || ""}:\n\n` +
+    `Le comparto la ${doc.toLowerCase()} ${k.folio} de ${h.nombre}` +
+    (k.titulo ? ` para ${k.titulo}` : "") + `.` +
+    (k.vigencia ? ` Tiene vigencia hasta el ${fechaTexto(k.vigencia)}.` : "") +
+    `\n\nPuede revisarla y firmarla desde este enlace, sin instalar nada:\n` +
+    (conLiga ? ligaFirma(k, "contratos") : "") +
+    `\n\nQuedo al pendiente.\n\nSaludos cordiales,\n${firmante}\n${h.nombre}`;
+
   const ov = modal(`
     <div class="modal">
       <div class="modal-head"><h2>Enviar ${esc(doc.toLowerCase())} al cliente</h2>
@@ -9054,6 +9188,23 @@ function enviarContrato(k, c){
                            navigator.canShare({ files:[file] });
 
     ov.querySelector("#cuerpoEnvioK").innerHTML =
+      (conLiga
+        ? `<h3 class="sec" style="margin-top:0">Que la firme en su pantalla</h3>
+           <div class="note"><b>Es el camino corto.</b> El cliente abre el enlace desde su
+             teléfono o computadora, la lee y la firma con el dedo. Cuando firme, este
+             documento pasa a <b>Aceptado</b> y aquí te avisamos.</div>
+           <p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+             <button class="btn" id="kMailLiga" ${(c && c.email) ? "" : "disabled"}>Mandar el enlace por correo</button>
+             <button class="btn wa" id="kWaLiga" ${(c && c.telefono) ? "" : "disabled"}
+               title="Mandar el enlace por WhatsApp" aria-label="Mandar el enlace por WhatsApp">${ICONO_WA}</button>
+             <button class="btn sm" id="kCopiar">Copiar el enlace</button></p>
+           <p class="hint">El enlace sólo abre este documento y deja de servir en cuanto se firma.</p>
+           <h3 class="sec">O mándale el PDF</h3>`
+        : `<div class="note warn"><b>El enlace de firma no está disponible.</b>
+             ${!puedeMandarLiga()
+               ? "Hace falta tener la nube configurada (Ajustes → Nube y equipo): el enlace vive ahí."
+               : "Primero tiene que firmarla el ejecutivo: la clave del enlace se genera en ese momento."}
+             <br><br>Mientras tanto, mándale el PDF.</div>`) +
       (puedeCompartir
         ? `<div class="note">Con <b>Compartir</b> se va el PDF y el mensaje juntos, por donde
              usted escoja. Es lo más cómodo desde el teléfono.</div>
@@ -9077,6 +9228,23 @@ function enviarContrato(k, c){
         anotar("whatsapp"); ov.remove();
       }catch(e){ /* si lo cancela, no pasa nada */ }
     };
+    const cop = ov.querySelector("#kCopiar");
+    if (cop) cop.onclick = async () => {
+      const liga = ligaFirma(k, "contratos");
+      try{ await navigator.clipboard.writeText(liga); alert("Enlace copiado."); }
+      catch(e){ prompt("Copia este enlace y mándaselo al cliente:", liga); }
+    };
+    const ml = ov.querySelector("#kMailLiga");
+    if (ml && !ml.disabled) ml.onclick = () => {
+      window.location.href = `mailto:${encodeURIComponent((c && c.email) || "")}` +
+        `?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(msgLiga)}`;
+      anotar("correo"); ov.remove();
+    };
+    const wl = ov.querySelector("#kWaLiga");
+    if (wl && !wl.disabled) wl.onclick = () => {
+      window.open(waLink((c && c.telefono) || "", msgLiga, ladaDe(c)), "_blank", "noopener");
+      anotar("whatsapp"); ov.remove();
+    };
     ov.querySelector("#kBajar").onclick = () => descargarBlob(blob, archivo);
     ov.querySelector("#kMail").onclick = () => {
       window.location.href = `mailto:${encodeURIComponent((c && c.email) || "")}` +
@@ -9084,7 +9252,7 @@ function enviarContrato(k, c){
       anotar("correo"); ov.remove();
     };
     ov.querySelector("#kWa").onclick = () => {
-      window.open(waLink((c && c.telefono) || "", mensaje), "_blank", "noopener");
+      window.open(waLink((c && c.telefono) || "", mensaje, ladaDe(c)), "_blank", "noopener");
       anotar("whatsapp"); ov.remove();
     };
   }).catch(e => {
@@ -10782,7 +10950,7 @@ function enviarEvento(e, c){
       anotar("correo"); ov.remove();
     };
     ov.querySelector("#evWa").onclick = () => {
-      window.open(waLink((c && c.telefono) || "", mensaje), "_blank", "noopener");
+      window.open(waLink((c && c.telefono) || "", mensaje, ladaDe(c)), "_blank", "noopener");
       anotar("whatsapp"); ov.remove();
     };
   }).catch(err => {
@@ -11480,7 +11648,12 @@ const enlaceDeFirma = () => {
   if (!m) return null;
   try{
     const d = JSON.parse(deB64url(m[1]));
-    return (d && d.v && d.t && d.u && d.k) ? d : null;
+    if (!(d && d.v && d.t && d.u && d.k)) return null;
+    /* Los enlaces que ya andan circulando no traen el tipo, y no hay que
+       romperlos: cuando se generaron, lo único que se firmaba así era un
+       convenio. */
+    d.d = d.d === "contratos" ? "contratos" : "convenios";
+    return d;
   }catch(e){ return null; }
 };
 
@@ -11506,7 +11679,10 @@ function pantallaFirmaCliente(datos){
   const caja = document.getElementById("firmaCliente");
   const aviso = (clase, html) => { caja.innerHTML = `<div class="note ${clase}">${html}</div>`; };
 
-  aviso("", "Abriendo su convenio…");
+  const esContrato = datos.d === "contratos";
+  const comoSeLlama = esContrato ? "su documento" : "su convenio";
+
+  aviso("", "Abriendo " + comoSeLlama + "…");
 
   const pedir = (ruta, opciones = {}) => fetch(datos.u + ruta, Object.assign({}, opciones, {
     headers: Object.assign({
@@ -11514,18 +11690,19 @@ function pantallaFirmaCliente(datos){
     }, opciones.headers || {})
   }));
 
-  pedir(`/rest/v1/crm_datos?select=id,datos&id=eq.${encodeURIComponent("convenios:" + datos.v)}`)
+  pedir(`/rest/v1/crm_datos?select=id,datos&id=eq.${
+      encodeURIComponent((esContrato ? "contratos:" : "convenios:") + datos.v)}`)
     .then(async r => {
       const txt = await r.text();
       if (!r.ok) throw new Error(`${r.status} · ${txt.slice(0,200)}`);
       const filas = JSON.parse(txt || "[]");
       if (!filas.length) throw new Error("vacio");
-      return saneaConv(filas[0].datos);
+      return esContrato ? saneaContrato(filas[0].datos) : saneaConv(filas[0].datos);
     })
     .then(v => dibujarParaFirmar(caja, v, datos, pedir))
     .catch(e => {
       if (String(e.message) === "vacio")
-        aviso("warn", `<b>Este enlace ya no sirve.</b><br><br>Puede ser que el convenio ya se
+        aviso("warn", `<b>Este enlace ya no sirve.</b><br><br>Puede ser que el documento ya se
           haya firmado, o que le hayan mandado un enlace nuevo. Pídale al hotel que se lo
           reenvíe.`);
       else if (/401|403|permission|policy/i.test(e.message))
@@ -11533,27 +11710,36 @@ function pantallaFirmaCliente(datos){
           les falta correr el archivo <code>firmas.sql</code> en su servidor.
           <br><br><span class="hint">${esc(e.message)}</span>`);
       else
-        aviso("warn", `<b>No se pudo abrir el convenio.</b><br>${esc(e.message)}
+        aviso("warn", `<b>No se pudo abrir ${comoSeLlama}.</b><br>${esc(e.message)}
           <br><br>Revise su conexión y vuelva a abrir el enlace.`);
     });
 }
 
 function dibujarParaFirmar(caja, v, datos, pedir){
   const h = state.ajustes.hotel;
-  const c = { empresa: v._empresa || "", contacto:"", ubicacion:"", telefono:"", email:"" };
+  const esContrato = datos.d === "contratos";
+  /* Cómo se llama el papel que el cliente tiene enfrente. Un contrato de
+     hospedaje puede ser cotización o contrato, y decirle "convenio" a lo que
+     dice CONTRATO en el encabezado confunde a cualquiera. */
+  const comoSeLlama = esContrato ? infoTipoCt(v.tipo).name.toLowerCase() : "carta-convenio";
+  const c = { empresa: v._empresa || (v.destinatario && v.destinatario.empresa) || "",
+              contacto: (v.destinatario && v.destinatario.contacto) || "",
+              ubicacion: (v.destinatario && v.destinatario.ubicacion) || "",
+              telefono: (v.destinatario && v.destinatario.telefono) || "",
+              email: (v.destinatario && v.destinatario.email) || "" };
   const agua = h.marcaAgua === "ninguna" ? ""
              : (h.marcaAgua === "logo" && h.logo) ? `<img src="${esc(h.logo)}" alt="">`
              : monogramaQ(MORADO_QUARTZ);
 
   caja.innerHTML = `
-    <div class="note"><b>Revise su carta-convenio y fírmela al final.</b>
+    <div class="note"><b>Revise su ${esc(comoSeLlama)} y fírmela al final.</b>
       No hace falta instalar nada ni crear ninguna cuenta. Si prefiere firmarla en papel,
       use <i>Descargar en PDF</i> y devuélvasela a su ejecutivo.</div>
     <p style="text-align:right;margin:0 0 12px">
       <button class="btn" id="bBajarCli">Descargar en PDF</button></p>
     <div class="doc-body hoja-cliente">
       ${agua ? `<div class="doc-agua">${agua}</div>` : ""}
-      <div class="doc-contenido">${cuerpoConvenio(v, c)}</div>
+      <div class="doc-contenido">${esContrato ? cuerpoContrato(v, c) : cuerpoConvenio(v, c)}</div>
     </div>
     <div id="zonaFirma" style="max-width:520px;margin:26px auto 0"></div>`;
 
@@ -11561,15 +11747,17 @@ function dibujarParaFirmar(caja, v, datos, pedir){
     const b = e.currentTarget, antes = b.textContent;
     b.disabled = true; b.textContent = "Generando…";
     try{
-      const bytes = await pdfDeConvenio(v, c);
-      descargarBlob(new Blob([bytes], { type:"application/pdf" }), nombrePdfConvenio(v, c));
+      const bytes = esContrato ? await pdfDeDocumento(cuerpoContrato(v, c))
+                               : await pdfDeConvenio(v, c);
+      descargarBlob(new Blob([bytes], { type:"application/pdf" }),
+                    esContrato ? nombrePdfContrato(v, c) : nombrePdfConvenio(v, c));
     }catch(err){ alert("No se pudo generar el PDF: " + err.message + "\n\nUse Imprimir del navegador."); }
     finally{ b.disabled = false; b.textContent = antes; }
   };
 
   const zona = caja.querySelector("#zonaFirma");
-  if (v.firmaEmpresa){
-    zona.innerHTML = `<div class="note"><b>Este convenio ya está firmado.</b> No hay nada más
+  if (esContrato ? v.firmaCliente : v.firmaEmpresa){
+    zona.innerHTML = `<div class="note"><b>Esto ya está firmado.</b> No hay nada más
       que hacer; conserve el PDF para sus registros.</div>`;
     return;
   }
@@ -11587,7 +11775,7 @@ function dibujarParaFirmar(caja, v, datos, pedir){
     <p><button class="btn sm" id="cfBorrar">Borrar y volver a firmar</button></p>
     <div id="cfErr"></div>
     <p><button class="btn ok" id="cfOk" style="width:100%;font-size:16px;padding:12px">
-      Firmar el convenio</button></p>
+      Firmar</button></p>
     <p class="hint">Al firmar, su firma queda registrada con la fecha y la hora.</p>`;
 
   const limpiar = prepararPad(zona.querySelector("#pad"));
@@ -11607,7 +11795,9 @@ function dibujarParaFirmar(caja, v, datos, pedir){
         method:"POST",
         headers:{ "Prefer":"return=minimal" },
         body: JSON.stringify({
-          convenio_id: datos.v, token: datos.t, nombre,
+          // El buzón guarda el documento con su tipo adelante cuando es
+          // contrato; un convenio va pelado, como se mandó siempre.
+          convenio_id: (esContrato ? "contratos:" : "") + datos.v, token: datos.t, nombre,
           puesto: zona.querySelector("#cfPuesto").value.trim(),
           celular: zona.querySelector("#cfCel").value.trim(),
           img: pad.toDataURL("image/png")
@@ -11615,7 +11805,7 @@ function dibujarParaFirmar(caja, v, datos, pedir){
       });
       if (!r.ok) throw new Error(`${r.status} · ${(await r.text()).slice(0,200)}`);
       caja.innerHTML = `<div class="note" style="border-left:3px solid var(--ok)">
-        <b>Listo, ${esc(nombre)}. Su convenio quedó firmado.</b><br><br>
+        <b>Listo, ${esc(nombre)}. Su ${esc(comoSeLlama)} quedó firmada.</b><br><br>
         El hotel ya fue notificado. Si quiere guardar una copia, vuelva a abrir este enlace
         antes de cerrarlo y use <i>Descargar en PDF</i>.</div>`;
       window.scrollTo(0, 0);
@@ -11629,10 +11819,20 @@ function dibujarParaFirmar(caja, v, datos, pedir){
 
 /* ----- El convenio se cierra por tres caminos ----- */
 
-/** El enlace que se le manda al cliente para que firme en su pantalla. */
-const ligaFirma = v =>
+/**
+ * El enlace que se le manda al cliente para que firme en su pantalla.
+ *
+ * Sirve para un convenio o para un contrato. El tipo viaja en 'd'; los enlaces
+ * que ya se mandaron no lo traen, y ésos se siguen leyendo como convenios, que
+ * es lo único que existía cuando se generaron.
+ */
+const ligaFirma = (doc, tipo) =>
   location.origin + location.pathname + "#firmar=" +
-  b64url(JSON.stringify({ v: v.id, t: v.tokenFirma, u: nube.url, k: nube.anon }));
+  b64url(JSON.stringify({ v: doc.id, d: tipo === "contratos" ? "contratos" : "convenios",
+                          t: doc.tokenFirma, u: nube.url, k: nube.anon }));
+
+/** Cómo se llama ese documento en el buzón de firmas. */
+const idEnBuzon = (doc, tipo) => tipo === "contratos" ? "contratos:" + doc.id : doc.id;
 
 const puedeMandarLiga = () => !!(nube.url && nube.anon);
 
@@ -11731,7 +11931,10 @@ function enviarConvenio(v, c){
     window.location.href = `mailto:${encodeURIComponent(c.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
     anotar("correo");
   };
-  const abrirWa = cuerpo => { window.open(waLink(c.telefono, cuerpo), "_blank", "noopener"); anotar("whatsapp"); };
+  const abrirWa = cuerpo => {
+    window.open(waLink(c.telefono, cuerpo, ladaDe(c)), "_blank", "noopener");
+    anotar("whatsapp");
+  };
 
   const botones = (id, hint) => `
     <p class="hint" style="margin:10px 0 4px">${hint}</p>

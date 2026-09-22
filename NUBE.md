@@ -332,6 +332,25 @@ Sin correrlo, el CRM funciona igual: el formulario de adentro sigue trabajando y
 UTMs se pueden armar apuntando a la página del hotel. Lo único que falta es el registro desde
 fuera, y el propio CRM lo avisa donde se nota.
 
+## El teléfono de los clientes americanos
+
+Tijuana está pegada a San Diego, y buena parte de la cartera del hotel es de Estados Unidos. Un
+número de **diez dígitos se ve igual en los dos países** —664 de Tijuana, 619 de San Diego—,
+así que el CRM no puede adivinar de dónde es.
+
+Por eso cada cliente trae **su propio país**, en la ficha, junto al teléfono. Por omisión es el
+del hotel (*Ajustes → Lada por omisión*), y se cambia una vez por cliente.
+
+Tres cosas que conviene saber:
+
+- Un teléfono capturado **con su `+` adelante** —`+1 619 555 1234`— manda siempre, sin
+  importar lo que diga la ficha.
+- **`1` más diez dígitos es ambiguo**: es a la vez el formato viejo de los celulares mexicanos
+  (`+52 1 664…`) y el de Estados Unidos (`+1 619…`). Con el país del cliente en *México* se
+  toma como el formato viejo y se corrige; con cualquier otro, se deja tal cual.
+- Los **huéspedes** de las confirmaciones vienen de un `.xlsx` y no tienen ficha: ahí manda el
+  `+` y, si no lo traen, la lada por omisión.
+
 ## El ingreso por campaña
 
 `marketing.sql` monta la cuenta que le dice al tablero de marketing cuánto dejó cada campaña.

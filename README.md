@@ -327,6 +327,15 @@ pago y el bloque de firmas.
 - Se imprime, se descarga en PDF y se manda por correo o WhatsApp, con la columna **Enviado**
   como en todo lo demás.
 
+#### El cliente lo firma desde su teléfono
+
+Igual que el convenio: al mandarlo, **Copiar el enlace** —o mandarlo por correo o WhatsApp— y
+el cliente lo abre, lo lee y lo firma con el dedo, sin instalar nada ni crear una cuenta.
+Cuando firma, el documento pasa a **Aceptado** solo y el CRM avisa.
+
+El enlace **sólo abre ese documento** y deja de servir en cuanto se firma. Hace falta tener la
+nube configurada —el enlace vive ahí— y haber corrido `firmas.sql`.
+
 ### Documentos que no se hicieron aquí
 
 En *Convenios* y en *Contratos* hay un botón **Subir uno firmado**: registra un convenio, una

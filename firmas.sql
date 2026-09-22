@@ -22,6 +22,10 @@
 -- ---------------------------------------------------------------------------
 -- 1. El buzón
 -- ---------------------------------------------------------------------------
+--    La columna se llama convenio_id por historia: hoy guarda el documento que
+--    se firmó, sea un convenio —'v123'— o un contrato —'contratos:k123'—.
+--    Renombrarla obligaría a mover las firmas que estuvieran esperando, y no
+--    vale la pena por un nombre.
 create table if not exists public.crm_firmas (
   id          bigserial primary key,
   convenio_id text not null,
@@ -38,13 +42,19 @@ create index if not exists crm_firmas_pend_idx on public.crm_firmas (aplicada) w
 alter table public.crm_firmas enable row level security;
 
 -- ---------------------------------------------------------------------------
--- 2. ¿La clave corresponde a ese convenio?
+-- 2. ¿La clave corresponde a ese documento?
 --
---    Va como security definer porque el visitante no puede leer la tabla de
---    convenios por su cuenta: sólo se le deja hacer esta pregunta concreta,
---    que se contesta con sí o no y no revela nada más.
+--    Va como security definer porque el visitante no puede leer la cartera por
+--    su cuenta: sólo se le deja hacer esta pregunta concreta, que se contesta
+--    con sí o no y no revela nada más.
+--
+--    Sirve para convenios Y para contratos de hospedaje. El buzón guarda el id
+--    tal como lo manda el CRM: un convenio va pelado —'v123', como se mandó
+--    siempre— y un contrato va con su tipo adelante —'contratos:k123'—. Así
+--    los enlaces que ya se mandaron por WhatsApp siguen sirviendo: si el valor
+--    no trae ':', es un convenio, como antes.
 -- ---------------------------------------------------------------------------
-create or replace function public.crm_token_ok(p_convenio text, p_token text)
+create or replace function public.crm_token_ok(p_doc text, p_token text)
 returns boolean
 language sql
 stable
@@ -53,7 +63,10 @@ set search_path = public
 as $$
   select exists (
     select 1 from public.crm_datos d
-     where d.id = 'convenios:' || p_convenio
+     where d.id = case when position(':' in p_doc) > 0
+                       then p_doc
+                       else 'convenios:' || p_doc end
+       and d.tipo in ('convenios', 'contratos')
        and d.borrado = false
        and coalesce(d.datos ->> 'tokenFirma', '') <> ''
        and d.datos ->> 'tokenFirma' = p_token);
@@ -125,12 +138,18 @@ $$;
 -- ---------------------------------------------------------------------------
 -- 4. Lo que puede hacer un visitante sin cuenta
 -- ---------------------------------------------------------------------------
-drop policy if exists "cliente lee su convenio" on public.crm_datos;
-create policy "cliente lee su convenio" on public.crm_datos for select to anon
+--    El visitante alcanza UN documento y nada más: el que trae su clave. No es
+--    "los convenios" ni "los contratos": es el renglón cuyo tokenFirma coincide
+--    con el encabezado que mandó. Sin clave no ve nada, y con la clave de uno
+--    no ve el de al lado.
+drop policy if exists "cliente lee su convenio"   on public.crm_datos;
+drop policy if exists "cliente lee su documento"  on public.crm_datos;
+create policy "cliente lee su documento" on public.crm_datos for select to anon
 using (
-  tipo = 'convenios'
+  tipo in ('convenios', 'contratos')
   and borrado = false
   and public.crm_token_pedido() is not null
+  and coalesce(datos ->> 'tokenFirma', '') <> ''
   and datos ->> 'tokenFirma' = public.crm_token_pedido()
 );
 
