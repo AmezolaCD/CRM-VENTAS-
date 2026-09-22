@@ -60,7 +60,9 @@ hotel. Si la conexión de Odoo sigue existiendo, buena parte ya está hecha.
 5. **Cópielo en ese momento.** Meta no lo vuelve a enseñar. Si se pierde, se genera otro y ya.
 
 También hace falta el **identificador de la cuenta publicitaria**: en el Administrador de
-anuncios, arriba, junto al nombre de la cuenta. Se ve así: `act_1234567890`.
+anuncios, arriba, junto al nombre de la cuenta. Ahí se ve como un número pelón —`1234567890`—
+y la API lo quiere con un prefijo —`act_1234567890`—. **Las dos formas sirven**: si se pega
+nada más el número, el CRM le pone el prefijo.
 
 > **El acceso no se manda por WhatsApp, ni por correo, ni por este chat, ni se pega en una
 > captura de pantalla.** Se copia y se pega directo en Supabase, en el paso siguiente. Quien lo
@@ -79,7 +81,7 @@ En **supabase.com**, proyecto del hotel:
    | Nombre | Qué va |
    |---|---|
    | `META_TOKEN` | el acceso que se acaba de generar |
-   | `META_CUENTA` | `act_1234567890` |
+   | `META_CUENTA` | el identificador de la cuenta: `1234567890`, o `act_1234567890` |
    | `META_API_VERSION` | *opcional*, sólo si algún día hay que mover la versión |
 
 2. **Edge Functions → Deploy a new function → Via Editor**, con el nombre **exacto**

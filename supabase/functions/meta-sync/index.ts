@@ -152,6 +152,20 @@ function objetosDeInsights(filas, cuenta) {
 }
 
 /**
+ * La cuenta publicitaria, como la quiere la API.
+ *
+ * En el Administrador de anuncios el identificador se ve como "1234567890",
+ * pero la API lo quiere como "act_1234567890". Pedirle a alguien que le agregue
+ * un prefijo a un número es pedirle que se equivoque, así que se acomoda aquí:
+ * se le quitan comillas y espacios, y si quedó puro dígito se le pone el act_.
+ */
+function normalizaCuenta(v) {
+  let c = String(v || "").trim().replace(/^["']|["']$/g, "").replace(/\s+/g, "");
+  if (/^\d+$/.test(c)) c = "act_" + c;
+  return /^act_\d+$/.test(c) ? c : "";
+}
+
+/**
  * Lo que se le dice a una persona que no sabe qué es un token.
  *
  * Un "(#190) Error validating access token" no le dice nada a nadie: hay que
@@ -329,7 +343,7 @@ Deno.serve(async (req) => {
 
     // ---- 3. Los accesos --------------------------------------------------
     const token = Deno.env.get("META_TOKEN");
-    cuenta = String(Deno.env.get("META_CUENTA") || "").trim();
+    cuenta = normalizaCuenta(Deno.env.get("META_CUENTA"));
     const version = String(Deno.env.get("META_API_VERSION") || VERSION_DEF).trim();
 
     if (!token)
@@ -338,13 +352,17 @@ Deno.serve(async (req) => {
                "Secrets, con el nombre META_TOKEN. Viene explicado paso a paso en META.md.",
         falta: "META_TOKEN",
       });
-    if (!/^act_\d+$/.test(cuenta))
+    if (!cuenta) {
+      console.log("meta-sync: META_CUENTA no sirve ::",
+                  Deno.env.get("META_CUENTA") ? "viene con algo que no es un número" : "vacía");
       return responde(400, {
-        error: "Falta la cuenta publicitaria, o está mal escrita. Se guarda en " +
-               "Supabase → Edge Functions → Secrets, con el nombre META_CUENTA, y " +
-               "se ve así: act_1234567890.",
+        error: "Falta la cuenta publicitaria, o trae algo que no es un número. Se " +
+               "guarda en Supabase → Edge Functions → Secrets, con el nombre " +
+               "META_CUENTA, y va el identificador de la cuenta: 1234567890, o " +
+               "act_1234567890. Sin comillas y sin espacios.",
         falta: "META_CUENTA",
       });
+    }
 
     const peticion: any = await req.json().catch(() => ({}));
     const accion = String(peticion.accion || "sincroniza");

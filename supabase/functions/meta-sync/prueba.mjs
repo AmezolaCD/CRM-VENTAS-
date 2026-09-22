@@ -21,11 +21,25 @@ if (ini < 0 || fin < 0) { console.log('No se encontraron las marcas de la lógic
 const VERSION_DEF = (src.match(/const VERSION_DEF = "([^"]+)"/) || [])[1] || '';
 ok('el archivo fija una versión de la API de Meta', /^v\d+\.\d+$/.test(VERSION_DEF), VERSION_DEF);
 
-const { ventana, leadsDe, filaMetrica, objetosDeInsights, mensajeDeError } =
+const { ventana, leadsDe, filaMetrica, objetosDeInsights, mensajeDeError, normalizaCuenta } =
   new Function('VERSION_DEF', `
     ${src.slice(ini, fin)}
-    return { ventana, leadsDe, filaMetrica, objetosDeInsights, mensajeDeError };
+    return { ventana, leadsDe, filaMetrica, objetosDeInsights, mensajeDeError, normalizaCuenta };
   `)(VERSION_DEF);
+
+console.log('\n== La cuenta publicitaria, como la pegue quien la pegue ==');
+{
+  ok('EL NÚMERO PELÓN TAMBIÉN SIRVE', normalizaCuenta('1234567890') === 'act_1234567890',
+     normalizaCuenta('1234567890'));
+  ok('con act_ adelante, igual', normalizaCuenta('act_1234567890') === 'act_1234567890');
+  ok('con espacios de más, igual', normalizaCuenta('  act_1234567890 ') === 'act_1234567890');
+  ok('con comillas pegadas al copiar, igual',
+     normalizaCuenta('"act_1234567890"') === 'act_1234567890');
+  ok('un espacio en medio no lo parte', normalizaCuenta('act_ 1234567890') === 'act_1234567890');
+  ok('lo que no es una cuenta se rechaza, no se adivina',
+     normalizaCuenta('la cuenta del hotel') === '' && normalizaCuenta('') === '' &&
+     normalizaCuenta('act_') === '' && normalizaCuenta(undefined) === '');
+}
 
 console.log('\n== La ventana que se vuelve a leer ==');
 {
