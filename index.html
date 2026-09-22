@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.22-57";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.22-58";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1215,9 +1215,34 @@ const DEPTOS_ROL = {
   captura:       []
 };
 
-/* El departamento escogido en esta sesión. No se guarda a propósito: la
-   pantalla es lo primero que ve quien alcanza los dos, cada vez que entra. */
+/* El departamento escogido en esta sesión. No se guarda en el equipo a
+   propósito: la pantalla de escoger es lo primero que ve quien alcanza más de
+   uno, cada vez que entra.
+   
+   Pero sí se recuerda mientras la pestaña siga abierta, en sessionStorage, que
+   se borra sola al cerrarla. Eso es lo que hace que RECARGAR no cuente como
+   volver a entrar: el botón CORE recarga la página, y sin esto le sacaría la
+   pantalla de escoger departamento cada vez. Se guarda junto con el correo de
+   quien lo escogió, para que si entra otra persona no herede el de la anterior. */
+const DEPTO_SESION = "crm-hotel-depto";
 let depto = "";
+
+function ponDepto(d){
+  depto = d || "";
+  try{
+    if (depto) sessionStorage.setItem(DEPTO_SESION,
+      JSON.stringify({ correo: correoSesion(), depto }));
+    else sessionStorage.removeItem(DEPTO_SESION);
+  }catch(e){}
+}
+
+function deptoRecordado(){
+  try{
+    const d = JSON.parse(sessionStorage.getItem(DEPTO_SESION) || "null");
+    if (!d || !d.depto) return "";
+    return String(d.correo || "") === correoSesion() ? d.depto : "";
+  }catch(e){ return ""; }
+}
 
 const VISTAS_ROL = {
   admin:     VISTAS,
@@ -2460,6 +2485,7 @@ async function salir(){
   detenerSondeo();
   nube.sesion = null;
   nube.ultimo = "";
+  ponDepto("");   // el que entre después escoge el suyo, no hereda éste
   try{ localStorage.removeItem(FIRMA_LOCAL); }catch(e){}
   nube.enlazado = false;      // el que entre después baja todo otra vez
   nube.estado = "local";
@@ -3198,7 +3224,7 @@ function pantallaDepto(){
   document.body.appendChild(ov);
 
   ov.querySelectorAll("[data-dep]").forEach(b => b.onclick = () => {
-    depto = b.dataset.dep;
+    ponDepto(b.dataset.dep);
     // Se entra siempre por la primera pestaña del departamento, no por donde
     // se hubiera quedado en el anterior.
     vista = "tablero";
@@ -3216,7 +3242,9 @@ function pantallaDepto(){
  * pantalla de escoger se quede colgada después de cerrar la sesión.
  */
 function ajustarDepto(){
-  if (depto && !misDepartamentos().some(d => d.id === depto)) depto = "";
+  // Al recargar, el que ya traía escogido en esta pestaña.
+  if (!depto && escogeDepto()) depto = deptoRecordado();
+  if (depto && !misDepartamentos().some(d => d.id === depto)) ponDepto("");
   const ov = document.getElementById("depto");
   if (ov && (!escogeDepto() || depto)) ov.remove();
 }
@@ -3229,7 +3257,7 @@ function pintarDepto(){
   if (!d){ el.style.display = "none"; return; }
   el.style.display = "";
   el.innerHTML = `<span>${d.icono}</span> ${esc(d.name)}`;
-  el.onclick = () => { depto = ""; pintarDepto(); pantallaDepto(); };
+  el.onclick = () => { ponDepto(""); pintarDepto(); pantallaDepto(); };
 }
 
 function pantallaEntrada(){
@@ -12597,7 +12625,28 @@ function abrirExportar(){
    ========================================================================== */
 
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => { vista = b.dataset.view; render(); });
-document.getElementById("bHome").onclick = () => { vista = "tablero"; render(); };
+/*
+ * El botón CORE del encabezado: al tablero, y RECARGANDO la página.
+ *
+ * Recargar es lo que pidió el hotel y para lo que sirve: es la manera de
+ * traerse la versión recién publicada y de volver a bajar todo de la nube sin
+ * tener que acordarse del Ctrl+Shift+R —que nadie se acuerda—.
+ *
+ * Lo capturado no se pierde: se guarda en el equipo conforme se escribe, y lo
+ * que no haya alcanzado a subir sube en la siguiente vuelta. Lo que SÍ se
+ * perdería es un formulario a medio llenar que siga abierto, así que en ese
+ * caso se pregunta antes en vez de tirarlo callando.
+ */
+document.getElementById("bHome").onclick = () => {
+  vista = "tablero";
+  if (document.querySelector(".overlay") &&
+      !confirm("Hay una ventana abierta y lo que esté a medio llenar se va a perder.\n\n" +
+               "¿Recargar de todos modos?")){
+    render();
+    return;
+  }
+  location.reload();
+};
 document.getElementById("q").addEventListener("input", e => { filtros.q = e.target.value; render(); });
 document.getElementById("fEje").addEventListener("change", e => { filtros.ejecutivo = e.target.value; render(); });
 document.getElementById("bNuevo").onclick = () => abrirCliente(null);

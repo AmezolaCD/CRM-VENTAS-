@@ -233,6 +233,12 @@ estaba desconectado —o en otra dirección— y se quedó nada más aquí.
 Antes de eso, revisa el semáforo del encabezado: si no dice **En línea**, lo que captures no
 está saliendo de esa computadora.
 
+Y si lo que sospechas es que ese equipo trae una versión vieja del CRM, **pícale al logo CORE**
+de arriba a la izquierda: te lleva al tablero y **recarga la página**, que es lo que trae la
+versión recién publicada y vuelve a bajar todo de la nube. Es el atajo para no tener que
+explicarle a nadie lo del Ctrl+Shift+R. Lo capturado no se pierde —se guarda conforme se
+escribe—; si hay un formulario abierto a medio llenar, pregunta antes.
+
 ### El renglón que tumbaba la subida entera
 
 Vale la pena saber por qué esto pasaba, porque el síntoma no se parecía a la causa.
