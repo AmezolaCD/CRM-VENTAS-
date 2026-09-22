@@ -223,6 +223,22 @@ Viene con el nombre «Dirección» porque es el de la cuenta, no el de una perso
 que los documentos y la bitácora salgan a nombre propio, se cambia en *Ajustes → Usuarios y
 permisos*.
 
+## El papel es lo que decide de qué área es cada quien
+
+El CRM no adivina el departamento por el nombre ni por el correo: lo saca **del papel que tiene
+esa persona en la tabla de usuarios**. *Marketing* y *Coordinación de marketing* son de
+marketing; *Ejecutivo de banquetes* y *Gerencia de banquetes*, de banquetes; el resto, de
+ventas. La administración y la dirección alcanzan los tres.
+
+Por eso, a quien se le deja el papel que viene por omisión —*Ejecutivo de ventas*— queda de
+ventas aunque se llame como se llame, y eso no es un detalle cosmético: **le baja la cartera de
+clientes completa** y en cambio **no le aparecen sus propias pestañas**. Si alguien de marketing
+no ve *Campañas* ni *Atribución & UTMs*, lo primero que hay que revisar es su papel.
+
+Los cambios de esa tabla se guardan con **Guardar usuarios**, el botón que está debajo de ella
+—o con *Guardar ajustes*, al final de la pantalla: hacen lo mismo—. No se guardan solos al
+escoger del menú.
+
 ## Dar de alta a alguien son dos pasos
 
 1. **En Supabase** → *Authentication → Users → Add user*, con **Auto Confirm User** marcado.

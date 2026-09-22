@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.22-59";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.22-60";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1544,6 +1544,9 @@ let huerfanos = new Set();
 let state = cargar();
 let filtros = { q:"", ejecutivo:"" };
 let vista = "tablero";
+/* ¿La pantalla de Ajustes ya está dibujada, con lo que alguien esté llenando
+   ahí sin guardar todavía? Mientras lo esté, no se vuelve a dibujar sola. */
+let ajustesEnPantalla = false;
 let arrastrando = null;
 
 const nuevoId = p => (p||"x") + Date.now().toString(36) + "-" + (++idCounter);
@@ -4056,7 +4059,18 @@ function render(){
   if (vista === "reportes") renderReportes();
   if (vista === "confirmaciones") renderConfirmaciones();
   if (vista === "formulario") renderFormulario();
-  if (vista === "ajustes")   renderAjustes();
+  /* Los Ajustes son una pantalla entera de campos que se llenan a mano —la
+     lista de usuarios, el catálogo de habitaciones, los datos del hotel— y que
+     NO se guardan solos: se guardan con el botón de abajo. Volver a dibujarla
+     mientras alguien la está llenando le borra lo que lleva escrito sin
+     decirle nada, y después el botón guarda lo viejo: parece que no sirve.
+     Pasaba de verdad, cada vez que el sondeo traía algo de otro equipo —el
+     papel que acababan de escoger se regresaba solo a "Ejecutivo de ventas"—.
+
+     Así que mientras siga ahí, esta pantalla no se vuelve a dibujar sola. Se
+     dibuja al entrar, y cuando el propio panel lo pide después de guardar. */
+  if (vista === "ajustes"){ if (!ajustesEnPantalla) renderAjustes(); }
+  else ajustesEnPantalla = false;
 
   // Al final, para que no salga encima de una pantalla a medio dibujar.
   pantallaDepto();
@@ -5525,6 +5539,7 @@ function renderAjustes(){
       ${ayuda ? `<div class="hint" style="margin:-2px 0 5px">${ayuda}</div>` : ""}
       <textarea class="field mono" data-t="${k}" style="width:100%;min-height:${alto}px">${esc(t[k])}</textarea></div>`;
 
+  ajustesEnPantalla = true;
   document.getElementById("panelAjustes").innerHTML = `
     <div style="max-width:900px">
       <h3 class="sec">Nube y equipo</h3>
@@ -5570,10 +5585,14 @@ function renderAjustes(){
         <thead><tr><th>Correo con el que entra</th><th>Nombre en la cartera</th>
           <th>Papel</th><th></th></tr></thead>
         <tbody></tbody></table></div>
-      <p style="margin:10px 0 0">
+      <p style="margin:10px 0 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn" id="bAddUsr">+ Agregar persona</button>
-        <span class="hint">Dar de alta aquí no crea la cuenta: eso se hace en Supabase,
-          en <i>Authentication → Users</i>, con el mismo correo.</span></p>
+        <button class="btn primary" id="bGuardarUsr">Guardar usuarios</button>
+        <span class="hint" id="usrOk" style="color:var(--ok);font-weight:600"></span></p>
+      <p class="hint" style="margin:6px 0 0">Guarda lo mismo que el botón del final de la
+        pantalla; está aquí para no tener que bajar hasta abajo. Dar de alta a alguien
+        <b>no crea su cuenta</b>: eso se hace en Supabase, en <i>Authentication → Users</i>,
+        con el mismo correo.</p>
 
       <div id="huerfanos" style="margin-top:22px"></div>
 
@@ -5843,6 +5862,13 @@ function renderAjustes(){
   if (bQ) bQ.onclick = () => {
     if (!confirm("¿Quitar el logotipo? La carta volverá a usar el monograma Q.")) return;
     recogerAjustes(); h.logo = ""; guardar(); renderAjustes();
+  };
+
+  p.querySelector("#bGuardarUsr").onclick = () => {
+    recogerAjustes();
+    guardar(); renderAjustes();
+    const ok = document.getElementById("usrOk");
+    if (ok){ ok.textContent = "Guardado ✓"; setTimeout(() => { if (ok) ok.textContent = ""; }, 2500); }
   };
 
   p.querySelector("#bAddUsr").onclick = () => {
