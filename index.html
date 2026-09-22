@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.21-51";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.21-52";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -7607,6 +7607,13 @@ async function pedirMeta(desde, hasta){
  */
 async function llamaMeta(cuerpo, reintento = true){
   if (!nubeActiva()) throw new Error("Sin conexión a la nube.");
+
+  /* Una sesión guardada puede venir sin token y sólo con el permiso de
+     renovarlo. Si se llama así, se manda "Bearer undefined" y Supabase contesta
+     401 sin decir por qué. Es la misma precaución que toma api(). */
+  if (reintento && nube.sesion && !nube.sesion.access_token && nube.sesion.refresh_token)
+    await renovarSesion();
+
   const r = await fetch(ligaFuncionMeta(), {
     method: "POST",
     headers: {
@@ -7622,16 +7629,25 @@ async function llamaMeta(cuerpo, reintento = true){
   }
 
   const j = await r.json().catch(() => ({}));
+  /* Nuestra función contesta en 'error'; el portón de Supabase, que atiende
+     antes, contesta en 'message' o en 'msg'. Leer nada más el nuestro dejaba al
+     usuario con un número pelón cuando el que se quejaba era el portón. */
+  const dijo = j.error || j.message || j.msg || "";
+
   if (r.status === 404)
     throw new Error("La función meta-sync todavía no está subida a Supabase. " +
       "Se sube una vez, pegando el archivo en Edge Functions. Viene en META.md.");
-  /* Un 401 sin explicación no sale de nuestra función —la nuestra siempre dice
-     por qué—: lo pone Supabase antes, cuando no le cuadra la sesión. */
+
+  /* Un 401 que no sale de nuestra función lo pone Supabase antes de llegar a
+     ella, y casi siempre es el interruptor de "Verify JWT". */
   if (r.status === 401 && !j.error)
-    throw new Error("Supabase no aceptó la sesión del CRM. Cierre sesión y vuelva " +
-      "a entrar; si sigue igual, revise que la función meta-sync sea de este mismo " +
-      "proyecto de Supabase.");
-  if (!r.ok) throw new Error(j.error || ("El servidor contestó " + r.status + "."));
+    throw new Error("Supabase rechazó la sesión antes de llegar a la función" +
+      (dijo ? ` («${dijo}»)` : "") + ". Primero cierre sesión y vuelva a entrar. " +
+      "Si sigue igual, en Supabase → Edge Functions → meta-sync → Settings, apague " +
+      "«Verify JWT»: la función comprueba la sesión y el papel por su cuenta, así que " +
+      "no se abre nada. Viene explicado en META.md.");
+
+  if (!r.ok) throw new Error(dijo || ("El servidor contestó " + r.status + "."));
   return j;
 }
 

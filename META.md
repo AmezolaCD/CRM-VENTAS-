@@ -140,6 +140,36 @@ El CRM los traduce. Los que se ven de verdad:
 | «Ya no reconoce la versión de su API» | poner la nueva en `META_API_VERSION` (ver abajo) |
 | «La función meta-sync todavía no está subida» | el paso 3 |
 
+### Cuando dice que «Supabase no aceptó la sesión»
+
+Ese no es un error de Meta: ni siquiera llegó a preguntarle. Lo puso Supabase al recibir la
+llamada, porque no le cuadró la sesión con la que el CRM entró.
+
+Lo primero, siempre: **cerrar sesión en el CRM y volver a entrar**. No basta con recargar la
+página —eso reusa el mismo token—; hay que salir y entrar para pedir uno nuevo.
+
+Si vuelve a pasar, el motivo exacto está en **Supabase → Edge Functions → meta-sync → Logs**.
+El renglón de la llamada que falló lo dice:
+
+| Lo que dice el registro | Qué es y qué hacer |
+|---|---|
+| `jwt expired` | la sesión del CRM caducó; salir y volver a entrar |
+| `Missing authorization header` | la llamada salió sin sesión; recargar con Ctrl+Shift+R para tomar la última versión del CRM |
+| `Invalid JWT` una y otra vez | es el interruptor de *Verify JWT*: ver abajo |
+| no aparece la llamada | la función no es de este proyecto: la dirección en *Ajustes → Nube y equipo* tiene que ser la del proyecto donde está subida `meta-sync` |
+
+#### Apagar «Verify JWT» es seguro aquí
+
+Supabase revisa la sesión **antes** de pasarle la llamada a la función. Cuando esa revisión
+falla una y otra vez —aunque la sesión sea buena y el resto del CRM funcione—, se apaga en
+**Edge Functions → meta-sync → Settings → Verify JWT**, y se vuelve a intentar.
+
+Eso **no abre nada**, y conviene entender por qué: `meta-sync` comprueba la sesión por su
+cuenta —le pregunta a Supabase quién es el que está llamando— y además exige que esa persona
+sea de marketing, dirección o administración. Sin sesión válida contesta 401 igual, y a un
+ejecutivo de ventas le contesta que no aunque traiga una sesión buena. El interruptor que se
+apaga es una segunda reja, no la única.
+
 ---
 
 ## Dos decisiones que conviene entender

@@ -272,20 +272,45 @@ Deno.serve(async (req) => {
   try {
     // ---- 1. ¿Quién pregunta? ---------------------------------------------
     const auth = req.headers.get("Authorization") ?? "";
-    if (!auth.startsWith("Bearer ")) return responde(401, { error: "Falta la sesión." });
 
-    const conSesion = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: auth } },
-    });
-    const { data: { user }, error: errUser } = await conSesion.auth.getUser();
-    if (errUser || !user) return responde(401, { error: "La sesión no es válida." });
+    /* Estas anotaciones salen en Supabase → Edge Functions → meta-sync → Logs.
+       NO se anota el token ni un pedazo de él: sólo si venía y qué tan largo es,
+       que es lo que hace falta para saber si el problema es la sesión o el
+       camino. Un registro es un lugar público dentro de la casa. */
+    console.log(JSON.stringify({
+      paso: "entra", metodo: req.method,
+      traeAuth: auth.startsWith("Bearer "), largoAuth: auth.length,
+      traeApikey: !!req.headers.get("apikey"),
+      hayServicio: !!servicio,
+      hayToken: !!Deno.env.get("META_TOKEN"),
+      hayCuenta: !!Deno.env.get("META_CUENTA"),
+    }));
+
+    if (!auth.startsWith("Bearer ")) {
+      console.log("meta-sync: llegó sin sesión");
+      return responde(401, { error: "Falta la sesión." });
+    }
+
+    /* La sesión se comprueba con la llave de SERVICIO, no con la pública.
+       Da lo mismo para comprobar —quien contesta quién es el dueño del token es
+       el servidor de cuentas de Supabase, no la llave—, pero la de servicio
+       siempre está puesta, y la pública cambió de nombre en los proyectos
+       nuevos: si falta, esto tronaba con un error que no decía nada. */
+    const admin = createClient(url, servicio);
+    const { data: { user }, error: errUser } = await admin.auth.getUser(auth.slice(7).trim());
+    if (errUser || !user) {
+      console.log("meta-sync: la sesión no pasó ::", errUser?.message ?? "sin usuario");
+      return responde(401, {
+        error: "La sesión no es válida. " + (errUser?.message ?? ""),
+      });
+    }
     correo = String(user.email || "").toLowerCase();
+    console.log("meta-sync: entra", correo);
 
     // ---- 2. ¿Y le toca? --------------------------------------------------
     //  El papel se busca con la llave de servicio a propósito: si se buscara
     //  con la sesión de quien pregunta, las reglas de la base podrían
     //  esconderle su propio renglón y el CRM leería "no es de nadie".
-    const admin = createClient(url, servicio);
     const { data: usuarios } = await admin
       .from("crm_datos").select("datos")
       .eq("tipo", "usuarios").eq("borrado", false);
@@ -294,11 +319,13 @@ Deno.serve(async (req) => {
     const papel = String(mio?.datos?.rol || "");
     // Sin lista de usuarios todavía —un proyecto recién montado— se deja
     // pasar a quien tenga sesión, igual que hace el resto del CRM.
-    if (usuarios && usuarios.length && !PAPELES.includes(papel))
+    if (usuarios && usuarios.length && !PAPELES.includes(papel)) {
+      console.log("meta-sync: papel sin permiso ::", papel || "(ninguno)");
       return responde(403, {
         error: "Esta cuenta no tiene permiso de ver lo de marketing. " +
                "Lo de los anuncios lo alcanzan marketing, dirección y administración.",
       });
+    }
 
     // ---- 3. Los accesos --------------------------------------------------
     const token = Deno.env.get("META_TOKEN");

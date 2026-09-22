@@ -142,7 +142,12 @@ console.log('\n== Lo que el archivo promete ==');
      !/graph\.facebook[\s\S]{0,200}method:\s*["']POST["']/.test(src));
   ok('el acceso sale de los secretos, no está escrito aquí',
      src.includes('Deno.env.get("META_TOKEN")') && !/EAA[A-Za-z0-9]{20,}/.test(src));
-  ok('comprueba la sesión antes de cualquier cosa', src.includes('auth.getUser()'));
+  ok('comprueba la sesión antes de cualquier cosa',
+     /auth\.getUser\(/.test(src) &&
+     // antes de ir por el acceso de Meta, no después
+     src.indexOf('auth.getUser(') < src.indexOf('const token = Deno.env.get("META_TOKEN")'));
+  ok('y la comprueba con la llave de servicio, que siempre está puesta',
+     !src.includes('SUPABASE_ANON_KEY'));
   ok('Y TAMBIÉN EL PAPEL, no sólo la sesión',
      src.includes('PAPELES.includes(papel)') && src.includes('"gte_marketing"'));
   ok('el papel se busca con la llave de servicio, no con la sesión de quien pregunta',
