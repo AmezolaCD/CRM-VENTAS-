@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.22-53";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.22-54";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -7559,6 +7559,13 @@ async function recogerAltas(){
    crm_datos, las reglas rechazarían el lote ENTERO y el hotel se quedaría sin
    sincronizar nada. Se piden cuando hacen falta y se quedan aquí, en la
    memoria de esta pestaña. */
+/* Cuántos días hacia atrás se le piden a Meta al sincronizar.
+   Siete es lo de diario: Meta corrige sus cifras unos días después y con eso
+   basta para ir al corriente. Pero la primera vez —o cuando alguien quiere ver
+   de dónde viene el año— hacen falta más, y una campaña que no gastó en la
+   semana no devuelve un solo renglón: por eso se puede escoger. El tope son 92
+   días, que es lo que aguanta la función sin ahogarse. */
+let metaDias = 7;
 let metaMetricas = null;     // una fila por campaña de Meta y día
 let metaObjetos = [];        // el catálogo: id de Meta → nombre
 let metaSync = null;         // el último renglón de la bitácora
@@ -7760,6 +7767,11 @@ function tiraMeta(){
       ${s && s.cuenta ? `<span class="hint">· ${esc(s.cuenta)}</span>` : ""}
       <span style="flex:1"></span>
       <span class="hint" id="metaDicho"></span>
+      <label class="hint" for="metaDias">Traer</label>
+      <select class="field" id="metaDias" style="width:auto;padding:4px 8px">
+        ${[[7, "7 días"], [30, "30 días"], [92, "3 meses"]].map(([n, t]) =>
+          `<option value="${n}"${n === metaDias ? " selected" : ""}>${t}</option>`).join("")}
+      </select>
       <button class="btn sm" id="bMetaSync">Sincronizar</button>
     </div>
     ${s && !s.ok && s.detalle ? `<div class="errbox" style="margin-bottom:12px">
@@ -7870,13 +7882,17 @@ function cargaMeta(vuelveAPintar){
 function enganchaTiraMeta(cont, alTerminar){
   const b = cont.querySelector("#bMetaSync");
   if (!b) return;
+  const cuantos = cont.querySelector("#metaDias");
+  if (cuantos) cuantos.onchange = () => { metaDias = Number(cuantos.value) || 7; };
+
   b.onclick = async () => {
     const dicho = cont.querySelector("#metaDicho");
+    if (cuantos) metaDias = Number(cuantos.value) || 7;
     b.disabled = true;
     const antes = b.textContent;
     b.textContent = "Trayendo…";
     try{
-      const j = await llamaMeta({ accion: "sincroniza" });
+      const j = await llamaMeta({ accion: "sincroniza", dias: metaDias });
       const partes = [j.filas
         ? j.filas + " días de cifras, del " + j.desde + " al " + j.hasta
         : "Meta no reportó gasto en esos días"];

@@ -96,6 +96,20 @@ En **Campañas** aparece una tira arriba que dice cómo va la conexión. Se apri
 **Sincronizar** y pasan dos cosas: se traen los últimos siete días de cifras y **se traen solas
 las campañas que Meta tiene activas**, ya enlazadas.
 
+#### Por qué casi todas salen sin gasto la primera vez
+
+La sincronización de diario trae **siete días**, que es lo que hace falta para ir al corriente
+—Meta corrige sus cifras unos días después—. Una campaña que no gastó en esa semana **no
+devuelve un solo renglón**, y por eso sale con raya aunque esté activa.
+
+Al lado del botón hay un selector: **7 días · 30 días · 3 meses**. La primera vez conviene
+traer **3 meses** para que el tablero tenga de dónde. Después se deja en 7, que es más rápido y
+no cansa a Meta. Volver a traer los mismos días no duplica nada.
+
+Más de tres meses no se puede de un jalón, a propósito: con veinte campañas por noventa días ya
+son casi dos mil renglones, y pedir un año de una sentada es la manera segura de que Meta corte
+la consulta a medias.
+
 Las de otros canales —Google, una expo, un convenio con una agencia— se siguen capturando con
 **+ Nueva campaña**, como hasta ahora.
 
