@@ -48,6 +48,20 @@ Son dos negocios distintos y cada uno ve el suyo:
   le cuenta a la IA. No renta habitaciones, así que el hospedaje no le sale por ningún lado.
 - Ventas **no ve** las pestañas *Eventos* ni *Contratos banquetes* —tampoco la gerencia de
   ventas—, ni los eventos en el calendario, ni el dinero de banquetes en los reportes.
+- **La bitácora también se separa.** Lo que cada área anota —llamadas, visitas, correos— lo ve
+  nada más esa área. La gerencia de ventas no lee las llamadas de banquetes ni las de
+  marketing, y al revés, **aunque el cliente sea el mismo**; en el filtro de *Actividades*
+  tampoco le aparece gente de las otras áreas. Es lo único que se separa de un cliente
+  compartido, y se separa porque la cartera se comparte por necesidad —un evento cuelga de un
+  cliente y sin él no se puede ni abrir—, no porque el trabajo de un área sea asunto de la
+  otra.
+
+  La administración y la dirección alcanzan los tres departamentos, así que su trabajo se ve
+  desde cualquiera de ellos, y lo que ELLAS ven depende del departamento en el que hayan
+  entrado, no de su papel: al cambiarse de departamento cambia la bitácora que leen.
+
+  Lo que quedó a nombre de alguien que **no está dado de alta** —lo importado, o quien ya se
+  fue— no se esconde de nadie: esconderlo lo dejaría sin que nadie lo volviera a ver.
 - **Marketing no ve la cartera en absoluto**: ni clientes, ni convenios, ni contratos, ni
   eventos. Lo suyo son sus campañas y los prospectos. Y las campañas no le bajan a nadie más.
   El detalle está en `MARKETING.md`.

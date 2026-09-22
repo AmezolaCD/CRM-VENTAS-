@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.22-58";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.22-59";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1282,6 +1282,49 @@ const escogeDepto = () => nubeActiva() && misDepartamentos().length > 1;
 const deptoActual = () => DEPARTAMENTOS.find(d => d.id === depto) || null;
 
 /**
+ * En cuál departamento está trabajando quien ve la pantalla, ahora mismo.
+ *
+ * Quien alcanza más de uno lo escogió al entrar. Quien alcanza uno solo —un
+ * ejecutivo, la gerencia de banquetes— no escoge nada y es ése, aunque nunca
+ * haya visto la pantalla de escoger. Y quien abre el archivo sin nube no tiene
+ * departamentos que separar: devuelve vacío y no se filtra nada, que es como
+ * trabajaba el CRM antes de los papeles.
+ */
+function miDepto(){
+  if (depto) return depto;
+  const ds = misDepartamentos();
+  return ds.length === 1 ? ds[0].id : "";
+}
+
+/** Los nombres de quienes trabajan en un departamento. */
+function nombresDelDepto(id){
+  if (!id) return nombresEquipo();
+  return [...new Set(state.usuarios
+    .filter(u => (DEPTOS_ROL[u.rol] || []).includes(id))
+    .map(u => String(u.nombre || "").trim()).filter(Boolean))]
+    .sort((a,b) => a.localeCompare(b,"es"));
+}
+
+/**
+ * Quienes NO son del departamento en el que se está, por su nombre.
+ *
+ * Sirve para no mezclar la bitácora de un área con la de otra. Se va por la
+ * negativa a propósito: lo que aparece a nombre de alguien que no está dado de
+ * alta NO se esconde. Eso es de antes de los papeles, o de alguien que se fue,
+ * y esconderlo lo dejaría sin que nadie lo viera nunca.
+ *
+ * La administración y la dirección alcanzan los tres departamentos, así que
+ * nunca salen en esta lista: su trabajo se ve desde cualquiera de ellos.
+ */
+function otrosDepartamentos(){
+  const d = miDepto();
+  if (!d) return new Set();
+  return new Set(state.usuarios
+    .filter(u => !(DEPTOS_ROL[u.rol] || []).includes(d))
+    .map(u => String(u.nombre || "").trim().toLowerCase()).filter(Boolean));
+}
+
+/**
  * Las pestañas de esta persona, ya acotadas al departamento en el que está.
  *
  * Los Ajustes no son de ningún departamento —son del administrador—, así que
@@ -1405,15 +1448,28 @@ const cuantoTiene = nombre => {
 };
 
 /** Las opciones de los filtros por ejecutivo, iguales en tablero y actividades. */
-function opcionesEjecutivos(valor, todos){
+/**
+ * La lista para filtrar por persona.
+ *
+ * Con `soloMiDepto` sólo salen los del departamento en el que se está: la
+ * gerencia de ventas no tiene por qué filtrar por la gente de banquetes ni por
+ * la de marketing, y verlos en la lista hace pensar que sí alcanza su trabajo.
+ */
+function opcionesEjecutivos(valor, todos, soloMiDepto){
   const op = n => `<option value="${esc(n)}"${n === valor ? " selected" : ""}>${esc(n)}</option>`;
   const cab = `<option value="">${esc(todos)}</option>`;
   if (!puedeVerTodo()){                 // un ejecutivo sólo se tiene a sí mismo
     const yo = miNombre().trim();
     return cab + (yo ? op(yo) : "");
   }
+  const equipo = soloMiDepto ? nombresDelDepto(miDepto()) : nombresEquipo();
   const sueltos = nombresSinDuenio();
-  return cab + nombresEquipo().map(op).join("") +
+  /* Si lo que está filtrado ya no sale en la lista, se le agrega de todos
+     modos: sin eso el select se vería en "todos" mientras el filtro sigue
+     puesto, y la pantalla estaría mintiendo. */
+  const v = String(valor || "").trim();
+  const falta = v && !equipo.some(n => n === v) && !sueltos.some(n => n === v);
+  return cab + equipo.map(op).join("") + (falta ? op(v) : "") +
     (sueltos.length ? `<optgroup label="Sin dar de alta">${sueltos.map(op).join("")}</optgroup>` : "");
 }
 
@@ -3924,7 +3980,18 @@ const actsDe      = id => state.actividades.filter(a => a.clienteId === id)
                             .sort((a,b) => String(b.fecha).localeCompare(String(a.fecha)));
 const conveniosDe = id => state.convenios.filter(c => c.clienteId === id)
                             .sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-const ultimaAct   = id => actsDe(id)[0] || null;
+/**
+ * Las actividades de un cliente que sí le tocan a quien está viendo la
+ * pantalla. `actsDe` se queda tal cual, con TODAS, porque el aviso de borrar
+ * tiene que contar también lo que quien borra no alcanza a ver.
+ */
+const actsVisiblesDe = id => {
+  const ajenos = otrosDepartamentos();
+  if (!ajenos.size) return actsDe(id);
+  return actsDe(id).filter(a =>
+    !ajenos.has(String(a.responsable || "").trim().toLowerCase()));
+};
+const ultimaAct   = id => actsVisiblesDe(id)[0] || null;
 const nombreCli   = id => (cliente(id) || {}).empresa || "(cliente eliminado)";
 
 function clientesVisibles(){
@@ -4066,7 +4133,7 @@ function tarjeta(c, e){
   el.style.borderLeftColor = e.color;
 
   const ua = ultimaAct(c.id);
-  const n = actsDe(c.id).length;
+  const n = actsVisiblesDe(c.id).length;
   const docs = veHospedaje() ? conveniosDe(c.id)
                              : state.eventos.filter(e => e.clienteId === c.id && eventoEsMio(e));
   const firmado = veHospedaje() ? docs.some(v => v.estado === "firmado_cliente")
@@ -4146,7 +4213,7 @@ function renderClientes(){
         <td><span class="estado-chip" style="background:${e.color};color:${e.ink}">${esc(e.name)}</span></td>
         <td class="num">${c.tarifa ? esc(money(c.tarifa)) : "—"}</td>
         <td>${esc(c.ejecutivo || "—")}</td>
-        <td class="num">${actsDe(c.id).length}</td>
+        <td class="num">${actsVisiblesDe(c.id).length}</td>
         <td class="num">${veHospedaje() ? conveniosDe(c.id).length
           : state.eventos.filter(e => e.clienteId === c.id && eventoEsMio(e)).length}</td>
         <td class="nowrap"><button class="btn sm wa" data-wa="${c.id}" ${c.telefono ? "" : "disabled"} title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button></td>
@@ -6074,7 +6141,7 @@ function abrirCliente(id, estatusInicial, pane){
       <div class="modal-body">
         ${existente ? `<div class="subtabs">
           <button data-pane="datos" aria-current="true">Datos</button>
-          <button data-pane="acts">Actividad <span class="hint">(${actsDe(c.id).length})</span></button>
+          <button data-pane="acts">Actividad <span class="hint">(${actsVisiblesDe(c.id).length})</span></button>
           ${veHospedaje() ? `<button data-pane="convs">Convenios
             <span class="hint">(${conveniosDe(c.id).length})</span></button>` : ""}
         </div>` : ""}
@@ -6140,7 +6207,7 @@ function abrirCliente(id, estatusInicial, pane){
   }
 
   function pintaActs(){
-    const lista = actsDe(c.id);
+    const lista = actsVisiblesDe(c.id);
     ov.querySelector("#p-acts").innerHTML = `
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
         <b>Actividad registrada</b><span class="hint">${lista.length} registro(s) · sin límite</span>
@@ -6321,7 +6388,14 @@ function actividadesVisibles(){
   const q = filtros.q.trim().toLowerCase();
   const mios = new Set(state.clientes.filter(esMio).map(c => c.id));
   const yo = miNombre().trim().toLowerCase();
+  /* Cada departamento lleva su propia bitácora. La cartera de clientes sí se
+     comparte entre ventas y banquetes —un evento cuelga de un cliente y sin él
+     no se puede ni abrir—, pero las llamadas y las visitas de banquetes no son
+     asunto de la gerencia de ventas, ni al revés, aunque el cliente sea el
+     mismo. Y las de marketing no son de nadie más. */
+  const ajenos = otrosDepartamentos();
   return state.actividades.filter(a => {
+    if (ajenos.has(String(a.responsable || "").trim().toLowerCase())) return false;
     // Un ejecutivo ve lo de su cartera y, además, lo que él mismo hizo:
     // a veces cubre a un compañero y esa llamada es suya de todos modos.
     if (!puedeVerTodo() && !mios.has(a.clienteId) &&
@@ -6355,7 +6429,7 @@ function renderActividades(){
         <span class="hint">a</span>
         <input class="field" type="date" id="fHasta" value="${esc(filtroAct.hasta)}" title="Hasta">` : ""}
       <select class="field" id="fEjeAct" title="Ejecutivo">${
-        opcionesEjecutivos(filtroAct.ejecutivo, "Todos los ejecutivos")}</select>
+        opcionesEjecutivos(filtroAct.ejecutivo, "Todos los ejecutivos", true)}</select>
       <select class="field" id="fTipoAct" title="Tipo">${
         opciones(TIPOS_ACT.map(t => [t.id, t.icon + " " + t.name]), filtroAct.tipo, "Todos los tipos")}</select>
       <span style="flex:1"></span>
