@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.22-54";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.22-55";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1598,7 +1598,7 @@ function saneaCampana(c){
   const o = Object.assign({ id:"", nombre:"", canal:"meta", objetivo:"",
     desde:"", hasta:"", presupuesto:0, gastos:[], estado:"borrador",
     responsable:"", notas:"", utmSource:"", utmMedium:"", utmCampaign:"",
-    metaIds:[], createdAt:"", updatedAt:"" }, c || {});
+    metaIds:[], origen:"", createdAt:"", updatedAt:"" }, c || {});
   o.id = o.id || nuevoId("mk");
   for (const k of ["nombre","objetivo","responsable","notas","utmSource","utmMedium","utmCampaign"])
     o[k] = String(o[k] || "").trim();
@@ -1612,6 +1612,10 @@ function saneaCampana(c){
      del hotel suele ser dos o tres de Meta —prospección y remarketing—, y
      sumarlas por separado no diría lo que costó traer a esa gente. Son ids de
      Meta, de puros dígitos: se escogen de una lista, nunca se teclean. */
+  /* De dónde salió: "meta" si la trajo la sincronización, vacío si la capturó
+     una persona. Sirve para poder limpiar lo que trajo la máquina sin tocar lo
+     que escribió alguien. */
+  o.origen = o.origen === "meta" ? "meta" : "";
   o.metaIds = (Array.isArray(o.metaIds) ? o.metaIds : [])
     .map(x => String(x || "").trim())
     .filter((x, i, a) => x && /^\d+$/.test(x) && a.indexOf(x) === i)
@@ -7750,6 +7754,7 @@ function tiraMeta(){
       funciona igual. El paso a paso está en <b>META.md</b>.</div>`;
 
   const s = metaSync;
+  const huecas = campanasHuecasDeMeta().length;
   const bien = s && s.ok;
   const punto = !s ? "○" : bien ? "●" : "▲";
   const color = !s ? "var(--muted)" : bien ? "var(--ok)" : "var(--bad)";
@@ -7767,6 +7772,9 @@ function tiraMeta(){
       ${s && s.cuenta ? `<span class="hint">· ${esc(s.cuenta)}</span>` : ""}
       <span style="flex:1"></span>
       <span class="hint" id="metaDicho"></span>
+      ${huecas ? `<button class="btn sm" id="bMetaLimpia"
+        title="Las que entraron solas y nunca tuvieron gasto, presupuesto ni prospectos">
+        Quitar ${huecas} sin movimiento</button>` : ""}
       <label class="hint" for="metaDias">Traer</label>
       <select class="field" id="metaDias" style="width:auto;padding:4px 8px">
         ${[[7, "7 días"], [30, "30 días"], [92, "3 meses"]].map(([n, t]) =>
@@ -7797,27 +7805,34 @@ const mismoNombre = n => String(n || "").trim().toLowerCase()
   .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
 
 /**
- * Trae al CRM las campañas que Meta tiene ACTIVAS.
+ * Trae al CRM las campañas de Meta que de verdad están corriendo.
  *
- * La lista del CRM es la del hotel: lleva presupuesto, gasto capturado y de
- * ella cuelgan los prospectos. La de Meta es otra cosa. Traerlas solas ahorra
- * capturarlas, pero hay tres cuidados, y son la mitad de esta función:
+ * "Corriendo" quiere decir QUE GASTARON en el periodo que se acaba de traer, y
+ * no lo que Meta llama ACTIVE. Los dos no son lo mismo y la diferencia se paga
+ * caro: una campaña con su interruptor encendido pero con todos sus conjuntos
+ * de anuncios apagados sigue saliendo ACTIVE, aunque lleve dos años sin mover
+ * un peso. Con la primera regla se trajeron diecinueve campañas de las cuales
+ * una sola estaba viva, y quien lleva las redes lo notó de inmediato.
+ *
+ * El gasto no miente: si Meta cobró, la campaña corrió.
+ *
+ * Los otros dos cuidados, que son la mitad de esta función:
  *
  *   1. Si su id de Meta ya está enlazado en alguna campaña, NO se toca. Es lo
  *      que hace que sincronizar diez veces no deje diez copias.
  *   2. Si hay una capturada a mano con el mismo nombre y sin enlace, se le pone
  *      el enlace en vez de crear otra al lado. Es el caso de quien ya tenía
  *      "Bodas verano 2026" antes de conectar Meta.
- *   3. Sólo entran las ACTIVAS. Una cuenta acumula años de campañas apagadas.
  *
  * Lo que NO hace, también a propósito: no borra, no apaga y no renombra. El
  * estado y el nombre de una campaña del CRM son del hotel; si en Meta la pausan
  * o le cambian el nombre, aquí se queda como está, porque así la conoce la
  * gente que la trabaja.
  */
-function traeCampanasDeMeta(lista){
+function traeCampanasDeMeta(lista, gastaron){
+  const corrieron = gastaron instanceof Set ? gastaron : new Set();
   const activas = (lista || []).filter(c =>
-    /^ACTIVE$/i.test(String(c.estado || "")) && String(c.id || "").trim());
+    String(c.id || "").trim() && corrieron.has(String(c.id)));
 
   const enlazados = new Set();
   for (const c of state.campanas) for (const id of c.metaIds || []) enlazados.add(String(id));
@@ -7846,8 +7861,9 @@ function traeCampanasDeMeta(lista){
     const c = saneaCampana({
       nombre: String(m.nombre || "").slice(0, 120) || "(sin nombre en Meta)",
       canal: "meta",
-      estado: "activa",
+      estado: /^ACTIVE$/i.test(String(m.estado || "")) ? "activa" : "pausada",
       metaIds: [id],
+      origen: "meta",
       responsable: miNombre(),
       notas: "Se trajo de Meta el " + fechaTexto(hoyISO()) + "."
     });
@@ -7859,6 +7875,31 @@ function traeCampanasDeMeta(lista){
 
   if (nuevas || enlazadas) guardar();
   return { nuevas, enlazadas, cortadas, activas: activas.length };
+}
+
+/**
+ * Las campañas que trajo la sincronización y resultaron cascarón vacío.
+ *
+ * Son las que entraron con la regla vieja —la de "activa en Meta"— y nunca
+ * tuvieron nada: ni gasto de Meta, ni gasto capturado, ni presupuesto, ni un
+ * prospecto, ni un cliente. Borrarlas no pierde un solo dato, y si alguna vuelve
+ * a correr se trae sola en la siguiente sincronización.
+ *
+ * Lo capturado por una persona NUNCA entra aquí, aunque esté igual de vacío: si
+ * alguien se tomó la molestia de escribirlo, se queda.
+ */
+function campanasHuecasDeMeta(){
+  const conGasto = new Set((metaMetricas || [])
+    .filter(f => (Number(f.gasto) || 0) > 0).map(f => String(f.objeto)));
+  return state.campanas.filter(c => {
+    const laTrajoMeta = c.origen === "meta" || /^Se trajo de Meta/.test(String(c.notas || ""));
+    if (!laTrajoMeta) return false;
+    if (gastoCampana(c) || Number(c.presupuesto) || 0) return false;
+    if ((c.metaIds || []).some(id => conGasto.has(String(id)))) return false;
+    if (state.prospectos.some(p => p.campanaId === c.id)) return false;
+    if (state.clientes.some(x => x.campanaId === c.id)) return false;
+    return true;
+  });
 }
 
 /**
@@ -7882,6 +7923,22 @@ function cargaMeta(vuelveAPintar){
 function enganchaTiraMeta(cont, alTerminar){
   const b = cont.querySelector("#bMetaSync");
   if (!b) return;
+  const limpia = cont.querySelector("#bMetaLimpia");
+  if (limpia) limpia.onclick = () => {
+    const fuera = campanasHuecasDeMeta();
+    if (!fuera.length) return;
+    if (!confirm(`Se van a quitar ${fuera.length} campaña(s) que entraron solas y nunca ` +
+      "tuvieron gasto, presupuesto ni prospectos:\n\n" +
+      fuera.slice(0, 12).map(c => "· " + c.nombre).join("\n") +
+      (fuera.length > 12 ? `\n· …y ${fuera.length - 12} más` : "") +
+      "\n\nSi alguna vuelve a correr en Meta, se trae sola en la siguiente " +
+      "sincronización.\n\n¿Quitarlas?")) return;
+    const ids = new Set(fuera.map(c => c.id));
+    state.campanas = state.campanas.filter(c => !ids.has(c.id));
+    guardar();
+    if (alTerminar) alTerminar();
+  };
+
   const cuantos = cont.querySelector("#metaDias");
   if (cuantos) cuantos.onchange = () => { metaDias = Number(cuantos.value) || 7; };
 
@@ -7897,12 +7954,21 @@ function enganchaTiraMeta(cont, alTerminar){
         ? j.filas + " días de cifras, del " + j.desde + " al " + j.hasta
         : "Meta no reportó gasto en esos días"];
 
-      /* Y de paso, las campañas que Meta tiene activas. Se pregunta aquí y no
-         en cada dibujo de la pantalla: traer cosas a la cartera es una acción,
-         y las acciones se hacen cuando alguien aprieta un botón. */
+      /* Y de paso, las campañas que corrieron. Se pregunta aquí y no en cada
+         dibujo de la pantalla: traer cosas a la cartera es una acción, y las
+         acciones se hacen cuando alguien aprieta un botón.
+
+         El orden importa: primero se leen las cifras que se acaban de guardar
+         —ésas dicen QUIÉN GASTÓ en el periodo—, y hasta entonces se pide el
+         catálogo, que nada más pone los nombres. Al revés se traería lo que
+         Meta llama activo, que no es lo mismo que estar corriendo. */
       try{
+        const recien = (await pedirMeta(j.desde, j.hasta)) || [];
+        const gastaron = new Set(recien
+          .filter(f => (Number(f.gasto) || 0) > 0)
+          .map(f => String(f.objeto)));
         const cat = await llamaMeta({ accion: "catalogo" });
-        const r = traeCampanasDeMeta(cat.campanas);
+        const r = traeCampanasDeMeta(cat.campanas, gastaron);
         if (r.nuevas) partes.push(r.nuevas + (r.nuevas === 1
           ? " campaña nueva de Meta" : " campañas nuevas de Meta"));
         if (r.enlazadas) partes.push(r.enlazadas + (r.enlazadas === 1

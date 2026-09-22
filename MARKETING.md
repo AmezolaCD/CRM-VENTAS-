@@ -47,9 +47,10 @@ búsqueda pagada, una feria.
 
 - **Canal**: Meta, Google, OTA, expo, referido, orgánico u otro. No es texto libre a propósito.
   Si cada quien escribe «face», «Facebook» y «FB», ningún reporte cuadra nunca.
-- **Las de Meta se traen solas.** Al apretar *Sincronizar*, las campañas que Meta tiene activas
-  entran al CRM ya enlazadas, sin capturarlas. No se duplican, y si una ya estaba capturada a
-  mano con el mismo nombre se le pone el enlace en vez de crear otra.
+- **Las de Meta se traen solas.** Al apretar *Sincronizar*, las campañas que **estuvieron
+  corriendo** —las que gastaron en el periodo, no las que Meta marca como activas— entran al CRM
+  ya enlazadas, sin capturarlas. No se duplican, y si una ya estaba capturada a mano con el
+  mismo nombre se le pone el enlace en vez de crear otra.
 - **Presupuesto y gasto**: el gasto se captura **mes por mes**, como lo cobra la plataforma. La
   pantalla va sumando y **avisa en rojo cuando se pasa del presupuesto**.
 - **Leads**: la columna dice cuántos prospectos trajo. Hoy se llena cuando el prospecto se

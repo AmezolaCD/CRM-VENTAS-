@@ -94,7 +94,7 @@ hace igual.
 
 En **Campañas** aparece una tira arriba que dice cómo va la conexión. Se aprieta
 **Sincronizar** y pasan dos cosas: se traen los últimos siete días de cifras y **se traen solas
-las campañas que Meta tiene activas**, ya enlazadas.
+las campañas que estuvieron corriendo**, ya enlazadas.
 
 #### Por qué casi todas salen sin gasto la primera vez
 
@@ -115,15 +115,28 @@ Las de otros canales —Google, una expo, un convenio con una agencia— se sigu
 
 #### Las reglas de lo que se trae, para cuando algo no aparezca
 
-- **Sólo las ACTIVAS en Meta.** Una cuenta publicitaria acumula años de campañas apagadas y no
-  tienen por qué llenar la pantalla. Si hace falta una vieja, se enlaza a mano: en la campaña,
-  **Enlace con Meta → Escoger de Meta**.
+- **Sólo las que gastaron** en el periodo que se acaba de traer. *Activa* en Meta **no** quiere
+  decir *corriendo*: una campaña con su interruptor encendido y todos sus conjuntos de anuncios
+  apagados sigue saliendo como activa, aunque lleve dos años sin mover un peso. El gasto no
+  miente. Si hace falta una que no gastó, se enlaza a mano: en la campaña, **Enlace con Meta →
+  Escoger de Meta**.
 - **Nunca se duplican.** Si el id de Meta ya está enlazado en alguna campaña, no se vuelve a
   traer. Sincronizar diez veces no deja diez copias.
 - **Si ya estaba capturada a mano con el mismo nombre, se le pone el enlace** en vez de crear
   otra al lado. El presupuesto y el gasto que ya tenía se quedan.
 - **De 50 en 50.** Si la cuenta trae más campañas activas que eso, se traen las primeras y la
   tira dice cuántas faltaron; con volver a sincronizar entran las demás.
+
+#### Si ya entraron campañas que nadie está corriendo
+
+Pasa si se sincronizó con la regla vieja, la de «activa en Meta». En la tira aparece un botón
+**Quitar N sin movimiento**, y se lleva únicamente las que **trajo la sincronización** y
+quedaron en nada: sin gasto de Meta, sin gasto capturado, sin presupuesto, sin un prospecto y
+sin un cliente.
+
+Lo que escribió una persona **no se toca nunca**, aunque esté igual de vacío. Y si alguna de
+las que se quitaron vuelve a correr, se trae sola en la siguiente sincronización: no se pierde
+nada.
 
 #### Lo que Meta NO manda en el CRM
 
