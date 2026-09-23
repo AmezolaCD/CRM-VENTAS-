@@ -673,10 +673,10 @@ window.CORE_NUBE = { url:"", anon:"" };
     <button data-view="contratosbq">Contratos banquetes</button>
     <button data-view="mktdash">Tablero de marketing</button>
     <button data-view="campanas">Campañas</button>
-    <button data-view="utms">Atribución &amp; UTMs</button>
     <button data-view="calendario">Calendario</button>
     <button data-view="reportes">Reportes</button>
     <button data-view="confirmaciones">Confirmaciones</button>
+    <button data-view="leads">Leads</button>
     <button data-view="formulario">Formulario</button>
     <button data-view="ajustes">Ajustes</button>
   </nav>
@@ -709,10 +709,10 @@ window.CORE_NUBE = { url:"", anon:"" };
   <section class="view" id="v-contratosbq"><div class="table-wrap" id="tblContratosBq"></div></section>
   <section class="view" id="v-mktdash"><div class="table-wrap" id="tblMktDash"></div></section>
   <section class="view" id="v-campanas"><div class="table-wrap" id="tblCampanas"></div></section>
-  <section class="view" id="v-utms"><div class="table-wrap" id="tblUtms"></div></section>
   <section class="view" id="v-calendario"><div class="table-wrap" id="tblCalendario"></div></section>
   <section class="view" id="v-reportes"><div class="table-wrap" id="tblReportes"></div></section>
   <section class="view" id="v-confirmaciones"><div class="table-wrap" id="tblConfirm"></div></section>
+  <section class="view" id="v-leads"><div class="table-wrap" id="tblLeads"></div></section>
   <section class="view" id="v-formulario"><div class="table-wrap" id="tblFormulario"></div></section>
   <section class="view" id="v-ajustes"><div class="table-wrap" id="panelAjustes"></div></section>
 </main>
@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.23-64";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.23-65";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1166,8 +1166,8 @@ const USUARIOS_DEF = [
  * otra pestaña a la que pueda irse.
  */
 const VISTAS = ["tablero","clientes","actividades","convenios","contratos",
-                "eventos","contratosbq","mktdash","campanas","utms","calendario","reportes",
-                "confirmaciones","formulario","ajustes"];
+                "eventos","contratosbq","mktdash","campanas","calendario","reportes",
+                "confirmaciones","leads","formulario","ajustes"];
 /* Lo de banquetes es de banquetes. Gerencia de ventas ve toda la cartera y
    todo el hospedaje, pero los eventos son de otro departamento: no le
    aparecen, ni en sus pestañas ni en el calendario ni en los reportes. La
@@ -1175,7 +1175,7 @@ const VISTAS = ["tablero","clientes","actividades","convenios","contratos",
 const SOLO_BANQUETES = ["eventos","contratosbq"];
 /* Y lo de marketing es de marketing: ventas y banquetes no tienen por qué
    cargar con las campañas ni con el armador de ligas. */
-const SOLO_MARKETING = ["mktdash","campanas","utms"];
+const SOLO_MARKETING = ["mktdash","campanas"];
 
 /**
  * Los departamentos del hotel.
@@ -1192,17 +1192,34 @@ const DEPARTAMENTOS = [
   { id:"ventas", name:"Ventas", icono:"🛏️",
     sub:"Convenios de tarifas, contratos de estancia y confirmaciones de hospedaje",
     vistas:["tablero","clientes","actividades","convenios","contratos",
-            "confirmaciones","calendario","reportes","formulario"] },
+            "confirmaciones","calendario","reportes","leads","formulario"] },
   { id:"banquetes", name:"Banquetes", icono:"🍽️",
     sub:"Cotizaciones y contratos de eventos, con su calendario y sus reportes",
     vistas:["tablero","clientes","actividades","eventos","contratosbq",
-            "calendario","reportes","formulario"] },
+            "calendario","reportes","leads","formulario"] },
   { id:"marketing", name:"Marketing", icono:"📣",
     sub:"Campañas, ligas con UTMs y los prospectos que traen",
-    vistas:["mktdash","campanas","utms","formulario"] }
+    vistas:["mktdash","campanas","leads","formulario"] }
 ];
 
 /** Qué departamentos alcanza cada papel. Vacío = no aplica, no se le pregunta. */
+/**
+ * Las dos áreas que se reparten los leads.
+ *
+ * Un lead que pregunta por salones es de banquetes y uno que pregunta por
+ * habitaciones es de ventas, y no hay manera de saberlo desde Meta: lo escoge
+ * quien reparte. De aquí sale también a quién se le puede asignar, porque la
+ * lista de ejecutivos se acota al área.
+ */
+const AREAS_LEAD = [
+  { id:"ventas",    name:"Hospedaje",  ayuda:"Habitaciones, grupos, convenios de tarifas" },
+  { id:"banquetes", name:"Banquetes",  ayuda:"Salones, bodas, eventos, catering" }
+];
+const infoArea = id => AREAS_LEAD.find(a => a.id === id) || null;
+
+/* Sus ids son los de los departamentos a propósito: así la lista de ejecutivos
+   de un área sale de nombresDelDepto() sin traducir nada. */
+
 const DEPTOS_ROL = {
   admin:         ["ventas","banquetes","marketing"],
   direccion:     ["ventas","banquetes","marketing"],
@@ -1252,13 +1269,13 @@ const VISTAS_ROL = {
   captura:   ["formulario"],
   // Banquetes comparte la cartera, pero el hospedaje no es asunto suyo.
   banquetes: ["tablero","clientes","actividades","eventos","contratosbq",
-              "calendario","reportes","formulario"],
+              "calendario","reportes","leads","formulario"],
   gte_banquetes: ["tablero","clientes","actividades","eventos","contratosbq",
-                  "calendario","reportes","formulario"],
+                  "calendario","reportes","leads","formulario"],
   /* Marketing no alcanza la cartera: lo suyo son las campañas, las ligas y los
      prospectos que ellos mismos levantan. Se decidió así a propósito. */
-  marketing:     ["mktdash","campanas","utms","formulario"],
-  gte_marketing: ["mktdash","campanas","utms","formulario"]
+  marketing:     ["mktdash","campanas","leads","formulario"],
+  gte_marketing: ["mktdash","campanas","leads","formulario"]
 };
 
 /** ¿A esta persona le toca ver los eventos de banquetes? */
@@ -1496,14 +1513,23 @@ function opcionesEjecutivos(valor, todos, soloMiDepto){
  * El ejecutivo de un cliente se escoge de la lista, no se escribe: un nombre
  * con una letra de más deja al cliente sin dueño y nadie lo vuelve a ver.
  */
-function selectEjecutivo(valor, nombreCampo){
+function selectEjecutivo(valor, nombreCampo, deArea){
   const v = String(valor || "").trim(), vb = v.toLowerCase();
-  const equipo = nombresEquipo();
+  /* Con un área, sólo los de esa área: un lead de salones no se le manda a
+     alguien de hospedaje nada más porque estaba en la lista. Si el que ya
+     estaba puesto no es de ahí, se conserva de todos modos —abajo, como
+     "suelto"—, porque perderlo callando sería peor que ofrecerlo de más. */
+  /* Y sin la dirección ni la administración: alcanzan las tres áreas, pero no
+     trabajan leads ni llevan cartera. Ofrecerlos es ofrecer un callejón. */
+  const mandos = deArea ? nombresSinBitacora() : new Set();
+  const equipo = (deArea ? nombresDelDepto(deArea) : nombresEquipo())
+    .filter(n => !mandos.has(n.trim().toLowerCase()));
   const suelto = v && !equipo.some(n => n.toLowerCase() === vb);
   return `<select class="field" name="${nombreCampo || "ejecutivo"}">
       <option value=""${v ? "" : " selected"}>— Sin asignar —</option>
       ${equipo.map(n => `<option value="${esc(n)}"${n.toLowerCase() === vb ? " selected" : ""}>${esc(n)}</option>`).join("")}
-      ${suelto ? `<option value="${esc(v)}" selected>${esc(v)} · sin dar de alta</option>` : ""}
+      ${suelto ? `<option value="${esc(v)}" selected>${esc(v)}${
+          deArea ? " · de otra área" : " · sin dar de alta"}</option>` : ""}
     </select>`;
 }
 
@@ -1774,10 +1800,13 @@ function etiquetaUtm(c){
 function saneaProspecto(p){
   const o = Object.assign({ id:"", nombre:"", apellido:"", compania:"", email:"", telefono:"",
     evento:"", notas:"", capturadoPor:"", fecha:"", clienteId:"",
-    canal:"", campanaId:"", utm:null, createdAt:"", updatedAt:"" }, p || {});
+    canal:"", campanaId:"", utm:null, asignadoA:"", area:"",
+    createdAt:"", updatedAt:"" }, p || {});
   o.id = o.id || nuevoId("p");
-  for (const k of ["nombre","apellido","compania","email","telefono","evento","notas","capturadoPor"])
+  for (const k of ["nombre","apellido","compania","email","telefono","evento","notas",
+                   "capturadoPor","asignadoA"])
     o[k] = String(o[k] || "").trim();
+  o.area = infoArea(o.area) ? o.area : "";
   o.email = o.email.toLowerCase();
   o.clienteId = String(o.clienteId || "");
   o.fecha = String(o.fecha || "").slice(0, 16);
@@ -2715,7 +2744,13 @@ function duenioDe(fila){
                                           deCliente(fila.datos.clienteId);
   if (fila.tipo === "eventos")     return String(fila.datos.ejecutivo || "").trim() ||
                                           deCliente(fila.datos.clienteId);
-  if (fila.tipo === "prospectos")  return String(fila.datos.capturadoPor || "").trim() || null;
+  /* Manda el asignado sobre el que lo capturó. Son cosas distintas: capturar
+     es teclear, asignar es trabajarlo. Y de este renglón sale la columna
+     `duenio` con la que roles.sql reparte, así que sin esto el ejecutivo al
+     que se le asigna un lead NO LO RECIBIRÍA del servidor: lo seguiría viendo
+     quien lo tecleó, que muchas veces es marketing y no tiene cartera. */
+  if (fila.tipo === "prospectos")  return String(fila.datos.asignadoA || "").trim() ||
+                                          String(fila.datos.capturadoPor || "").trim() || null;
   // Las campañas no se reparten: son del área, no de quien las capturó. Sin
   // dueño marcado, el servidor se las entrega a todo marketing.
   return null;
@@ -4077,10 +4112,10 @@ function render(){
   if (vista === "contratosbq") renderContratosBq();
   if (vista === "mktdash") renderMktDash();
   if (vista === "campanas") renderCampanas();
-  if (vista === "utms") renderUtms();
   if (vista === "calendario") renderCalendario();
   if (vista === "reportes") renderReportes();
   if (vista === "confirmaciones") renderConfirmaciones();
+  if (vista === "leads") renderLeads();
   if (vista === "formulario") renderFormulario();
   /* Los Ajustes son una pantalla entera de campos que se llenan a mano —la
      lista de usuarios, el catálogo de habitaciones, los datos del hotel— y que
@@ -4340,6 +4375,265 @@ function renderConvenios(){
 }
 
 /* ==========================================================================
+   LEADS
+
+   Todo lo que llega, en una sola lista, para repartirlo.
+
+   El Formulario sigue siendo la captura de prospección en eventos, con su
+   tableta. Esto es lo otro: la cola de trabajo. Lo que importa aquí no es
+   capturar sino DECIDIR —de qué área es y quién lo trabaja—, porque un lead
+   sin dueño es un lead que nadie contesta.
+   ========================================================================== */
+
+let filtroLeads = { q:"", campana:"", area:"", sinAsignar:false };
+
+function leadsVisibles(){
+  const q = filtroLeads.q.trim().toLowerCase();
+  return state.prospectos.filter(p => {
+    if (!leadEsMio(p)) return false;
+    if (filtroLeads.campana && p.campanaId !== filtroLeads.campana) return false;
+    if (filtroLeads.area && p.area !== filtroLeads.area) return false;
+    if (filtroLeads.sinAsignar && String(p.asignadoA || "").trim()) return false;
+    if (!q) return true;
+    return [p.nombre, p.apellido, p.compania, p.email, p.telefono, p.evento, p.notas,
+            nombreCampanaDe(p)].join(" ").toLowerCase().includes(q);
+  }).sort((a,b) => String(b.fecha).localeCompare(String(a.fecha)));
+}
+
+/** De qué campaña del CRM vino, por su nombre. */
+const nombreCampanaDe = p => {
+  const c = campana(p.campanaId);
+  return c ? c.nombre : "";
+};
+
+function renderLeads(){
+  const cont = document.getElementById("tblLeads");
+  const ls = leadsVisibles();
+  const sinAsignar = state.prospectos.filter(p =>
+    leadEsMio(p) && !String(p.asignadoA || "").trim() && !p.clienteId).length;
+  const conCampana = [...new Set(state.prospectos.map(p => p.campanaId).filter(Boolean))]
+    .map(campana).filter(Boolean);
+
+  const cab = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <b style="font-size:15px">Leads</b>
+      <span class="hint">${ls.length} de ${state.prospectos.length}</span>
+      <span style="flex:1"></span>
+      <button class="btn primary" id="bLeadWa">+ Lead de WhatsApp</button></div>
+    <div class="note">Todo lo que llega: de los anuncios, de la tableta del lobby y lo
+      capturado a mano. Lo que hay que hacer aquí es <b>repartirlo</b>: decir de qué área es
+      y quién lo trabaja. Un lead sin dueño es un lead que nadie contesta.</div>
+    ${sinAsignar ? `<div class="note warn"><b>${sinAsignar}
+      ${sinAsignar === 1 ? "lead está" : "leads están"} sin asignar.</b>
+      <button class="btn sm" id="bSoloSin" style="margin-left:8px">${
+        filtroLeads.sinAsignar ? "Ver todos" : "Ver sólo ésos"}</button></div>` : ""}
+    <div style="display:flex;gap:8px;align-items:center;margin:12px 0;flex-wrap:wrap">
+      <input class="field" id="qLeads" placeholder="Buscar nombre, teléfono, correo…"
+        value="${esc(filtroLeads.q)}" style="flex:1;min-width:200px">
+      <select class="field" id="fLeadCamp" style="width:auto">
+        <option value="">Todas las campañas</option>
+        ${conCampana.map(c => `<option value="${c.id}"${
+          c.id === filtroLeads.campana ? " selected" : ""}>${esc(c.nombre)}</option>`).join("")}
+      </select>
+      <select class="field" id="fLeadArea" style="width:auto">
+        <option value="">Las dos áreas</option>
+        ${AREAS_LEAD.map(a => `<option value="${a.id}"${
+          a.id === filtroLeads.area ? " selected" : ""}>${esc(a.name)}</option>`).join("")}
+      </select>
+      <button class="btn" id="bCsvLeads">Exportar CSV</button></div>`;
+
+  if (!ls.length){
+    cont.innerHTML = cab + `<div class="vacio">${state.prospectos.length
+      ? "Ningún lead cuadra con lo que se está filtrando."
+      : "Todavía no ha llegado ningún lead."}<br>
+      <span class="hint">${state.prospectos.length ? "" :
+        "Entran solos por la liga que se pega en cada anuncio —está en la carta de la campaña—, por la tableta del lobby, o a mano con el botón de arriba."}</span></div>`;
+  } else {
+    cont.innerHTML = cab + `<div style="overflow:auto"><table class="data">
+      <thead><tr><th>Llegó</th><th>Quién</th><th>Contacto</th><th>De qué campaña</th>
+        <th>Área</th><th>Asignado a</th><th>Estado</th><th></th></tr></thead>
+      <tbody>${ls.map(p => {
+        const c = campana(p.campanaId);
+        const padre = c ? deQueCampana(c) : "";
+        const a = infoArea(p.area);
+        return `<tr data-lead="${p.id}">
+          <td class="nowrap">${esc(fechaCorta(String(p.fecha).slice(0,10)))}</td>
+          <td><b>${esc(nombreProspecto(p))}</b>${p.compania
+            ? `<div class="hint">${esc(p.compania)}</div>` : ""}</td>
+          <td class="nowrap">${esc(p.telefono || "—")}${p.email
+            ? `<div class="hint">${esc(p.email)}</div>` : ""}</td>
+          <td>${c ? esc(c.nombre) : `<span class="hint">${esc(p.evento || "—")}</span>`}${
+            padre ? `<div class="hint">${esc(padre)}</div>` : ""}</td>
+          <td class="nowrap">${a ? esc(a.name) : `<span class="hint">—</span>`}</td>
+          <td class="nowrap">${p.asignadoA
+            ? esc(p.asignadoA)
+            : `<span class="hint" style="color:var(--bad)">Sin asignar</span>`}</td>
+          <td class="nowrap">${p.clienteId
+            ? `<span class="pill" style="background:var(--ok-soft);color:var(--ok)">En cartera</span>`
+            : `<span class="hint">Sin trabajar</span>`}</td>
+          <td class="nowrap"><button class="btn sm primary" data-asig="${p.id}">${
+            p.asignadoA ? "Reasignar" : "Asignar"}</button></td>
+        </tr>`;
+      }).join("")}</tbody></table></div>`;
+  }
+
+  const q = sel => cont.querySelector(sel);
+  q("#qLeads").oninput = e => {
+    filtroLeads.q = e.target.value;
+    renderLeads();
+    const c = cont.querySelector("#qLeads");
+    c.focus(); c.setSelectionRange(c.value.length, c.value.length);
+  };
+  q("#fLeadCamp").onchange = e => { filtroLeads.campana = e.target.value; renderLeads(); };
+  q("#fLeadArea").onchange = e => { filtroLeads.area = e.target.value; renderLeads(); };
+  const bSin = q("#bSoloSin");
+  if (bSin) bSin.onclick = () => { filtroLeads.sinAsignar = !filtroLeads.sinAsignar; renderLeads(); };
+  q("#bLeadWa").onclick = () => leadDeWhatsApp();
+  q("#bCsvLeads").onclick = () => {
+    const cab = ["Llegó","Nombre","Compañía","Teléfono","Correo","Campaña","Área",
+                 "Asignado a","Capturó","Estado","Notas"];
+    descargar(`leads-${hoyISO()}.csv`, toCSV([cab].concat(ls.map(p =>
+      [p.fecha, nombreProspecto(p), p.compania, p.telefono, p.email,
+       nombreCampanaDe(p), (infoArea(p.area) || {}).name || "", p.asignadoA,
+       p.capturadoPor, p.clienteId ? "En cartera" : "Sin trabajar", p.notas]))), "text/csv");
+  };
+  cont.querySelectorAll("[data-asig]").forEach(b =>
+    b.onclick = () => asignarLead(b.dataset.asig));
+}
+
+/**
+ * Repartir un lead: de qué área es, y quién lo trabaja.
+ *
+ * Los dos juntos y en ese orden, porque el área manda sobre la lista de
+ * ejecutivos: un lead de salones sólo se le puede pasar a alguien de
+ * banquetes. Meta no dice de qué es —sus anuncios traen "conversaciones", no
+ * intenciones—, así que lo decide quien reparte, leyendo lo que pidió.
+ */
+function asignarLead(id){
+  const p = state.prospectos.find(x => x.id === id);
+  if (!p) return;
+
+  const ov = modal(`
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head"><h2>Asignar el lead</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note"><b>${esc(nombreProspecto(p))}</b>${p.telefono
+          ? " · " + esc(p.telefono) : ""}${nombreCampanaDe(p)
+          ? `<br><span class="hint">Llegó por ${esc(nombreCampanaDe(p))}</span>` : ""}
+          ${p.evento || p.notas ? `<br><span class="hint">${esc(
+            [p.evento, p.notas].filter(Boolean).join(" · "))}</span>` : ""}</div>
+        <div class="grid">
+          <div class="full"><label class="lbl">¿De qué es?</label>
+            <select class="field" id="alArea">
+              <option value="">— Escoja —</option>
+              ${AREAS_LEAD.map(a => `<option value="${a.id}"${
+                a.id === p.area ? " selected" : ""}>${esc(a.name)} · ${esc(a.ayuda)}</option>`).join("")}
+            </select></div>
+          <div class="full"><label class="lbl">¿Quién lo trabaja?</label>
+            <div id="alQuien"></div>
+            <div class="hint">Sólo salen los del área escogida.</div></div>
+        </div>
+        <div id="alErr"></div>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="bOkAsig">Asignar</button></div>
+    </div>`);
+
+  const q = sel => ov.querySelector(sel);
+  const pintaQuien = () => {
+    const area = q("#alArea").value;
+    q("#alQuien").innerHTML = area
+      ? selectEjecutivo(p.asignadoA, "alEje", area)
+      : `<span class="hint">Primero escoja de qué es.</span>`;
+  };
+  pintaQuien();
+  q("#alArea").onchange = pintaQuien;
+
+  q("#bOkAsig").onclick = () => {
+    const area = q("#alArea").value;
+    const eje = (q('[name="alEje"]') || {}).value || "";
+    if (!area || !eje.trim()){
+      q("#alErr").innerHTML = `<div class="errbox">Hace falta el área y el ejecutivo:
+        sin los dos, el lead se queda sin dueño y nadie lo contesta.</div>`;
+      return;
+    }
+    p.area = area;
+    p.asignadoA = eje.trim();
+    p.updatedAt = new Date().toISOString();
+    guardar(); render(); ov.remove();
+  };
+}
+
+/**
+ * Un lead de WhatsApp, a mano y en diez segundos.
+ *
+ * Los anuncios del hotel son de mensajes, y Meta NO entrega esas
+ * conversaciones por su API: para eso el número tendría que estar en la Cloud
+ * API. Mientras tanto, quien contesta el teléfono lo mete aquí con lo mínimo
+ * —quién es, su teléfono y de qué anuncio venía— y el lead deja de perderse.
+ */
+function leadDeWhatsApp(){
+  const cs = campanasVisibles();
+  const ov = modal(`
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head"><h2>Lead de WhatsApp</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note">Para el que escribió por WhatsApp desde un anuncio. Con el
+          teléfono y la campaña basta: lo demás se completa después.</div>
+        <div class="grid">
+          <div><label class="lbl">Nombre</label>
+            <input class="field" id="waNom" placeholder="Como se presentó"></div>
+          <div><label class="lbl">Teléfono</label>
+            <input class="field" id="waTel" inputmode="tel" placeholder="6641234567"></div>
+          <div class="full"><label class="lbl">¿De qué anuncio venía?</label>
+            <select class="field" id="waCamp">
+              <option value="">— No sé / no venía de uno —</option>
+              ${cs.map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join("")}
+            </select></div>
+          <div class="full"><label class="lbl">¿Qué pidió?</label>
+            <select class="field" id="waArea">
+              <option value="">— Escoja —</option>
+              ${AREAS_LEAD.map(a => `<option value="${a.id}">${esc(a.name)} · ${esc(a.ayuda)}</option>`).join("")}
+            </select></div>
+          <div class="full"><label class="lbl">Nota <span class="hint">opcional</span></label>
+            <input class="field" id="waNota" placeholder="Pidió salón para 150 el 14 de febrero"></div>
+        </div>
+        <div id="waErr"></div>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="bOkWa">Guardar</button></div>
+    </div>`);
+
+  const q = sel => ov.querySelector(sel);
+  q("#bOkWa").onclick = () => {
+    const nombre = q("#waNom").value.trim();
+    const tel = q("#waTel").value.trim();
+    if (!nombre && !tel){
+      q("#waErr").innerHTML = `<div class="errbox">Hace falta al menos el nombre o el
+        teléfono: sin uno de los dos no hay a quién volverle a hablar.</div>`;
+      return;
+    }
+    const camp = campana(q("#waCamp").value);
+    state.prospectos.push(saneaProspecto({
+      nombre: nombre || "(sin nombre)",
+      telefono: tel,
+      canal: camp ? camp.canal : "meta",
+      campanaId: camp ? camp.id : "",
+      area: q("#waArea").value,
+      capturadoPor: miNombre(),
+      fecha: ahoraLocal(),
+      notas: ["Escribió por WhatsApp.", q("#waNota").value.trim()].filter(Boolean).join(" "),
+      createdAt: new Date().toISOString()
+    }));
+    guardar(); render(); ov.remove();
+  };
+  q("#waNom").focus();
+}
+
+/* ==========================================================================
    FORMULARIO DE PROSPECCIÓN
 
    Lo que se llena en un stand, de pie y con prisa: cinco campos y listo. No
@@ -4350,10 +4644,19 @@ function renderConvenios(){
 let filtroPros = { q:"", evento:"" };
 let ultimoEvento = "";      // se repite solo: en una expo todos son del mismo
 
-const prospectosVisibles = () => {
+/** ¿Este lead es de quien está viendo la pantalla? */
+const leadEsMio = p => {
   const yo = miNombre().trim().toLowerCase();
-  const mios = p => puedeVerTodo() || veMarketing() ||
-    (!!yo && String(p.capturadoPor || "").trim().toLowerCase() === yo);
+  if (puedeVerTodo() || veMarketing()) return true;
+  if (!yo) return false;
+  // El asignado primero: es quien lo trabaja. Y quien lo capturó lo sigue
+  // viendo, porque de otro modo perdería de vista lo que él mismo levantó.
+  return String(p.asignadoA || "").trim().toLowerCase() === yo ||
+         String(p.capturadoPor || "").trim().toLowerCase() === yo;
+};
+
+const prospectosVisibles = () => {
+  const mios = leadEsMio;
   const q = filtroPros.q.trim().toLowerCase();
   return state.prospectos.filter(p => {
     if (!mios(p)) return false;
@@ -7407,8 +7710,8 @@ function editarCampana(id, alCerrar){
           <span class="hint" id="mkMetaDicho"></span></p>
 
         <h3 class="sec">Etiquetas de la liga</h3>
-        <div class="note">Con esto se arman las ligas en <i>Atribución &amp; UTMs</i>. Si se dejan
-          vacías, se toman del canal y del nombre, que es lo que conviene casi siempre.</div>
+        <div class="note">Con esto se arma la liga de aquí abajo. Si se dejan vacías, se toman
+          del canal y del nombre, que es lo que conviene casi siempre.</div>
         <div class="grid">
           <div><label class="lbl">utm_source</label>
             <input class="field" id="mkSource" value="${esc(c.utmSource)}"
@@ -7420,6 +7723,21 @@ function editarCampana(id, alCerrar){
             <input class="field" id="mkCampaign" value="${esc(c.utmCampaign)}"
               placeholder="${esc(etiquetaUtm(c))}"></div>
         </div>
+
+        <h3 class="sec">La liga para el anuncio</h3>
+        <div class="note">Es la liga que se pega <b>en este anuncio</b>. Quien la abra llega al
+          formulario del hotel, y el prospecto entra ya amarrado aquí: por eso cada conjunto
+          necesita la suya, y no la de su campaña.</div>
+        <div class="grid">
+          <div class="full"><label class="lbl">utm_content
+            <span class="hint">qué pieza (opcional, no se guarda)</span></label>
+            <input class="field" id="mkContent" placeholder="video-15s, carrusel-a"></div>
+        </div>
+        <div id="mkLiga" style="margin-top:8px"></div>
+        ${nube.sinBuzonAltas ? `<div class="note warn" style="margin-top:10px">
+          <b>La liga todavía no está lista del lado del hotel.</b> Falta correr
+          <code>prospectos.sql</code> una vez en Supabase. Mientras tanto se puede armar,
+          pero quien la abra no va a poder mandar sus datos.</div>` : ""}
 
         <h3 class="sec">Notas</h3>
         <textarea class="field" id="mkNotas" style="width:100%;min-height:70px">${esc(c.notas)}</textarea>
@@ -7535,12 +7853,97 @@ function editarCampana(id, alCerrar){
     };
   };
 
+  /* ---- La liga del anuncio ----
+     Vive aquí, en la carta de la campaña, y no en una pantalla aparte: la liga
+     es DE esta campaña, y con los conjuntos de anuncios cada renglón necesita
+     la suya. Tenerla al lado del nombre es lo que hace evidente que la de la
+     campaña vieja no sirve para un conjunto. */
+  const pintaLiga = () => {
+    const caja = q("#mkLiga");
+    if (!caja) return;
+    const k = infoCanal(q("#mkCanal").value);
+    const nombre = q("#mkNombre").value.trim() || c.nombre;
+    const utm = {
+      source:   q("#mkSource").value.trim()   || k.utm,
+      medium:   q("#mkMedium").value.trim()   || k.medio,
+      campaign: q("#mkCampaign").value.trim() || etiquetaUtm({ nombre }),
+      content:  q("#mkContent").value.trim()
+    };
+    const liga = ligaDeAlta(utm);
+    const sitio = String(state.ajustes.hotel.sitio || "").trim();
+    const alSitio = sitio ? armaLiga(sitio, utm) : "";
+
+    /* Una liga que se ve bien y no sirve es peor que ninguna: se pega en el
+       anuncio, se paga el anuncio, y los prospectos simplemente no llegan. */
+    const sinClave = !claveAltaPublicada()
+      ? `<div class="note warn" id="utmSinClave" style="margin-top:10px">
+           <b>${liga ? "Esta liga todavía no sirve." : "Todavía no se puede armar la liga."}</b>
+           La clave que la abre no ha llegado al servidor, así que quien la abra no va a
+           poder registrarse.
+           ${esAdmin()
+             ? `<br><br><button class="btn sm primary" id="bPublicarClave">Publicarla ahora</button>`
+             : `<br><br>Pídele al administrador que entre al CRM y abra la carta de cualquier
+                campaña: la clave se publica desde su cuenta, una sola vez, y a partir de ahí
+                todas las ligas funcionan —ésta y las que armes después—.`}
+         </div>`
+      : "";
+
+    caja.innerHTML = (liga
+      ? `<div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap">
+           <textarea class="field mono" id="utmLiga" readonly rows="2"
+             style="flex:1;min-width:260px">${esc(liga)}</textarea>
+           <button class="btn primary" id="bCopiarUtm">Copiar</button></div>
+         <div class="hint" id="utmAviso" style="margin-top:6px"></div>`
+      : "") + sinClave +
+      (alSitio
+        ? `<p class="hint" style="margin:12px 0 4px">O la que lleva a la página del hotel
+             —para que la campaña se amarre, esa página tiene que mandar a la gente a la liga
+             de arriba <b>conservando las etiquetas</b>—:</p>
+           <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap">
+             <textarea class="field mono" id="utmLigaSitio" readonly rows="2"
+               style="flex:1;min-width:260px">${esc(alSitio)}</textarea>
+             <button class="btn" id="bCopiarSitio">Copiar</button></div>`
+        : `<p class="hint" style="margin:12px 0 0">Si el anuncio lleva a la página del hotel en
+             vez de al formulario, escríbela en <i>Ajustes → Datos del hotel</i> y aquí sale
+             también esa liga, con sus etiquetas.</p>`);
+
+    const pub = q("#bPublicarClave");
+    if (pub) pub.onclick = async () => {
+      pub.disabled = true; pub.textContent = "Publicando…";
+      try{ await sincronizar(); }catch(e){}
+      pintaLiga();
+    };
+
+    const copiar = (boton, texto, area) => {
+      const b = q(boton);
+      if (!b) return;
+      b.onclick = async () => {
+        try{
+          await navigator.clipboard.writeText(texto);
+          if (q("#utmAviso")) q("#utmAviso").textContent = "Copiada. Ya se puede pegar en el anuncio.";
+        }catch(e){
+          // Sin permiso de portapapeles: se selecciona para que la copien a mano.
+          if (q(area)) q(area).select();
+          if (q("#utmAviso")) q("#utmAviso").textContent = "Quedó seleccionada: cópiala con Ctrl+C.";
+        }
+      };
+    };
+    copiar("#bCopiarUtm", liga, "#utmLiga");
+    copiar("#bCopiarSitio", alSitio, "#utmLigaSitio");
+  };
+
+  ["#mkSource","#mkMedium","#mkCampaign","#mkContent","#mkNombre"]
+    .forEach(sel => { const el = q(sel); if (el) el.addEventListener("input", pintaLiga); });
+
   // Los marcadores de posición siguen al canal, para que se vea qué va a salir.
   q("#mkCanal").addEventListener("change", () => {
     const k = infoCanal(q("#mkCanal").value);
     q("#mkSource").placeholder = k.utm;
     q("#mkMedium").placeholder = k.medio;
+    pintaLiga();
   });
+
+  pintaLiga();
 
   if (existente) q("#bDelCamp").onclick = () => {
     const n = leadsDeCampana(c.id);
@@ -7605,7 +8008,6 @@ function editarCampana(id, alCerrar){
    medición. Por eso aquí no se escriben a mano: se arman.
    ========================================================================== */
 
-let utmCampSel = "";
 
 /** Junta la liga con sus etiquetas, sin dejar parámetros vacíos. */
 function armaLiga(base, utm){
@@ -7617,147 +8019,6 @@ function armaLiga(base, utm){
   if (!pares.length) return limpio;
   return limpio + (limpio.includes("?") ? "&" : "?") + pares.join("&");
 }
-
-function renderUtms(){
-  const cont = document.getElementById("tblUtms");
-  const cs = campanasVisibles();
-  const sitio = String(state.ajustes.hotel.sitio || "").trim();
-
-  if (!cs.length){
-    cont.innerHTML = `<div style="max-width:760px">
-      <b style="font-size:15px">Atribución &amp; UTMs</b>
-      <div class="note" style="margin-top:12px">Primero hay que dar de alta una campaña:
-        las ligas se arman a partir de ella. Ve a <b>Campañas</b> y crea una.</div></div>`;
-    return;
-  }
-
-  if (!utmCampSel || !campana(utmCampSel)) utmCampSel = cs[0].id;
-  const c = campana(utmCampSel);
-  const k = infoCanal(c.canal);
-
-  cont.innerHTML = `<div style="max-width:820px">
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-      <b style="font-size:15px">Atribución &amp; UTMs</b>
-      <span style="flex:1"></span>
-      <label class="hint">Campaña</label>
-      <select class="field" id="utmCamp">${cs.map(x =>
-        `<option value="${x.id}"${x.id === utmCampSel ? " selected" : ""}>${esc(x.nombre)}</option>`).join("")}</select>
-    </div>
-
-    <div class="note">Pega esta liga en el anuncio, en la biografía o en el correo.
-      Quien la abra llega a la página del hotel, y la campaña viaja con él.
-      <b>No se escriben a mano</b>: basta cambiar el destino y el contenido.</div>
-
-    <div class="grid">
-      <div class="full"><label class="lbl">¿A dónde mandas a la gente?</label>
-        <div class="subtabs" id="utmDestino" style="margin:0 0 8px">
-          <button data-dest="registro" aria-current="true">La liga de registro</button>
-          <button data-dest="sitio">La página del hotel</button>
-        </div>
-        <div id="utmDestNota" class="hint" style="margin-bottom:8px"></div>
-        <input class="field" id="utmBase" value="${esc(sitio)}"
-          placeholder="https://www.quartzhotel.mx/bodas" style="width:100%"></div>
-      <div><label class="lbl">utm_source <span class="hint">de dónde</span></label>
-        <input class="field" id="utmS" value="${esc(c.utmSource || k.utm)}"></div>
-      <div><label class="lbl">utm_medium <span class="hint">cómo</span></label>
-        <input class="field" id="utmM" value="${esc(c.utmMedium || k.medio)}"></div>
-      <div><label class="lbl">utm_campaign <span class="hint">cuál</span></label>
-        <input class="field" id="utmC" value="${esc(etiquetaUtm(c))}"></div>
-      <div><label class="lbl">utm_content <span class="hint">qué pieza (opcional)</span></label>
-        <input class="field" id="utmCt" placeholder="video-15s, carrusel-a"></div>
-    </div>
-
-    <h3 class="sec">La liga</h3>
-    <div id="utmSalida"></div>
-
-    ${nube.sinBuzonAltas ? `<div class="note warn" style="margin-top:12px">
-      <b>La liga de registro todavía no está lista del lado del hotel.</b>
-      Falta correr <code>prospectos.sql</code> una vez en Supabase. Mientras tanto la liga
-      se puede armar, pero quien la abra no va a poder mandar sus datos.</div>` : ""}
-
-    <h3 class="sec">Para qué sirve utm_content</h3>
-    <div class="note">Cuando la misma campaña corre con dos piezas distintas —un video y
-      un carrusel, dos textos— se les pone <b>utm_content</b> diferente y después se ve cuál
-      trajo más. Si se deja vacío, no estorba: simplemente no aparece en la liga.</div>
-  </div>`;
-
-  const q = sel => cont.querySelector(sel);
-  let destino = "registro";
-
-  const pinta = () => {
-    const utm = { source: q("#utmS").value, medium: q("#utmM").value,
-                  campaign: q("#utmC").value, content: q("#utmCt").value };
-    const alRegistro = destino === "registro";
-
-    q("#utmBase").style.display = alRegistro ? "none" : "";
-    q("#utmDestNota").innerHTML = alRegistro
-      ? `El anuncio lleva directo al formulario del hotel. <b>Funciona desde hoy</b> y la
-         campaña se amarra sola: no hay que tocar la página.`
-      : (sitio
-          ? `El anuncio lleva a la página del hotel. Para que la campaña se amarre, la
-             página tiene que mandar a la gente a la liga de registro <b>conservando las
-             etiquetas</b>; quien lleve el sitio sabrá hacerlo.`
-          : `Falta la página del hotel. Escríbela aquí, o déjala fija en
-             <i>Ajustes → Datos del hotel</i>.`);
-
-    const liga = alRegistro ? ligaDeAlta(utm) : armaLiga(q("#utmBase").value, utm);
-    /* Una liga que se ve bien y no sirve es peor que ninguna: se pega en el
-       anuncio, se paga el anuncio, y los prospectos simplemente no llegan.
-       Así que cuando la clave no está publicada se dice aquí, antes. */
-    const sinClave = alRegistro && !claveAltaPublicada()
-      ? `<div class="note warn" id="utmSinClave" style="margin-top:10px">
-           <b>${liga ? "Esta liga todavía no sirve." : "Todavía no se puede armar la liga."}</b>
-           La clave que la abre no ha llegado al servidor, así que quien la abra no va a
-           poder registrarse.
-           ${esAdmin()
-             ? `<br><br><button class="btn sm primary" id="bPublicarClave">Publicarla ahora</button>`
-             : `<br><br>Pídele al administrador que entre al CRM y abra esta misma pantalla:
-                la clave se publica desde su cuenta, una sola vez, y a partir de ahí todas
-                las ligas funcionan —ésta y las que armes después—.`}
-         </div>`
-      : "";
-    q("#utmSalida").innerHTML = (liga
-      ? `<div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap">
-           <textarea class="field mono" id="utmLiga" readonly rows="2"
-             style="flex:1;min-width:280px">${esc(liga)}</textarea>
-           <button class="btn primary" id="bCopiarUtm">Copiar</button></div>
-         <div class="hint" id="utmAviso" style="margin-top:6px"></div>`
-      : (alRegistro
-          ? ""
-          : `<div class="note warn">Falta la dirección a dónde llega la liga.</div>`)) + sinClave;
-
-    const pub = q("#bPublicarClave");
-    if (pub) pub.onclick = async () => {
-      pub.disabled = true; pub.textContent = "Publicando…";
-      try{ await sincronizar(); }catch(e){}
-      pinta();
-    };
-
-    const b = q("#bCopiarUtm");
-    if (b) b.onclick = async () => {
-      try{
-        await navigator.clipboard.writeText(liga);
-        q("#utmAviso").textContent = "Copiada. Ya se puede pegar en el anuncio.";
-      }catch(e){
-        // Sin permiso de portapapeles: se selecciona para que la copien a mano.
-        q("#utmLiga").select();
-        q("#utmAviso").textContent = "Quedó seleccionada: cópiala con Ctrl+C.";
-      }
-    };
-  };
-
-  ["#utmBase","#utmS","#utmM","#utmC","#utmCt"].forEach(sel =>
-    q(sel).addEventListener("input", pinta));
-  cont.querySelectorAll("#utmDestino button").forEach(b => b.onclick = () => {
-    destino = b.dataset.dest;
-    cont.querySelectorAll("#utmDestino button").forEach(x =>
-      x.setAttribute("aria-current", String(x === b)));
-    pinta();
-  });
-  q("#utmCamp").onchange = e => { utmCampSel = e.target.value; renderUtms(); };
-  pinta();
-}
-
 
 /* ==========================================================================
    LA LIGA PÚBLICA DE REGISTRO

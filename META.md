@@ -263,7 +263,8 @@ inversión**.
 El costo por lead **de arriba del tablero sigue siendo correcto** —la inversión total y los
 leads totales están bien—. Los que quedan sin sentido, mientras tanto, son el costo por lead y
 el retorno **de cada renglón**. Se arregla a mano, cambiando las ligas de los anuncios en Meta
-para que cada conjunto traiga la suya, desde *Atribución & UTMs*.
+para que cada conjunto traiga la suya. La liga de cada uno está en su propia carta,
+en **Campañas**.
 
 ## Dos decisiones que conviene entender
 

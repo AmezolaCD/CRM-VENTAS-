@@ -435,10 +435,14 @@ entregarle el aparato al cliente y que se registre él mismo.
 Su propio departamento, con sus cuentas y sus pestañas. **Marketing no alcanza la cartera** —se
 decidió así—: ve sus campañas, sus ligas y los prospectos, y nada más.
 
-- **Campañas.** Canal, presupuesto y el gasto mes por mes, con aviso en rojo al pasarse.
-- **Atribución & UTMs.** Las ligas de los anuncios no se escriben a mano, se arman. Y hay una
-  **liga pública de registro**: quien ve el anuncio deja sus datos sin tener cuenta y cae en el
-  CRM sabiendo de qué campaña vino.
+- **Campañas.** Canal, presupuesto y el gasto mes por mes, con aviso en rojo al pasarse. La
+  **liga del anuncio** se arma en la carta de cada una —no se escribe a mano—, y con ella viene
+  la **liga pública de registro**: quien ve el anuncio deja sus datos sin tener cuenta y cae en
+  el CRM sabiendo de qué campaña vino. Cada conjunto de anuncios necesita la suya.
+- **Leads.** Todo lo que llega —de los anuncios, de la tableta del lobby, capturado a mano— en
+  una lista, con la campaña de la que vino. Ahí se **reparte**: de qué área es y quién lo
+  trabaja. El asignado es el que lo recibe del servidor, así que asignar no es una etiqueta:
+  es lo que hace que el lead le aparezca.
 - **Tablero.** El embudo —de lead a cierre—, el costo por lead y el retorno por campaña.
 - **Meta Ads.** Con la conexión puesta, el gasto, las impresiones y los clics **bajan solos**,
   por campaña y por día. Lo capturado a mano no se pisa: los dos se enseñan y, cuando no

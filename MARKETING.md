@@ -98,7 +98,7 @@ campaña vinieron—, y el aviso lo dice con el número antes de borrar.
 
 ---
 
-## Atribución & UTMs
+## La liga de cada anuncio
 
 Una UTM es una etiqueta que viaja pegada a la liga de un anuncio. Quien la abre llega a la
 página del hotel, y la campaña viaja con él.
@@ -136,7 +136,7 @@ avisa y el resto del CRM funciona igual.
 
 ### Los dos destinos
 
-En *Atribución & UTMs* se escoge a dónde manda el anuncio:
+En la carta de cada campaña se escoge a dónde manda el anuncio:
 
 - **La liga de registro** (por omisión). El anuncio lleva directo al formulario del hotel.
   **Funciona desde el día uno** y la campaña se amarra sola: nadie tiene que tocar la página.
@@ -165,7 +165,7 @@ quedaría en esa computadora: el servidor nunca la conocería y **rebotaría a t
 el anuncio** —después de haberlo pagado—. Y el día que el administrador abriera la pantalla se
 inventaría otra, dejando muerta la del anuncio sin que nadie supiera por qué.
 
-Así que la primera vez, el administrador entra al CRM y abre *Atribución & UTMs*: con eso la
+Así que la primera vez, el administrador entra al CRM y abre la carta de cualquier campaña: con eso la
 clave se crea y se publica. A partir de ahí marketing arma todas las ligas que quiera. Mientras
 no esté publicada, la pantalla **no entrega una liga que no sirve**: dice qué falta y a quién
 pedírselo.
@@ -189,6 +189,36 @@ antes. Si se cortara la luz entre una cosa y la otra, más vale recoger dos vece
 perderlo.
 
 ---
+
+## Leads
+
+Todo lo que llega, en una sola lista: los de los anuncios, los de la tableta del lobby y los
+capturados a mano. La columna **De qué campaña** dice de cuál vino, y si es un conjunto de
+anuncios, de qué campaña de Meta cuelga.
+
+Lo que se hace aquí no es capturar: es **repartir**. Cada lead se asigna diciendo dos cosas, y
+en ese orden:
+
+1. **De qué es** — *Hospedaje* (habitaciones, grupos) o *Banquetes* (salones, bodas, catering).
+   Meta no lo dice: sus anuncios traen conversaciones, no intenciones. Lo decide quien reparte,
+   leyendo lo que pidió el cliente.
+2. **Quién lo trabaja** — y la lista **sólo ofrece a los de esa área**. Un lead de salones no se
+   le puede mandar por error a alguien de hospedaje. La dirección y la administración no salen:
+   alcanzan las tres áreas pero no trabajan leads.
+
+**Asignar no es una etiqueta.** El asignado pasa a ser el *dueño* del renglón, y con eso el
+servidor se lo entrega: antes de asignarlo, el lead lo ve quien lo capturó —que muchas veces es
+marketing, que no tiene cartera—. Por eso arriba se dice cuántos están **sin asignar**, con un
+botón para ver sólo ésos: es la cola de trabajo real.
+
+### El lead de WhatsApp
+
+Los anuncios de mensajes no dejan rastro en el CRM: **Meta no entrega esas conversaciones por su
+API**. Para que sí lo hicieran, el número del hotel tendría que estar también en la *Cloud API*
+—se puede, sin perder el teléfono, pero es otra entrega—.
+
+Mientras tanto, el botón **+ Lead de WhatsApp** lo mete en diez segundos: quién es, su teléfono,
+de qué anuncio venía y qué pidió. Es preferible a perderlo.
 
 ## El tablero
 

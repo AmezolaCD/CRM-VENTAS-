@@ -10,7 +10,7 @@ El CRM tiene nueve papeles:
 | **Ejecutivo de ventas** | Las de hospedaje, menos Ajustes | Sólo sus propios clientes, convenios, actividades y prospectos |
 | **Gerencia de banquetes** | Tablero, Clientes, Actividades, Eventos, Contratos banquetes, Calendario, Reportes y Formulario | Los eventos y contratos de **todo el equipo de banquetes**; la cartera la comparte con ventas |
 | **Ejecutivo de banquetes** | Las mismas que su gerencia | Sólo sus propios eventos y contratos de banquetes |
-| **Coordinación de marketing** | Tablero de marketing, Campañas, Atribución & UTMs y Formulario | Las campañas del área y los prospectos de todos. **No alcanza la cartera** |
+| **Coordinación de marketing** | Tablero de marketing, Campañas, Leads y Formulario | Las campañas del área y los prospectos de todos. **No alcanza la cartera** |
 | **Marketing** | Las mismas que su coordinación | Lo mismo: las campañas son del área, no de una persona |
 | **Sólo prospección** | Únicamente *Formulario* | Sólo los prospectos que esa cuenta capturó |
 
@@ -236,7 +236,7 @@ ventas. La administración y la dirección alcanzan los tres.
 Por eso, a quien se le deja el papel que viene por omisión —*Ejecutivo de ventas*— queda de
 ventas aunque se llame como se llame, y eso no es un detalle cosmético: **le baja la cartera de
 clientes completa** y en cambio **no le aparecen sus propias pestañas**. Si alguien de marketing
-no ve *Campañas* ni *Atribución & UTMs*, lo primero que hay que revisar es su papel.
+no ve *Campañas* ni el *Tablero de marketing*, lo primero que hay que revisar es su papel.
 
 Los cambios de esa tabla se guardan con **Guardar usuarios**, el botón que está debajo de ella
 —o con *Guardar ajustes*, al final de la pantalla: hacen lo mismo—. No se guardan solos al
