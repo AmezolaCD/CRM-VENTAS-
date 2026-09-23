@@ -68,11 +68,18 @@ búsqueda pagada, una feria.
   conjunto —cada uno trae su *«diario, no compartido»*—, así que su renglón no representa una
   decisión de nadie. De cuál cuelga cada conjunto sale en la columna **Campaña de Meta**.
 
+  **Y lo que no gastó tampoco sale.** Si Meta no le reporta un peso en el periodo, está
+  apagada: es la misma regla con la que se decide cuáles traer, aplicada a lo que se enseña.
+  Vale para los conjuntos y para las campañas viejas por igual.
+
   Se esconde de la lista, **no de las cuentas**: su gasto, sus prospectos y su ingreso siguen
-  contando en el tablero de marketing. Arriba de la tabla dice cuántas se escondieron y cuántos
-  prospectos traen, con un botón para verlas; el selector **Ver** las alterna. Una campaña a la
-  que todavía **no** se le han traído los conjuntos no se esconde, porque no habría nada que la
-  reemplazara.
+  contando en el tablero de marketing. Arriba de la tabla dice cuántas se escondieron, por qué
+  y cuántos prospectos traen, con un botón para verlas; el selector **Ver** las alterna.
+
+  Dos cosas que **nunca** se esconden: lo que no es de Meta —una expo, Google, un referido, lo
+  capturado a mano— porque no tiene por qué aparecer en Meta jamás; y nada en absoluto mientras
+  las cifras no hayan bajado, porque entonces todo saldría con raya y la pantalla se vaciaría
+  por una consulta que va en camino.
 - **Presupuesto y gasto**: el gasto se captura **mes por mes**, como lo cobra la plataforma. La
   pantalla va sumando y **avisa en rojo cuando se pasa del presupuesto**.
 - **Leads**: la columna dice cuántos prospectos trajo. Hoy se llena cuando el prospecto se

@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.23-63";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.23-64";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -7202,6 +7202,29 @@ function laTapanSusConjuntos(c){
   return false;
 }
 
+/**
+ * ¿Meta no le reporta un peso a esta campaña en el periodo?
+ *
+ * Si Meta no cobró, no corrió. Es la misma regla con la que ya se decide cuáles
+ * traer, aplicada ahora a lo que se enseña: una campaña que sale con raya en
+ * «Según Meta» está apagada, y ocupa un renglón entre las que sí se manejan.
+ *
+ * Dos límites, y los dos importan:
+ *
+ *   · SÓLO LO DE META. Una expo, un referido o algo capturado a mano no tienen
+ *     por qué aparecer en Meta nunca, y esconderlas por eso sería absurdo.
+ *   · SIN CIFRAS CARGADAS NO SE ESCONDE NADA. Mientras la consulta va en camino
+ *     —o si el servidor no contestó— todo saldría con raya, y la pantalla se
+ *     vaciaría entera por algo que no tiene que ver con las campañas.
+ */
+function sinGastoEnMeta(c, desde, hasta){
+  const deMeta = (c.metaIds || []).length || c.origen === "meta";
+  if (!deMeta) return false;
+  if (!metaMetricas || !metaMetricas.length) return false;
+  const m = metricasMeta(c, desde, hasta);
+  return !m || !m.gasto;
+}
+
 /* Qué enseña la pantalla de Campañas. Arranca en los conjuntos, que es lo que
    se quiere ver de diario, y no se guarda a propósito: el logo CORE recarga, y
    al recargar conviene volver a lo de siempre. */
@@ -7216,12 +7239,18 @@ function renderCampanas(){
      saldrían también de los totales —con su inversión, sus prospectos y su
      ingreso— y el costo por lead de arriba dejaría de cuadrar. Esta lista es
      para trabajar; el tablero es para las cuentas, y ahí no se esconde nada. */
-  const tapadas = todas.filter(laTapanSusConjuntos);
+  const [mDesde, mHasta] = rangoMkt();
+  /* Se esconden dos cosas: las campañas de Meta que ya se desglosaron en sus
+     conjuntos, y todo lo de Meta que no gastó en el periodo —que es lo mismo
+     que decir que está apagado—. */
+  const desglosadas = todas.filter(laTapanSusConjuntos);
+  const apagadas = todas.filter(c =>
+    !desglosadas.includes(c) && sinGastoEnMeta(c, mDesde, mHasta));
+  const tapadas = desglosadas.concat(apagadas);
   const cs = verCampanas === "todas"
     ? todas : todas.filter(c => !tapadas.includes(c));
   const leadsTapados = tapadas.reduce((a, c) => a + leadsDeCampana(c.id), 0);
 
-  const [mDesde, mHasta] = rangoMkt();
   const conMeta = cs.some(c => (c.metaIds || []).length);
   const conPadre = cs.some(c => deQueCampana(c));
 
@@ -7237,9 +7266,15 @@ function renderCampanas(){
       <button class="btn primary" id="bNuevaCamp">+ Nueva campaña</button></div>
     ${tiraMeta()}
     ${(tapadas.length && verCampanas !== "todas") ? `<div class="note">
-      <b>${tapadas.length} campaña${tapadas.length === 1 ? "" : "s"} de Meta
-      ${tapadas.length === 1 ? "está escondida" : "están escondidas"}</b> porque sus conjuntos
-      de anuncios ya están aquí, y el presupuesto se asigna por conjunto.
+      <b>${tapadas.length === 1 ? "Hay una campaña escondida" :
+           "Hay " + tapadas.length + " campañas escondidas"}:</b>
+      ${[desglosadas.length ? (desglosadas.length === 1
+           ? "una que ya se desglosó en sus conjuntos de anuncios"
+           : desglosadas.length + " que ya se desglosaron en sus conjuntos de anuncios") : "",
+         apagadas.length ? (apagadas.length === 1
+           ? "una a la que Meta no le reporta gasto en este periodo"
+           : apagadas.length + " a las que Meta no les reporta gasto en este periodo") : ""]
+        .filter(Boolean).join(" y ")}.
       ${leadsTapados ? `<b>${tapadas.length === 1 ? "Trae" : "Traen"} ${leadsTapados}
         prospecto${leadsTapados === 1 ? "" : "s"}</b> —las ligas de los anuncios todavía
         apuntan a ${tapadas.length === 1 ? "ella" : "ellas"}—, y sigue${
@@ -7250,7 +7285,13 @@ function renderCampanas(){
       Lo que se mide es <b>cuánto costó y qué trajo</b>, así que de aquí cuelgan los
       prospectos: la liga que se genera en <i>Atribución &amp; UTMs</i> es la que los amarra.</div>`;
 
-  if (!cs.length){
+  if (!cs.length && tapadas.length){
+    /* Todo quedó escondido. El vacío de siempre diría "todavía no hay
+       campañas", que sería mentira y mandaría a capturar lo que ya existe. */
+    cont.innerHTML = cab + `<div class="vacio">Ninguna campaña gastó en este periodo.<br>
+      <span class="hint">Las ${tapadas.length} que hay están escondidas. Apriete
+      <b>Sincronizar</b> para traer más días, o cambie <b>Ver</b> a <i>Todas</i>.</span></div>`;
+  } else if (!cs.length){
     cont.innerHTML = cab + (hayMeta()
       ? `<div class="vacio">Todavía no hay campañas.<br>
           <span class="hint">Apriete <b>Sincronizar</b> y se traen solas las que Meta
