@@ -19,7 +19,7 @@ hotel ya lo tiene andando desde que la conexión estuvo en Odoo.
 
 | | |
 |---|---|
-| **Lee** | gasto, impresiones, alcance, clics y los leads que Meta contó, por campaña y por día |
+| **Lee** | gasto, impresiones, alcance, clics y los leads que Meta contó, **por campaña y por conjunto de anuncios**, día por día |
 | **No escribe nada en Meta** | ni crea campañas, ni las pausa, ni cambia un presupuesto |
 | **No trae los leads** | los formularios de Meta todavía no entran solos al CRM: eso es la entrega que sigue |
 | **No trae nombres de personas** | de Meta sólo bajan cifras y el nombre de la campaña |
@@ -93,8 +93,9 @@ hace igual.
 ### 4. Apretar Sincronizar
 
 En **Campañas** aparece una tira arriba que dice cómo va la conexión. Se aprieta
-**Sincronizar** y pasan dos cosas: se traen los últimos siete días de cifras y **se traen solas
-las campañas que estuvieron corriendo**, ya enlazadas.
+**Sincronizar** y pasan dos cosas: se traen los últimos siete días de cifras y **se traen solos
+los conjuntos de anuncios que estuvieron corriendo**, ya enlazados, cada uno como una campaña
+del CRM.
 
 #### Por qué casi todas salen sin gasto la primera vez
 
@@ -220,6 +221,49 @@ ejecutivo de ventas le contesta que no aunque traiga una sesión buena. El inter
 apaga es una segunda reja, no la única.
 
 ---
+
+## Los conjuntos de anuncios, y por qué la inversión no se duplica
+
+En Meta, debajo de cada campaña van los **conjuntos de anuncios**. Es el nivel con el que de
+verdad se trabaja: una campaña llamada *Eventos* puede traer un conjunto de bodas y otro de
+catering, y en el CRM ésas son dos cosas distintas, con su propio presupuesto y sus propios
+prospectos. Por eso el CRM trae **los conjuntos**, cada uno como una campaña suya.
+
+Se bajan **los dos niveles**, campaña y conjunto, y aquí está lo único que hay que entender:
+
+> **El gasto de un conjunto YA VIENE DENTRO del de su campaña.** Meta no los suma: los
+> desglosa. Si el CRM enseñara los dos completos, la inversión saldría al doble —y con ella el
+> costo por lead y el retorno, que son las dos cifras con las que se decide dónde gastar el mes
+> que entra—.
+
+Así que el CRM le **resta** a cada campaña, **día por día**, lo que ya está enseñando en sus
+conjuntos. Donde la columna *Según Meta* diga **· desglosada**, ahí sale sólo lo que sobró.
+Sumadas, la campaña y sus conjuntos dan exactamente lo que Meta cobró: **ningún peso se cuenta
+dos veces, y ninguno se pierde.**
+
+Día por día y no al final, a propósito: los meses de antes de todo esto **sólo existen a nivel
+de campaña**, y ahí la campaña sigue valiendo entera. Por lo mismo, al traer los conjuntos la
+campaña padre **no se desenlaza**: si se desenlazara, todo ese historial desaparecería de la
+pantalla de un jalón.
+
+Y si por lo que sea no se supiera de qué campaña cuelga algún conjunto —porque el catálogo no
+alcanzó a bajar—, el CRM **cuenta sólo por campaña**, como antes, y lo dice en la tira. Se
+pierde el detalle, que se nota; no se infla la inversión, que no se nota y es lo que hace tomar
+una decisión equivocada.
+
+### Los leads se quedan en la campaña de antes
+
+Vale la pena saberlo antes de la primera vez, porque se ve raro y no está mal:
+
+Los prospectos que ya estaban apuntan a la campaña con la que entraron, y las ligas con UTMs que
+andan pegadas en los anuncios **también** apuntan a esa campaña, no a los conjuntos. Así que por
+un tiempo va a ver **conjuntos con inversión y sin leads**, y **campañas con leads y con poca
+inversión**.
+
+El costo por lead **de arriba del tablero sigue siendo correcto** —la inversión total y los
+leads totales están bien—. Los que quedan sin sentido, mientras tanto, son el costo por lead y
+el retorno **de cada renglón**. Se arregla a mano, cambiando las ligas de los anuncios en Meta
+para que cada conjunto traiga la suya, desde *Atribución & UTMs*.
 
 ## Dos decisiones que conviene entender
 

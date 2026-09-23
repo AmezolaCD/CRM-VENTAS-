@@ -101,6 +101,29 @@ function num(v) {
 }
 
 /**
+ * De qué nivel es un renglón de Meta, y de quién cuelga.
+ *
+ * Meta contesta los insights con los campos del nivel que se le pidió y con
+ * los de arriba: un renglón de conjunto trae adset_id Y campaign_id. De ahí
+ * sale todo: si trae adset_id es un conjunto y su padre es la campaña; si no,
+ * es la campaña misma y no cuelga de nadie.
+ *
+ * Se lee del renglón en vez de pasarlo como parámetro porque es el renglón el
+ * que sabe lo que es. Con un parámetro, equivocarse de llamada mezclaría los
+ * dos niveles en la misma tabla sin que nada lo notara —y el gasto del padre
+ * y el de sus hijos se sumarían como si fueran dinero distinto—.
+ */
+function nivelDe(ins) {
+  const conjunto = String((ins && ins.adset_id) || "").trim();
+  const campana = String((ins && ins.campaign_id) || "").trim();
+  return conjunto
+    ? { nivel: "conjunto", objeto: conjunto,
+        nombre: String((ins && ins.adset_name) || ""), padre: campana }
+    : { nivel: "campana", objeto: campana,
+        nombre: String((ins && ins.campaign_name) || ""), padre: "" };
+}
+
+/**
  * Un renglón de Meta se vuelve un renglón de la tabla.
  *
  * Se queda fuera todo lo que no sea una cifra: nombres de creativos, textos
@@ -109,10 +132,11 @@ function num(v) {
 function filaMetrica(ins, cuenta, moneda) {
   const fecha = String(ins.date_start || "").slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return null;
-  const objeto = String(ins.campaign_id || "").trim();
+  const q = nivelDe(ins);
+  const objeto = q.objeto;
   if (!objeto) return null;
   return {
-    nivel: "campana",
+    nivel: q.nivel,
     objeto,
     fecha,
     cuenta: String(cuenta || ""),
@@ -136,13 +160,18 @@ function filaMetrica(ins, cuenta, moneda) {
 function objetosDeInsights(filas, cuenta) {
   const m = new Map();
   for (const ins of filas || []) {
-    const objeto = String(ins.campaign_id || "").trim();
-    if (!objeto || m.has(objeto)) continue;
-    m.set(objeto, {
-      nivel: "campana",
-      objeto,
-      nombre: String(ins.campaign_name || "").slice(0, 300),
-      padre: "",
+    const q = nivelDe(ins);
+    if (!q.objeto) continue;
+    /* La llave lleva el nivel, como en la tabla. Sin él, una campaña y un
+       conjunto se pisarían aquí si algún día Meta repitiera un id entre
+       niveles, y el catálogo se quedaría con el nombre equivocado. */
+    const llave = q.nivel + ":" + q.objeto;
+    if (m.has(llave)) continue;
+    m.set(llave, {
+      nivel: q.nivel,
+      objeto: q.objeto,
+      nombre: q.nombre.slice(0, 300),
+      padre: q.padre,
       estado: "",
       cuenta: String(cuenta || ""),
       visto: new Date().toISOString(),
@@ -368,7 +397,14 @@ Deno.serve(async (req) => {
     const accion = String(peticion.accion || "sincroniza");
     const dias = peticion.dias;
 
-    // ---- 4a. El catálogo, para poder enlazar campañas --------------------
+    /* ---- 4a. El catálogo, para poder enlazar ----------------------------
+       Los dos niveles, campañas y conjuntos de anuncios. El catálogo es lo
+       ÚNICO que sabe si algo está prendido hoy: los insights sólo cuentan lo
+       que gastó, y una cosa no dice la otra —de ahí salió el enredo de traer
+       diecinueve campañas "activas" de las cuales una sola estaba viva—.
+
+       Si la llamada de los conjuntos falla, el catálogo de campañas se
+       entrega igual: perder el nivel de abajo no vale romper el de arriba. */
     if (accion === "catalogo") {
       const { filas } = await todo(
         `https://graph.facebook.com/${version}/${cuenta}/campaigns` +
@@ -379,13 +415,33 @@ Deno.serve(async (req) => {
         estado: String(c.effective_status || c.status || ""),
       }));
 
-      if (lista.length)
-        await admin.from("crm_meta_objetos").upsert(lista.map((c: any) => ({
-          nivel: "campana", objeto: c.id, nombre: c.nombre, padre: "",
-          estado: c.estado, cuenta, visto: new Date().toISOString(),
-        })), { onConflict: "nivel,objeto" });
+      let conjuntos: any[] = [];
+      try {
+        const r = await todo(
+          `https://graph.facebook.com/${version}/${cuenta}/adsets` +
+          `?fields=id,name,status,effective_status,campaign_id&limit=500` +
+          `&access_token=${encodeURIComponent(token)}`);
+        conjuntos = r.filas.map((c: any) => ({
+          id: String(c.id), nombre: String(c.name || ""),
+          estado: String(c.effective_status || c.status || ""),
+          padre: String(c.campaign_id || ""),
+        }));
+      } catch (e) {
+        console.log("meta-sync: no se pudieron listar los conjuntos ::", String(e));
+      }
 
-      return responde(200, { ok: true, cuenta, campanas: lista });
+      const guardar = lista.map((c: any) => ({
+        nivel: "campana", objeto: c.id, nombre: c.nombre, padre: "",
+        estado: c.estado, cuenta, visto: new Date().toISOString(),
+      })).concat(conjuntos.map((c: any) => ({
+        nivel: "conjunto", objeto: c.id, nombre: c.nombre, padre: c.padre,
+        estado: c.estado, cuenta, visto: new Date().toISOString(),
+      })));
+      if (guardar.length)
+        await admin.from("crm_meta_objetos")
+          .upsert(guardar, { onConflict: "nivel,objeto" });
+
+      return responde(200, { ok: true, cuenta, campanas: lista, conjuntos });
     }
 
     // ---- 4b. Las cifras --------------------------------------------------
@@ -401,32 +457,71 @@ Deno.serve(async (req) => {
       moneda = String(c.currency || "");
     } catch { /* si no se puede, se sigue sin moneda: el gasto vale igual */ }
 
-    const liga = `https://graph.facebook.com/${version}/${cuenta}/insights` +
-      `?level=campaign&time_increment=1` +
+    /* Dos lecturas, una por nivel.
+       
+       No se saca una de la otra: el gasto de una campaña NO siempre es la suma
+       de sus conjuntos —Meta cobra cosas al nivel de la campaña— y sumarlos a
+       mano daría una cifra que no cuadra con la que el hotel ve en su propia
+       pantalla de Meta. Cada nivel se pregunta y se guarda tal como Meta lo
+       reporta, en renglones distintos, y quien lee escoge cuál mirar. */
+    const insightsDe = (nivel: string, campos: string) =>
+      `https://graph.facebook.com/${version}/${cuenta}/insights` +
+      `?level=${nivel}&time_increment=1` +
       `&time_range=${encodeURIComponent(JSON.stringify({ since: desde, until: hasta }))}` +
-      `&fields=${encodeURIComponent(
-        "campaign_id,campaign_name,spend,impressions,reach,clicks,actions,date_start,date_stop")}` +
+      `&fields=${encodeURIComponent(campos)}` +
       `&limit=500&access_token=${encodeURIComponent(token)}`;
 
-    const { filas: crudas, incompleto } = await todo(liga);
+    const CIFRAS = "spend,impressions,reach,clicks,actions,date_start,date_stop";
 
-    const metricas = crudas.map((f: any) => filaMetrica(f, cuenta, moneda)).filter(Boolean);
-    const objetos = objetosDeInsights(crudas, cuenta);
+    const { filas: crudas, incompleto } = await todo(
+      insightsDe("campaign", "campaign_id,campaign_name," + CIFRAS));
 
+    /* Los conjuntos no tumban la sincronización si fallan: las cifras de las
+       campañas son lo que se vino a buscar, y media verdad puntual vale más
+       que un error que deja al hotel sin nada. */
+    let crudasConj: any[] = [];
+    let cortadoConj = false;
+    try {
+      const r = await todo(
+        insightsDe("adset", "adset_id,adset_name,campaign_id," + CIFRAS));
+      crudasConj = r.filas;
+      cortadoConj = r.incompleto;
+    } catch (e) {
+      console.log("meta-sync: no se pudieron leer los conjuntos ::", String(e));
+    }
+
+    const todas = crudas.concat(crudasConj);
+    const metricas = todas.map((f: any) => filaMetrica(f, cuenta, moneda)).filter(Boolean);
+    const objetos = objetosDeInsights(todas, cuenta);
+
+    /* EL CATÁLOGO SE GUARDA ANTES QUE LAS CIFRAS, y si falla, truena.
+       
+       De ahí sale de qué campaña cuelga cada conjunto, y sin eso el CRM no
+       puede restarle a la campaña lo que ya está enseñando en sus conjuntos:
+       contaría el mismo peso dos veces. Al revés —cifras guardadas y catálogo
+       no— quedaría una tabla con gasto de conjuntos huérfanos, que es justo el
+       estado peligroso. Así queda el estado seguro: o están los dos, o falta
+       el desglose y el CRM cuenta por campaña, como antes. */
+    if (objetos.length) {
+      const { error } = await admin.from("crm_meta_objetos")
+        .upsert(objetos, { onConflict: "nivel,objeto" });
+      if (error) throw new Error("No se pudo guardar el catálogo: " + error.message);
+    }
     if (metricas.length) {
       const { error } = await admin.from("crm_meta_metricas")
         .upsert(metricas, { onConflict: "nivel,objeto,fecha" });
       if (error) throw new Error("No se pudieron guardar las cifras: " + error.message);
     }
-    if (objetos.length)
-      await admin.from("crm_meta_objetos").upsert(objetos, { onConflict: "nivel,objeto" });
 
+    const cortado = incompleto || cortadoConj;
     await anota(true, metricas.length,
-      incompleto ? "Se cortó por demasiadas páginas; acorte el periodo." : "");
+      cortado ? "Se cortó por demasiadas páginas; acorte el periodo." : "");
 
     return responde(200, {
       ok: true, cuenta, desde, hasta, moneda,
-      filas: metricas.length, campanas: objetos.length, incompleto,
+      filas: metricas.length, campanas: objetos.length,
+      conjuntos: objetos.filter((o: any) => o.nivel === "conjunto").length,
+      incompleto: cortado,
     });
   } catch (e) {
     const msg = (e as Error).message || "error inesperado";

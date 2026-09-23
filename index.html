@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.22-61";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.23-62";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2102,6 +2102,10 @@ function sellarTotales(){
 
 function guardar(){
   sellarTotales();
+  /* El índice de Meta depende de qué conjuntos están enlazados, y eso cambia
+     al guardar. Tirarlo cuesta una asignación; dejarlo viejo cuesta una cifra
+     equivocada en la pantalla. */
+  metaIndice = null;
   try{ localStorage.setItem(STORE, JSON.stringify(state)); }
   catch(e){
     console.warn("No se pudo guardar:", e);
@@ -7157,6 +7161,21 @@ const nombreCampana = id => (campana(id) || {}).nombre || "";
 /** Los prospectos que trajo una campaña. Es el número que importa. */
 const leadsDeCampana = id => state.prospectos.filter(p => p.campanaId === id).length;
 
+/**
+ * "Conjunto de anuncios de «Bodas verano»", bajo el nombre de la campaña.
+ *
+ * Se saca del catálogo cada vez que se pinta, no se guarda: en Meta renombran
+ * las campañas cada temporada, y un nombre guardado aquí envejecería mal sin
+ * que nadie se diera cuenta.
+ */
+function deQueCampana(c){
+  const ids = (c.metaIds || []).map(String).filter(esConjunto);
+  if (!ids.length) return "";
+  const padres = [...new Set(ids.map(padreDe).filter(Boolean).map(nombreMeta))];
+  if (!padres.length) return "";
+  return `<div class="hint">Conjunto de anuncios de ${esc(padres.join(" · "))}</div>`;
+}
+
 function renderCampanas(){
   const cont = document.getElementById("tblCampanas");
   const cs = campanasVisibles();
@@ -7192,7 +7211,7 @@ function renderCampanas(){
         const sobre = c.presupuesto && gasto > c.presupuesto;
         return `<tr class="row-link" data-id="${c.id}">
           <td><b>${esc(c.nombre || "(sin nombre)")}</b>${c.objetivo
-            ? `<div class="hint">${esc(c.objetivo)}</div>` : ""}</td>
+            ? `<div class="hint">${esc(c.objetivo)}</div>` : ""}${deQueCampana(c)}</td>
           <td>${esc(infoCanal(c.canal).name)}</td>
           <td class="nowrap">${c.desde ? esc(fechaCorta(c.desde)) : "—"}${
             c.hasta ? " → " + esc(fechaCorta(c.hasta)) : ""}</td>
@@ -7365,13 +7384,15 @@ function editarCampana(id, alCerrar){
     let lista = [];
     try{
       const j = await llamaMeta({ accion: "catalogo" });
-      lista = j.campanas || [];
+      lista = (j.campanas || []).map(x => Object.assign({ nivel: "campana" }, x))
+        .concat((j.conjuntos || []).map(x => Object.assign({ nivel: "conjunto" }, x)));
       dichoMeta.textContent = "";
     }catch(e){
       /* Si no se puede preguntar en este momento, se ofrece lo que ya se
          conocía de la última vez: es mejor que dejar a la persona sin poder
          enlazar nada. */
-      lista = metaObjetos.map(o => ({ id: o.objeto, nombre: o.nombre, estado: o.estado }));
+      lista = metaObjetos.map(o => ({ id: o.objeto, nombre: o.nombre, estado: o.estado,
+                                      nivel: o.nivel, padre: o.padre }));
       dichoMeta.textContent = lista.length
         ? "No se pudo preguntar ahorita; ésta es la lista de la última vez."
         : e.message;
@@ -7379,12 +7400,26 @@ function editarCampana(id, alCerrar){
 
     if (!lista.length){ pintaEnlace(); return; }
 
-    cajaMeta.innerHTML = `<div style="max-height:230px;overflow:auto;border:1px solid var(--linea);
-        border-radius:8px;padding:8px">
-      ${lista.map(x => `<label style="display:block;padding:3px 0">
+    /* Separados por nivel, y los conjuntos con el nombre de su campaña
+       debajo. Revueltos no se entiende nada: en Meta los dos se llaman igual
+       de feo y no hay manera de distinguir uno del otro de un vistazo. */
+    const opcion = x => `<label style="display:block;padding:3px 0">
         <input type="checkbox" value="${esc(x.id)}"${metaIds.includes(String(x.id)) ? " checked" : ""}>
         ${esc(x.nombre || "(sin nombre)")}
-        <span class="hint">${esc(x.estado || "")} · ${esc(x.id)}</span></label>`).join("")}
+        <span class="hint">${esc(x.estado || "")} · ${esc(x.id)}${
+          x.padre ? " · de " + esc(nombreMeta(String(x.padre))) : ""}</span></label>`;
+    const camps = lista.filter(x => x.nivel !== "conjunto");
+    const conjs = lista.filter(x => x.nivel === "conjunto");
+
+    cajaMeta.innerHTML = `<div class="note" style="margin:0 0 8px">Enlace una campaña
+        <b>o</b> sus conjuntos de anuncios, no las dos cosas: el gasto de los conjuntos ya
+        viene dentro del de su campaña, y contarlo dos veces descuadra el costo por lead.</div>
+      <div style="max-height:230px;overflow:auto;border:1px solid var(--linea);
+        border-radius:8px;padding:8px">
+      ${camps.length ? `<div class="hint" style="font-weight:700;margin:2px 0 4px">
+        Campañas de Meta</div>${camps.map(opcion).join("")}` : ""}
+      ${conjs.length ? `<div class="hint" style="font-weight:700;margin:10px 0 4px">
+        Conjuntos de anuncios</div>${conjs.map(opcion).join("")}` : ""}
     </div>
     <p style="margin:8px 0 0"><button class="btn sm primary" id="bMetaListo">Listo</button></p>`;
     cajaMeta.querySelector("#bMetaListo").onclick = () => {
@@ -7908,6 +7943,12 @@ let metaSync = null;         // el último renglón de la bitácora
 let metaError = "";    // no se pudieron LEER las cifras que ya estaban
 let metaFallo = "";    // no se pudieron TRAER las nuevas de Meta
 let metaPidiendo = null;
+/* Cuántas cifras se bajan de una vez. Ochenta y tantos objetos por un año dan
+   unos treinta mil renglones, así que el tope viejo de veinte mil los cortaba
+   sin decir nada y el tablero contaba de menos. Si se llega al tope se avisa,
+   que es lo único peor que quedarse corto: quedarse corto en silencio. */
+const TOPE_CIFRAS = 60000;
+let metaCortado = false;
 
 const hayMeta = () => nubeActiva() && !nube.sinMeta;
 const ligaFuncionMeta = () =>
@@ -7927,13 +7968,19 @@ async function pedirMeta(desde, hasta){
   if (!hayMeta()) return null;
   try{
     const [met, obj, bit] = await Promise.all([
-      api("/rest/v1/crm_meta_metricas?select=objeto,fecha,gasto,impresiones,clics,leads,moneda"
-          + "&nivel=eq.campana&fecha=gte." + desde + "&fecha=lte." + hasta + "&limit=20000"),
-      api("/rest/v1/crm_meta_objetos?select=objeto,nombre,estado&nivel=eq.campana&limit=1000"),
+      /* Bajan LOS DOS NIVELES: campañas y conjuntos de anuncios. Antes se
+         filtraba a campañas aquí; ya no, porque el hotel trabaja con los
+         conjuntos —una campaña de Meta que mezcla bodas y catering, aquí son
+         dos cosas—. Quién suma qué lo decide metricasMeta, que sabe de
+         padres e hijos; este lado nada más los trae. */
+      api("/rest/v1/crm_meta_metricas?select=nivel,objeto,fecha,gasto,impresiones,clics,leads,moneda"
+          + "&fecha=gte." + desde + "&fecha=lte." + hasta + "&limit=" + TOPE_CIFRAS),
+      api("/rest/v1/crm_meta_objetos?select=nivel,objeto,nombre,estado,padre&limit=4000"),
       api("/rest/v1/crm_meta_sync?select=cuando,quien,cuenta,desde,hasta,filas,ok,detalle"
           + "&order=cuando.desc&limit=1")
     ]);
     metaError = "";
+    metaCortado = Array.isArray(met) && met.length >= TOPE_CIFRAS;
     metaObjetos = Array.isArray(obj) ? obj : [];
     metaSync = Array.isArray(bit) && bit.length ? bit[0] : null;
     return Array.isArray(met) ? met : [];
@@ -7999,10 +8046,31 @@ async function llamaMeta(cuerpo, reintento = true){
   return j;
 }
 
-/** El nombre que Meta le puso a esa campaña, si lo sabemos. */
+/** El renglón del catálogo de un id de Meta, sea campaña o conjunto. */
+const objetoMeta = id => metaObjetos.find(x => String(x.objeto) === String(id)) || null;
+
+/** El nombre que Meta le puso a eso, si lo sabemos. */
 const nombreMeta = id => {
-  const o = metaObjetos.find(x => String(x.objeto) === String(id));
+  const o = objetoMeta(id);
   return o && o.nombre ? o.nombre : String(id);
+};
+
+/**
+ * De qué campaña de Meta cuelga un conjunto de anuncios.
+ *
+ * Vacío si es una campaña —no cuelga de nadie— o si todavía no se ha bajado
+ * el catálogo. De aquí sale la regla que impide contar el mismo gasto dos
+ * veces, así que un vacío significa "no sabemos", nunca "no tiene padre".
+ */
+const padreDe = id => {
+  const o = objetoMeta(id);
+  return o && o.padre ? String(o.padre) : "";
+};
+
+/** ¿Ese id de Meta es un conjunto de anuncios? */
+const esConjunto = id => {
+  const o = objetoMeta(id);
+  return !!(o && String(o.nivel || "") === "conjunto");
 };
 
 /**
@@ -8012,25 +8080,123 @@ const nombreMeta = id => {
  * con datos: null es "no sabemos", y se pinta con una raya. Un cero aquí
  * sería otra cosa —"no se gastó"— y no es lo que está pasando.
  */
+/**
+ * Las cifras de Meta, ordenadas una vez, para no recorrerlas por campaña.
+ *
+ * La pantalla de campañas pregunta una vez por renglón, y con los conjuntos de
+ * anuncios los renglones pasan de diecinueve a ochenta y tantos sobre decenas
+ * de miles de cifras. Recorrerlas ochenta veces se siente en la máquina de
+ * quien lo usa. Se arma al bajar y se tira cada vez que algo cambia.
+ *
+ * Y aquí se calcula LA RESTA, que es el corazón de todo esto: cuánto de lo que
+ * Meta le cobró a una campaña, un día, ya se está enseñando en alguno de sus
+ * conjuntos.
+ */
+let metaIndice = null;
+
+function indiceMeta(){
+  if (metaIndice) return metaIndice;
+
+  const porObjeto = new Map();
+  for (const f of metaMetricas || []){
+    const k = String(f.objeto);
+    if (!porObjeto.has(k)) porObjeto.set(k, []);
+    porObjeto.get(k).push(f);
+  }
+
+  /* Los conjuntos que alguna campaña del CRM ya está cobrando por su cuenta.
+     Se mira en TODAS las campañas, no en una: el peso que ya se contó en un
+     renglón de la pantalla no se puede volver a contar en otro. */
+  const tomados = new Set();
+  for (const c of state.campanas)
+    for (const id of c.metaIds || []) if (esConjunto(id)) tomados.add(String(id));
+
+  /* ¿De todos ellos sabemos de qué campaña cuelgan? Si de alguno no —porque
+     el catálogo no alcanzó a bajar—, no se puede restar, y sin restar el mismo
+     peso se contaría dos veces. En ese caso se cuenta SÓLO por campaña, como
+     antes: se pierde el detalle, que se nota, en vez de inflar la inversión,
+     que no se nota y es lo que hace tomar una decisión equivocada. */
+  let completo = true;
+  for (const id of tomados) if (!padreDe(id)){ completo = false; break; }
+
+  const resta = new Map();
+  if (completo)
+    for (const id of tomados)
+      for (const f of porObjeto.get(id) || []){
+        const k = padreDe(id) + "|" + String(f.fecha || "").slice(0, 10);
+        const a = resta.get(k) || { gasto:0, impresiones:0, clics:0, leads:0 };
+        a.gasto       += Number(f.gasto) || 0;
+        a.impresiones += Number(f.impresiones) || 0;
+        a.clics       += Number(f.clics) || 0;
+        a.leads       += Number(f.leads) || 0;
+        resta.set(k, a);
+      }
+
+  metaIndice = { porObjeto, resta, completo };
+  return metaIndice;
+}
+
+/**
+ * Lo que Meta dice de una campaña del CRM, sumando las suyas.
+ *
+ * Devuelve null cuando la campaña no está enlazada o cuando no hay ni un día
+ * con datos: null es "no sabemos", y se pinta con una raya. Un cero aquí
+ * sería otra cosa —"no se gastó"— y no es lo que está pasando.
+ *
+ * ------------------------------------------------------------------------
+ * EL GASTO DE UN CONJUNTO YA VIENE DENTRO DEL DE SU CAMPAÑA.
+ *
+ * Meta no los suma: los desglosa. Si el hotel tiene enlazada la campaña en un
+ * renglón y uno de sus conjuntos en otro, sumar los dos tal cual infla la
+ * inversión —y con ella el costo por lead y el retorno, que son las dos cifras
+ * con las que alguien decide dónde gastar el mes que entra—.
+ *
+ * La regla: un conjunto se suma entero; una campaña se suma MENOS los
+ * conjuntos suyos que estén enlazados en cualquier campaña del CRM, DÍA POR
+ * DÍA.
+ *
+ * Día por día y no al final, porque los dos conviven en la misma tabla: los
+ * días de antes de traer los conjuntos no tienen desglose y la campaña vale
+ * entera, y los de después sí lo tienen y a la campaña le queda lo que sobra.
+ * Restando al final, un rango que cruce las dos épocas saldría mal. Y por eso
+ * tampoco se desenlaza la campaña al traer sus conjuntos: eso borraría de la
+ * pantalla todos los meses de historia que sólo existen a nivel de campaña.
+ *
+ * Se acota en cero porque Meta redondea cada nivel por su cuenta: unos
+ * centavos al revés pintarían un gasto negativo, que no existe.
+ */
 function metricasMeta(c, desde, hasta){
   const ids = (c.metaIds || []).map(String);
   if (!metaMetricas || !ids.length) return null;
-  const busca = new Set(ids);
+  const ix = indiceMeta();
   let gasto = 0, impresiones = 0, clics = 0, leads = 0, moneda = "", dias = 0;
-  for (const f of metaMetricas){
-    if (!busca.has(String(f.objeto))) continue;
-    const d = String(f.fecha || "").slice(0, 10);
-    if (desde && d < desde) continue;
-    if (hasta && d > hasta) continue;
-    gasto += Number(f.gasto) || 0;
-    impresiones += Number(f.impresiones) || 0;
-    clics += Number(f.clics) || 0;
-    leads += Number(f.leads) || 0;
-    moneda = moneda || String(f.moneda || "");
-    dias++;
+  let desglosados = 0;
+  for (const id of ids){
+    const conj = esConjunto(id);
+    if (conj && !ix.completo) continue;   // sin saber de quién cuelga, no se cuenta
+    for (const f of ix.porObjeto.get(id) || []){
+      const d = String(f.fecha || "").slice(0, 10);
+      if (desde && d < desde) continue;
+      if (hasta && d > hasta) continue;
+      let g  = Number(f.gasto) || 0,       im = Number(f.impresiones) || 0,
+          cl = Number(f.clics) || 0,       le = Number(f.leads) || 0;
+      if (!conj){
+        const r = ix.resta.get(id + "|" + d);
+        if (r){
+          g  = Math.max(0, g  - r.gasto);
+          im = Math.max(0, im - r.impresiones);
+          cl = Math.max(0, cl - r.clics);
+          le = Math.max(0, le - r.leads);
+          desglosados++;
+        }
+      }
+      gasto += g; impresiones += im; clics += cl; leads += le;
+      moneda = moneda || String(f.moneda || "");
+      dias++;
+    }
   }
   return dias ? { gasto: Math.round(gasto * 100) / 100, impresiones, clics, leads,
-                  moneda, dias } : null;
+                  moneda, dias, desglosados } : null;
 }
 
 /**
@@ -8046,11 +8212,22 @@ function celdaMeta(c, gastoManual, desde, hasta){
   const m = metricasMeta(c, desde, hasta);
   if (!m)
     return `<span class="hint" title="Meta no reportó gasto de esta campaña en el periodo">—</span>`;
-  const dispar = gastoManual && m.gasto &&
+  /* El ≠ compara lo capturado a mano con lo que dice Meta, y eso sólo tiene
+     sentido cuando las dos cifras hablan de lo mismo. Si a esta campaña ya se
+     le restó lo que se enseña en sus conjuntos, aquí sale un residual y allá
+     está el gasto entero del mes: marcarlas como que no cuadran sería gritar
+     por algo que está bien. */
+  const dispar = !m.desglosados && gastoManual && m.gasto &&
     Math.abs(m.gasto - gastoManual) / Math.max(m.gasto, gastoManual) > 0.10;
+  /* Cuando parte del gasto ya se está enseñando en sus conjuntos, aquí sale
+     sólo lo que sobra. Sin decirlo, una campaña que ayer traía cincuenta mil y
+     hoy trae dos mil parece un error del CRM. */
+  const desglose = m.desglosados
+    ? ` <span class="hint" title="Este gasto ya se está enseñando en sus conjuntos de anuncios, que están aquí como campañas aparte. Aquí sale sólo lo que no cayó en ninguno, para no cobrarlo dos veces.">· desglosada</span>`
+    : "";
   return esc(moneyMN(m.gasto)) + (dispar
     ? ` <b style="color:var(--warn)" title="No cuadra con lo capturado a mano (${
-        esc(moneyMN(gastoManual))}). Revise si falta capturar un mes.">≠</b>` : "");
+        esc(moneyMN(gastoManual))}). Revise si falta capturar un mes.">≠</b>` : "") + desglose;
 }
 
 /** "hace 3 horas", que es como lo diría una persona. */
@@ -8121,7 +8298,15 @@ function tiraMeta(){
       <span class="hint">${esc(metaError)}</span></div>` : ""}
     ${metaFallo ? `<div class="errbox" style="margin-bottom:12px">
       No se pudo traer lo de Meta.<br>
-      <span class="hint">${esc(metaFallo)}</span></div>` : ""}`;
+      <span class="hint">${esc(metaFallo)}</span></div>` : ""}
+    ${metaCortado ? `<div class="note warn" style="margin-bottom:12px">
+      <b>Son demasiadas cifras para un solo jalón.</b> Se trajeron las primeras y las
+      demás se quedaron fuera, así que la inversión de esta pantalla sale <b>de menos</b>.
+      Escoja un periodo más corto arriba, en el tablero de marketing.</div>` : ""}
+    ${(metaMetricas && !indiceMeta().completo) ? `<div class="note warn" style="margin-bottom:12px">
+      <b>Falta saber de qué campaña cuelga algún conjunto de anuncios.</b> Mientras tanto
+      se cuenta <b>sólo por campaña</b>, como antes, para no cobrar el mismo peso dos veces.
+      Con volver a apretar <b>Sincronizar</b> se arregla.</div>` : ""}`;
 }
 
 /**
@@ -8130,7 +8315,7 @@ function tiraMeta(){
  * Una cuenta publicitaria con cientos de campañas activas no tiene por qué
  * poder llenar la cartera del hotel de un botonazo. Si se pasa, se dice.
  */
-const TOPE_TRAER = 50;
+const TOPE_TRAER = 80;
 
 /** Para comparar nombres sin que estorben acentos, mayúsculas ni dobles espacios. */
 const mismoNombre = n => String(n || "").trim().toLowerCase()
@@ -8210,6 +8395,72 @@ function traeCampanasDeMeta(lista, gastaron){
 }
 
 /**
+ * Trae al CRM los CONJUNTOS DE ANUNCIOS que de verdad corrieron.
+ *
+ * Es el nivel con el que trabaja el hotel. Una campaña de Meta puede mezclar
+ * bodas y catering; en el CRM ésas son dos cosas distintas, con su propio
+ * presupuesto y sus propios prospectos, y hasta que no se separan no se puede
+ * decir cuál de las dos está dejando dinero.
+ *
+ * Misma regla que arriba —gastó, no "está activa"— y los mismos tres cuidados.
+ *
+ * La campaña padre NO se desenlaza. Se pensó y estaba mal: sus meses de
+ * historia existen nada más a nivel de campaña, y desenlazarla los borraría de
+ * la pantalla de un jalón. Lo que impide contar el mismo peso dos veces está
+ * en metricasMeta, que le resta a cada campaña, día por día, lo que ya se está
+ * enseñando en sus conjuntos.
+ */
+function traeConjuntosDeMeta(lista, gastaron){
+  const corrieron = gastaron instanceof Set ? gastaron : new Set();
+  const activos = (lista || []).filter(c =>
+    String(c.id || "").trim() && corrieron.has(String(c.id)));
+
+  const enlazados = new Set();
+  for (const c of state.campanas) for (const id of c.metaIds || []) enlazados.add(String(id));
+
+  const porNombre = new Map();
+  for (const c of state.campanas)
+    if (!(c.metaIds || []).length) porNombre.set(mismoNombre(c.nombre), c);
+
+  let nuevas = 0, enlazadas = 0, cortadas = 0;
+  for (const m of activos){
+    const id = String(m.id);
+    if (enlazados.has(id)) continue;
+
+    const ya = porNombre.get(mismoNombre(m.nombre));
+    if (ya){
+      ya.metaIds = [id];
+      ya.updatedAt = new Date().toISOString();
+      enlazados.add(id);
+      porNombre.delete(mismoNombre(m.nombre));
+      enlazadas++;
+      continue;
+    }
+
+    if (nuevas >= TOPE_TRAER){ cortadas++; continue; }
+
+    const dePadre = nombreMeta(String(m.padre || ""));
+    const c = saneaCampana({
+      nombre: String(m.nombre || "").slice(0, 120) || "(sin nombre en Meta)",
+      canal: "meta",
+      estado: /^ACTIVE$/i.test(String(m.estado || "")) ? "activa" : "pausada",
+      metaIds: [id],
+      origen: "meta",
+      responsable: miNombre(),
+      notas: "Conjunto de anuncios" + (m.padre ? ' de la campaña «' + dePadre + '»' : "") +
+             ". Se trajo de Meta el " + fechaTexto(hoyISO()) + "."
+    });
+    c.createdAt = new Date().toISOString();
+    state.campanas.push(c);
+    enlazados.add(id);
+    nuevas++;
+  }
+
+  if (nuevas || enlazadas) guardar();
+  return { nuevas, enlazadas, cortadas, activas: activos.length };
+}
+
+/**
  * Las campañas que trajo la sincronización y resultaron cascarón vacío.
  *
  * Son las que entraron con la regla vieja —la de "activa en Meta"— y nunca
@@ -8221,6 +8472,15 @@ function traeCampanasDeMeta(lista, gastaron){
  * alguien se tomó la molestia de escribirlo, se queda.
  */
 function campanasHuecasDeMeta(){
+  /* "Sin movimiento" se juzga contra las cifras QUE ESTÁN CARGADAS, y ésas son
+     las del periodo del tablero de marketing. Con un periodo corto, un conjunto
+     que gastó el mes pasado se vería hueco y se ofrecería quitarlo. Con
+     diecinueve campañas casi no se notaba; con ochenta y tantos conjuntos sería
+     ofrecer borrar medio Meta. Así que no se ofrece nada hasta tener un año
+     completo cargado. */
+  const [d, h] = rangoMkt();
+  const largo = (Date.parse(h) - Date.parse(d)) / 86400000;
+  if (!(largo >= 300)) return [];
   const conGasto = new Set((metaMetricas || [])
     .filter(f => (Number(f.gasto) || 0) > 0).map(f => String(f.objeto)));
   return state.campanas.filter(c => {
@@ -8247,6 +8507,7 @@ function cargaMeta(vuelveAPintar){
   metaPidiendo = pedirMeta(d, h).then(r => {
     metaPidiendo = null;
     metaMetricas = r || [];
+    metaIndice = null;
     vuelveAPintar();
   });
 }
@@ -8300,7 +8561,12 @@ function enganchaTiraMeta(cont, alTerminar){
           .filter(f => (Number(f.gasto) || 0) > 0)
           .map(f => String(f.objeto)));
         const cat = await llamaMeta({ accion: "catalogo" });
-        const r = traeCampanasDeMeta(cat.campanas, gastaron);
+        /* Se traen los CONJUNTOS DE ANUNCIOS, no las campañas: es el nivel con
+           el que trabaja el hotel. Si el servidor todavía es el viejo y no los
+           manda, se cae de vuelta a las campañas en vez de no traer nada. */
+        const r = (cat.conjuntos && cat.conjuntos.length)
+          ? traeConjuntosDeMeta(cat.conjuntos, gastaron)
+          : traeCampanasDeMeta(cat.campanas, gastaron);
         if (r.nuevas) partes.push(r.nuevas + (r.nuevas === 1
           ? " campaña nueva de Meta" : " campañas nuevas de Meta"));
         if (r.enlazadas) partes.push(r.enlazadas + (r.enlazadas === 1

@@ -21,10 +21,12 @@ if (ini < 0 || fin < 0) { console.log('No se encontraron las marcas de la lógic
 const VERSION_DEF = (src.match(/const VERSION_DEF = "([^"]+)"/) || [])[1] || '';
 ok('el archivo fija una versión de la API de Meta', /^v\d+\.\d+$/.test(VERSION_DEF), VERSION_DEF);
 
-const { ventana, leadsDe, filaMetrica, objetosDeInsights, mensajeDeError, normalizaCuenta } =
+const { ventana, leadsDe, filaMetrica, objetosDeInsights, mensajeDeError, normalizaCuenta,
+        nivelDe } =
   new Function('VERSION_DEF', `
     ${src.slice(ini, fin)}
-    return { ventana, leadsDe, filaMetrica, objetosDeInsights, mensajeDeError, normalizaCuenta };
+    return { ventana, leadsDe, filaMetrica, objetosDeInsights, mensajeDeError, normalizaCuenta,
+             nivelDe };
   `)(VERSION_DEF);
 
 console.log('\n== La cuenta publicitaria, como la pegue quien la pegue ==');
@@ -99,6 +101,64 @@ console.log('\n== Un renglón de Meta se vuelve un renglón de la tabla ==');
      vacio.gasto === 0 && vacio.impresiones === 0 && vacio.leads === 0);
 }
 
+console.log('\n== De qué nivel es cada renglón ==');
+/* Meta contesta los insights con los campos del nivel que se le pidió y con
+   los de arriba: un renglón de conjunto trae adset_id Y campaign_id. Si se
+   leyera nada más el campaign_id, el gasto de los conjuntos se guardaría como
+   si fuera de la campaña —y el mismo dinero quedaría contado dos veces—. */
+{
+  const camp = nivelDe({ campaign_id:'120210000000000123', campaign_name:'Bodas verano' });
+  ok('un renglón de campaña es una campaña y no cuelga de nadie',
+     camp.nivel === 'campana' && camp.objeto === '120210000000000123' &&
+     camp.nombre === 'Bodas verano' && camp.padre === '', JSON.stringify(camp));
+
+  const conj = nivelDe({ adset_id:'120210000000000999', adset_name:'QZ_CATERING_TJ',
+                         campaign_id:'120210000000000123', campaign_name:'Bodas verano' });
+  ok('UN RENGLÓN CON adset_id ES UN CONJUNTO, NO LA CAMPAÑA',
+     conj.nivel === 'conjunto' && conj.objeto === '120210000000000999',
+     JSON.stringify(conj));
+  ok('Y CUELGA DE SU CAMPAÑA, que es lo que después evita contar doble',
+     conj.padre === '120210000000000123', conj.padre);
+  ok('con su propio nombre, no el de la campaña', conj.nombre === 'QZ_CATERING_TJ');
+
+  ok('sin nada útil no inventa un objeto', nivelDe({}).objeto === '' &&
+     nivelDe(undefined).objeto === '');
+}
+
+console.log('\n== Un conjunto de anuncios se guarda aparte de su campaña ==');
+{
+  const conj = { adset_id:'120210000000000999', adset_name:'QZ_CATERING_TJ',
+    campaign_id:'120210000000000123', campaign_name:'Bodas verano',
+    spend:'300.50', impressions:'900', clicks:'40',
+    actions:[{ action_type:'lead', value:'3' }],
+    date_start:'2026-09-20', date_stop:'2026-09-20' };
+  const f = filaMetrica(conj, 'act_999', 'MXN');
+  ok('SE GUARDA EN EL NIVEL DE CONJUNTO, con su id, no con el de la campaña',
+     f.nivel === 'conjunto' && f.objeto === '120210000000000999', JSON.stringify(f));
+  ok('con sus propias cifras', f.gasto === 300.5 && f.leads === 3);
+  ok('y tampoco aquí se guarda un nombre', !JSON.stringify(f).includes('CATERING'));
+
+  const o = objetosDeInsights([conj,
+    { campaign_id:'120210000000000123', campaign_name:'Bodas verano',
+      date_start:'2026-09-20' }], 'act_999');
+  ok('EL CATÁLOGO LOS DISTINGUE: dos renglones, no uno', o.length === 2, String(o.length));
+  const oc = o.find(x => x.nivel === 'conjunto');
+  ok('el conjunto trae el nombre del conjunto y el id de su campaña',
+     oc && oc.nombre === 'QZ_CATERING_TJ' && oc.padre === '120210000000000123',
+     JSON.stringify(oc));
+  ok('y la campaña sigue sin padre',
+     o.find(x => x.nivel === 'campana').padre === '');
+
+  /* El mismo id en dos niveles no pasa en Meta, pero si pasara no se deben
+     pisar: la llave del catálogo lleva el nivel, como la de la tabla. */
+  const chocan = objetosDeInsights([
+    { campaign_id:'777', campaign_name:'La campaña', date_start:'2026-09-20' },
+    { adset_id:'777', adset_name:'El conjunto', campaign_id:'888',
+      date_start:'2026-09-20' }], 'act_999');
+  ok('UN ID REPETIDO ENTRE NIVELES NO SE PISA', chocan.length === 2,
+     JSON.stringify(chocan));
+}
+
 console.log('\n== El catálogo de nombres ==');
 {
   const filas = [
@@ -151,6 +211,16 @@ console.log('\n== Un error de Meta, en cristiano ==');
 
 console.log('\n== Lo que el archivo promete ==');
 {
+  ok('EL CATÁLOGO SE GUARDA ANTES QUE LAS CIFRAS',
+     src.indexOf('crm_meta_objetos") \n') < 0 &&
+     src.indexOf('from("crm_meta_objetos")') < src.indexOf('from("crm_meta_metricas")\n'));
+  ok('y si el catálogo no se guarda, truena en vez de dejar conjuntos sin padre',
+     /crm_meta_objetos[\s\S]{0,260}if \(error\) throw/.test(src));
+  ok('LEE LOS DOS NIVELES: campañas y conjuntos de anuncios',
+     /level=\$\{nivel\}/.test(src) &&
+     src.includes('insightsDe("campaign"') && src.includes('insightsDe("adset"'));
+  ok('y los conjuntos no tumban la sincronización si fallan',
+     /crudasConj[\s\S]{0,400}catch/.test(src));
   ok('NUNCA ESCRIBE EN META: no hay un solo POST a graph.facebook.com',
      !/method:\s*["']POST["'][\s\S]{0,200}graph\.facebook/.test(src) &&
      !/graph\.facebook[\s\S]{0,200}method:\s*["']POST["']/.test(src));

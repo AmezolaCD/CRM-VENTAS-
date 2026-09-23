@@ -47,10 +47,21 @@ búsqueda pagada, una feria.
 
 - **Canal**: Meta, Google, OTA, expo, referido, orgánico u otro. No es texto libre a propósito.
   Si cada quien escribe «face», «Facebook» y «FB», ningún reporte cuadra nunca.
-- **Las de Meta se traen solas.** Al apretar *Sincronizar*, las campañas que **estuvieron
-  corriendo** —las que gastaron en el periodo, no las que Meta marca como activas— entran al CRM
-  ya enlazadas, sin capturarlas. No se duplican, y si una ya estaba capturada a mano con el
-  mismo nombre se le pone el enlace en vez de crear otra.
+- **Las de Meta se traen solas.** Al apretar *Sincronizar*, los **conjuntos de anuncios** que
+  **estuvieron corriendo** —los que gastaron en el periodo, no los que Meta marca como activos—
+  entran al CRM ya enlazados, cada uno como su propia campaña. No se duplican, y si uno ya
+  estaba capturado a mano con el mismo nombre se le pone el enlace en vez de crear otro.
+
+  Se traen los **conjuntos** y no las campañas de Meta porque es el nivel con el que se
+  trabaja: una campaña de Meta llamada *Eventos* puede traer un conjunto de bodas y otro de
+  catering, y aquí ésas son dos cosas con su propio presupuesto y sus propios prospectos. Bajo
+  el nombre de cada una dice de qué campaña de Meta cuelga.
+
+  **La inversión no se duplica.** El gasto de un conjunto ya viene dentro del de su campaña
+  —Meta no los suma, los desglosa—, así que el CRM le resta a la campaña, día por día, lo que
+  ya está enseñando en sus conjuntos; donde diga **· desglosada**, ahí sale sólo lo que sobró.
+  La campaña padre **no se desenlaza**, para no borrar de la pantalla los meses de historia que
+  sólo existen a ese nivel. Está explicado con detalle en **[META.md](META.md)**.
 - **Presupuesto y gasto**: el gasto se captura **mes por mes**, como lo cobra la plataforma. La
   pantalla va sumando y **avisa en rojo cuando se pasa del presupuesto**.
 - **Leads**: la columna dice cuántos prospectos trajo. Hoy se llena cuando el prospecto se
