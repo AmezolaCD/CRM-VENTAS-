@@ -121,6 +121,16 @@ console.log('\n== De qué nivel es cada renglón ==');
      conj.padre === '120210000000000123', conj.padre);
   ok('con su propio nombre, no el de la campaña', conj.nombre === 'QZ_CATERING_TJ');
 
+  /* Un renglón de anuncio trae LOS TRES ids. Si se leyera el de la campaña,
+     el mensaje de WhatsApp que entra por ese anuncio no podría amarrarse a su
+     conjunto, que es lo único que interesa. */
+  const anun = nivelDe({ ad_id:'120210000000007', ad_name:'QZ_CATERING_VIDEO_15s',
+                         adset_id:'120210000000000999', campaign_id:'120210000000000123' });
+  ok('UN RENGLÓN CON ad_id ES UN ANUNCIO, y cuelga de su CONJUNTO, no de la campaña',
+     anun.nivel === 'anuncio' && anun.objeto === '120210000000007' &&
+     anun.padre === '120210000000000999', JSON.stringify(anun));
+  ok('con su propio nombre', anun.nombre === 'QZ_CATERING_VIDEO_15s');
+
   ok('sin nada útil no inventa un objeto', nivelDe({}).objeto === '' &&
      nivelDe(undefined).objeto === '');
 }
@@ -216,6 +226,12 @@ console.log('\n== Lo que el archivo promete ==');
      src.indexOf('from("crm_meta_objetos")') < src.indexOf('from("crm_meta_metricas")\n'));
   ok('y si el catálogo no se guarda, truena en vez de dejar conjuntos sin padre',
      /crm_meta_objetos[\s\S]{0,260}if \(error\) throw/.test(src));
+  ok('BAJA EL CATÁLOGO DE ANUNCIOS, que es lo que amarra un WhatsApp a su conjunto',
+     /\/ads\b[\s\S]{0,120}adset_id/.test(src) && src.includes('nivel: "anuncio"'));
+  ok('pero SIN CIFRAS: el gasto de un anuncio ya está contado en su conjunto',
+     !/insightsDe\("ad"/.test(src) && !/level=ad\b/.test(src));
+  ok('y si no se pueden listar, la sincronización sigue',
+     /anuncios[\s\S]{0,400}catch/.test(src));
   ok('LEE LOS DOS NIVELES: campañas y conjuntos de anuncios',
      /level=\$\{nivel\}/.test(src) &&
      src.includes('insightsDe("campaign"') && src.includes('insightsDe("adset"'));

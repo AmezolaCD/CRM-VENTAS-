@@ -443,6 +443,11 @@ decidió así—: ve sus campañas, sus ligas y los prospectos, y nada más.
   una lista, con la campaña de la que vino. Ahí se **reparte**: de qué área es y quién lo
   trabaja. El asignado es el que lo recibe del servidor, así que asignar no es una etiqueta:
   es lo que hace que el lead le aparezca.
+- **WhatsApp.** Los anuncios del hotel son de *mensajes*: la gente da clic y escribe. Con la
+  conexión puesta, cada mensaje entra solo a **Leads** y **sabiendo de qué conjunto de anuncios
+  vino** —el primer mensaje trae el id del anuncio—, que es lo que permite saber por fin cuál
+  está dejando dinero. Sólo recibe; se sigue contestando donde se contesta hoy. Los pasos están
+  en **[WHATSAPP.md](WHATSAPP.md)**.
 - **Tablero.** El embudo —de lead a cierre—, el costo por lead y el retorno por campaña.
 - **Meta Ads.** Con la conexión puesta, el gasto, las impresiones y los clics **bajan solos**,
   por campaña y por día. Lo capturado a mano no se pisa: los dos se enseñan y, cuando no

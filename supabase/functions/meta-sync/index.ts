@@ -114,13 +114,20 @@ function num(v) {
  * y el de sus hijos se sumarían como si fueran dinero distinto—.
  */
 function nivelDe(ins) {
+  const anuncio  = String((ins && ins.ad_id) || "").trim();
   const conjunto = String((ins && ins.adset_id) || "").trim();
-  const campana = String((ins && ins.campaign_id) || "").trim();
-  return conjunto
-    ? { nivel: "conjunto", objeto: conjunto,
-        nombre: String((ins && ins.adset_name) || ""), padre: campana }
-    : { nivel: "campana", objeto: campana,
-        nombre: String((ins && ins.campaign_name) || ""), padre: "" };
+  const campana  = String((ins && ins.campaign_id) || "").trim();
+  /* Del más hondo al más alto: el renglón de un anuncio trae los tres campos,
+     el de un conjunto trae dos, el de una campaña uno. Quien manda es el más
+     hondo que venga. */
+  if (anuncio)
+    return { nivel: "anuncio", objeto: anuncio,
+             nombre: String((ins && ins.ad_name) || ""), padre: conjunto };
+  if (conjunto)
+    return { nivel: "conjunto", objeto: conjunto,
+             nombre: String((ins && ins.adset_name) || ""), padre: campana };
+  return { nivel: "campana", objeto: campana,
+           nombre: String((ins && ins.campaign_name) || ""), padre: "" };
 }
 
 /**
@@ -430,18 +437,43 @@ Deno.serve(async (req) => {
         console.log("meta-sync: no se pudieron listar los conjuntos ::", String(e));
       }
 
+      /* Y los anuncios. SÓLO EL CATÁLOGO, sin una sola cifra: lo que gastó un
+         anuncio ya está contado en su conjunto, y bajarlo otra vez sería el
+         mismo lío de cobrar dos veces el mismo peso.
+
+         Se bajan porque un mensaje de WhatsApp que entra por un anuncio trae
+         el id DEL ANUNCIO, no el del conjunto. Sin esta lista no hay manera de
+         subir de uno al otro, y el lead caería sin saber de dónde vino. */
+      let anuncios: any[] = [];
+      try {
+        const r = await todo(
+          `https://graph.facebook.com/${version}/${cuenta}/ads` +
+          `?fields=id,name,status,effective_status,adset_id&limit=500` +
+          `&access_token=${encodeURIComponent(token)}`);
+        anuncios = r.filas.map((c: any) => ({
+          id: String(c.id), nombre: String(c.name || ""),
+          estado: String(c.effective_status || c.status || ""),
+          padre: String(c.adset_id || ""),
+        }));
+      } catch (e) {
+        console.log("meta-sync: no se pudieron listar los anuncios ::", String(e));
+      }
+
       const guardar = lista.map((c: any) => ({
         nivel: "campana", objeto: c.id, nombre: c.nombre, padre: "",
         estado: c.estado, cuenta, visto: new Date().toISOString(),
       })).concat(conjuntos.map((c: any) => ({
         nivel: "conjunto", objeto: c.id, nombre: c.nombre, padre: c.padre,
         estado: c.estado, cuenta, visto: new Date().toISOString(),
+      })), anuncios.map((c: any) => ({
+        nivel: "anuncio", objeto: c.id, nombre: c.nombre, padre: c.padre,
+        estado: c.estado, cuenta, visto: new Date().toISOString(),
       })));
       if (guardar.length)
         await admin.from("crm_meta_objetos")
           .upsert(guardar, { onConflict: "nivel,objeto" });
 
-      return responde(200, { ok: true, cuenta, campanas: lista, conjuntos });
+      return responde(200, { ok: true, cuenta, campanas: lista, conjuntos, anuncios });
     }
 
     // ---- 4b. Las cifras --------------------------------------------------
@@ -458,7 +490,7 @@ Deno.serve(async (req) => {
     } catch { /* si no se puede, se sigue sin moneda: el gasto vale igual */ }
 
     /* Dos lecturas, una por nivel.
-       
+
        No se saca una de la otra: el gasto de una campaña NO siempre es la suma
        de sus conjuntos —Meta cobra cosas al nivel de la campaña— y sumarlos a
        mano daría una cifra que no cuadra con la que el hotel ve en su propia
@@ -495,7 +527,7 @@ Deno.serve(async (req) => {
     const objetos = objetosDeInsights(todas, cuenta);
 
     /* EL CATÁLOGO SE GUARDA ANTES QUE LAS CIFRAS, y si falla, truena.
-       
+
        De ahí sale de qué campaña cuelga cada conjunto, y sin eso el CRM no
        puede restarle a la campaña lo que ya está enseñando en sus conjuntos:
        contaría el mismo peso dos veces. Al revés —cifras guardadas y catálogo

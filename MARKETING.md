@@ -211,14 +211,31 @@ servidor se lo entrega: antes de asignarlo, el lead lo ve quien lo capturó —q
 marketing, que no tiene cartera—. Por eso arriba se dice cuántos están **sin asignar**, con un
 botón para ver sólo ésos: es la cola de trabajo real.
 
-### El lead de WhatsApp
+### Los leads de WhatsApp entran solos
 
-Los anuncios de mensajes no dejan rastro en el CRM: **Meta no entrega esas conversaciones por su
-API**. Para que sí lo hicieran, el número del hotel tendría que estar también en la *Cloud API*
-—se puede, sin perder el teléfono, pero es otra entrega—.
+Los anuncios del hotel son de **mensajes**: la gente da clic y escribe. Con la conexión puesta,
+cada mensaje entra solo a esta lista, con el teléfono, el nombre de su perfil y lo que escribió.
 
-Mientras tanto, el botón **+ Lead de WhatsApp** lo mete en diez segundos: quién es, su teléfono,
-de qué anuncio venía y qué pidió. Es preferible a perderlo.
+Y entra **sabiendo de qué conjunto vino**. El primer mensaje de una conversación que empezó en
+un anuncio trae el id **del anuncio**; de ahí el CRM sube al conjunto y del conjunto a la
+campaña. Tres saltos, y si falla uno el lead entra **sin campaña** en vez de colgarse de otra:
+un lead en la campaña equivocada ensucia el costo por lead de las dos, y eso no se nota hasta
+que alguien decide con el número malo.
+
+Quien escribe tres veces es una persona, no tres: si ya hay un lead con ese teléfono sin pasar a
+la cartera, el mensaje nuevo se le anexa a las notas.
+
+Arriba de la lista, una tira dice si los mensajes están entrando. Sin ella, el día que la
+conexión se caiga los leads dejarían de llegar sin un error que ver —y la ausencia de leads se
+confunde con una mala racha—.
+
+Esto **sólo recibe**. Se sigue contestando donde se contesta hoy: Meta únicamente deja responder
+libre durante 24 horas y fuera de esa ventana exige plantillas que aprueba una por una, así que
+una bandeja dentro del CRM es otra cosa y más grande. Los pasos para conectarlo están en
+**[WHATSAPP.md](WHATSAPP.md)**.
+
+Mientras no esté conectado —o para lo que llegue por otro lado—, el botón **+ Lead de WhatsApp**
+lo mete a mano en diez segundos: quién es, su teléfono, de qué anuncio venía y qué pidió.
 
 ## El tablero
 
@@ -293,8 +310,9 @@ del hotel, no del programa.
 | ~~2~~ | ~~Liga pública de registro y atribución de punta a punta~~ ✅ |
 | ~~3~~ | ~~Tablero: embudo, costo por lead y retorno~~ ✅ |
 | ~~4~~ | ~~Meta Ads: gasto, impresiones y costo por lead, bajados solos~~ ✅ |
-| 5 | Lead Ads: el lead de Meta entra al CRM en el momento |
-| 6 | Lead Scoring, Biblioteca de Activos y Automatizaciones |
+| ~~5~~ | ~~WhatsApp: el mensaje del anuncio entra solo, con su conjunto~~ ✅ |
+| 6 | Lead Ads: el formulario de Meta entra al CRM en el momento |
+| 7 | Lead Scoring, Biblioteca de Activos y Automatizaciones |
 
 **Las OTAs no se atribuyen igual.** Booking y Expedia no entregan el contacto hasta que hay
 reserva, y no pasan por una liga con UTMs. Para esos canales no hay atribución de lead: entran

@@ -410,11 +410,30 @@ renglón.
 Sin correrlo, el CRM funciona igual y el gasto se captura a mano, como hasta hoy. El paso a
 paso completo —incluido cómo sacar el acceso de Meta— está en **META.md**.
 
+## Los mensajes de WhatsApp de los anuncios
+
+`whatsapp.sql` monta el buzón donde cae cada mensaje que entra por un anuncio de
+clic-a-WhatsApp. Se corre una vez y se puede repetir.
+
+Está hecho igual que `meta.sql`, y por la misma razón: **nadie lo escribe desde el navegador**.
+No hay una sola regla de escritura. La única que escribe es la función `wa-hook`, con la llave
+de servicio. Si alguien pudiera escribirlo desde el CRM, podría inventarse leads —y un CRM con
+leads inventados es peor que uno vacío, porque se les asigna gente y se reporta que la campaña
+funcionó—.
+
+`mensaje_id` es único, y eso tampoco es de adorno: Meta y el proveedor reintentan cuando no
+reciben respuesta a tiempo, y sin eso un reintento levantaría un segundo lead de la misma
+persona.
+
+Sin correrlo, los mensajes de los anuncios se siguen capturando a mano con el botón de la
+pestaña Leads, y el CRM lo avisa ahí mismo. El paso a paso —incluido lo que hay que hacer en
+el proveedor— está en **[WHATSAPP.md](WHATSAPP.md)**.
+
 ## Los archivos .sql se corren en el orden que sea
 
 `nube.sql` va primero, porque crea la tabla. Los demás —`roles.sql`, `firmas.sql`,
-`archivos.sql`, `folios.sql`, `prospectos.sql`, `marketing.sql`, `meta.sql`— no dependen unos
-de otros: se corren en cualquier orden, cuantas veces haga falta, y cada uno se reemplaza
+`archivos.sql`, `folios.sql`, `prospectos.sql`, `marketing.sql`, `meta.sql`, `whatsapp.sql`— no
+dependen unos de otros: se corren en cualquier orden, cuantas veces haga falta, y cada uno se reemplaza
 entero en vez de acumularse.
 
 Eso incluye correr `archivos.sql` o `folios.sql` **antes** que `roles.sql`. Los dos

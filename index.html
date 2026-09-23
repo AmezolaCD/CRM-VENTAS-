@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.23-65";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.23-66";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2611,6 +2611,7 @@ async function salir(){
      de marketing. No se ven en su pantalla de todos modos, pero no tienen por
      qué seguir en la memoria de este equipo. */
   mkIngresos = null; mkIngresosError = "";
+  waSync = null; waPidiendo = null;
   metaMetricas = null; metaObjetos = []; metaSync = null;
   metaError = ""; metaFallo = "";
   try{ localStorage.setItem(STORE, JSON.stringify(state)); }catch(e){}
@@ -2951,6 +2952,9 @@ async function sincronizar(){
     // Los registros que dejaron en la liga entran antes de subir, para que
     // viajen a los demás equipos en esta misma tanda.
     if (!nube.sinBuzonAltas && (await recogerAltas()).hubo) render();
+    // Y los de WhatsApp, que entran por el mismo camino y son los que más se
+    // perdían: los anuncios del hotel son de mensajes.
+    if (!nube.sinBuzonWa && (await recogerWhatsApp()).hubo) render();
     if (resolverFoliosRepetidos()) render();
 
     const actuales = filasDeEstado();
@@ -4406,6 +4410,53 @@ const nombreCampanaDe = p => {
   return c ? c.nombre : "";
 };
 
+/**
+ * Si los mensajes de WhatsApp están entrando o no.
+ *
+ * Sin esto, el día que el webhook se caiga los leads simplemente dejarían de
+ * llegar y nadie se enteraría: no hay error que ver, sólo ausencia. Y la
+ * ausencia de leads se confunde con una mala racha.
+ */
+function tiraWhatsApp(){
+  if (!nubeActiva()) return "";
+  if (nube.sinBuzonWa)
+    return `<div class="note warn"><b>WhatsApp todavía no está conectado.</b>
+      Los mensajes que entran por los anuncios se capturan a mano, con el botón de arriba.
+      Para que entren solos se corre <code>whatsapp.sql</code> en Supabase y se sube la
+      función <code>wa-hook</code>. El paso a paso está en <b>WHATSAPP.md</b>.</div>`;
+  if (!waSync) return "";
+  /* Corrido whatsapp.sql pero sin un solo mensaje todavía, no hay nada que
+     decir: una tira que dijera "el último mensaje entró" sin decir cuándo se
+     lee como una frase cortada, y peor, como si ya estuviera entrando algo. */
+  if (!waSync.cuando) return "";
+  const bien = waSync.ok;
+  return `<div class="note" style="border-left:3px solid ${bien ? "var(--ok)" : "var(--bad)"}">
+    <b>WhatsApp</b> · ${bien ? "el último mensaje entró " + esc(haceCuanto(waSync.cuando))
+      : "la última vez falló " + esc(haceCuanto(waSync.cuando))}
+    ${!bien && waSync.detalle ? `<br><span class="hint">${esc(waSync.detalle)}</span>` : ""}</div>`;
+}
+
+/* La última anotación de la bitácora del webhook. Se lee una vez por pantalla,
+   no en cada dibujo: es informativa, no manda sobre nada. */
+let waSync = null;
+let waPidiendo = null;
+
+function cargaWhatsApp(vuelveAPintar){
+  if (waSync !== null || !nubeActiva() || nube.sinBuzonWa || waPidiendo) return;
+  waPidiendo = api("/rest/v1/crm_wa_log?select=cuando,evento,ok,detalle&order=cuando.desc&limit=1")
+    .then(r => {
+      waPidiendo = null;
+      waSync = Array.isArray(r) && r.length ? r[0] : { cuando:"", ok:true, detalle:"" };
+      vuelveAPintar();
+    })
+    .catch(e => {
+      waPidiendo = null;
+      if (/crm_wa|schema cache|does not exist|404|PGRST205/i.test(e.message)) nube.sinBuzonWa = true;
+      waSync = { cuando:"", ok:true, detalle:"" };
+      vuelveAPintar();
+    });
+}
+
 function renderLeads(){
   const cont = document.getElementById("tblLeads");
   const ls = leadsVisibles();
@@ -4422,6 +4473,7 @@ function renderLeads(){
     <div class="note">Todo lo que llega: de los anuncios, de la tableta del lobby y lo
       capturado a mano. Lo que hay que hacer aquí es <b>repartirlo</b>: decir de qué área es
       y quién lo trabaja. Un lead sin dueño es un lead que nadie contesta.</div>
+    ${tiraWhatsApp()}
     ${sinAsignar ? `<div class="note warn"><b>${sinAsignar}
       ${sinAsignar === 1 ? "lead está" : "leads están"} sin asignar.</b>
       <button class="btn sm" id="bSoloSin" style="margin-left:8px">${
@@ -4498,6 +4550,8 @@ function renderLeads(){
   };
   cont.querySelectorAll("[data-asig]").forEach(b =>
     b.onclick = () => asignarLead(b.dataset.asig));
+
+  cargaWhatsApp(() => { if (vista === "leads") renderLeads(); });
 }
 
 /**
@@ -8213,6 +8267,124 @@ async function mandarAlta(caja, err, datos){
  * mismo generó. Si no la reconoce, el prospecto entra igual: más vale un lead
  * sin campaña que un lead perdido.
  */
+/**
+ * Recoge los mensajes de WhatsApp que dejó el proveedor y los vuelve leads.
+ *
+ * Calcada de recogerAltas(), que hace lo mismo con la liga pública. La
+ * diferencia está en de dónde sale la campaña:
+ *
+ *   El mensaje trae el id DEL ANUNCIO. De ahí se sube al conjunto —que es el
+ *   `padre` del anuncio en el catálogo de Meta— y del conjunto a la campaña
+ *   del CRM que lo tenga enlazado. Tres saltos, y si falla cualquiera se
+ *   guarda el lead SIN campaña en vez de adivinar una.
+ *
+ * Y un cuidado que no tiene la otra: alguien que escribe tres veces es una
+ * persona, no tres. Si ya hay un prospecto con ese teléfono sin pasar a la
+ * cartera, el mensaje se le anexa a las notas.
+ */
+async function recogerWhatsApp(){
+  const parte = { hubo:false, buzon:true, pendientes:0, aplicadas:0, notas:[] };
+  if (!nubeActiva()){ parte.buzon = false; return parte; }
+
+  let filas;
+  try{
+    filas = await api("/rest/v1/crm_wa?select=id,mensaje_id,telefono,perfil,texto,tipo,"
+                      + "referral,conjunto,campana_id,recibido"
+                      + "&aplicada=is.false&order=recibido.asc&limit=200");
+  }catch(e){
+    if (/crm_wa|schema cache|does not exist|404|PGRST205/i.test(e.message)){
+      nube.sinBuzonWa = true;
+      parte.buzon = false;
+      parte.notas.push("El buzón de WhatsApp no existe todavía: falta correr whatsapp.sql en Supabase.");
+      return parte;
+    }
+    parte.notas.push("No se pudo leer el buzón de WhatsApp: " + e.message);
+    return parte;
+  }
+
+  parte.pendientes = (filas || []).length;
+  const aplicadas = [];
+  for (const f of filas || []){
+    const r = f.referral || {};
+    /* La campaña viene resuelta desde el servidor, que es el único que ve el
+       catálogo de Meta Y las campañas: el catálogo sólo lo lee marketing y las
+       campañas no le bajan a ventas, así que resolverlo aquí dejaría sin
+       campaña a todo lead que recogiera una cuenta de ventas. Lo de abajo es
+       la red por si la función todavía es la vieja. */
+    const camp = campana(f.campana_id) || campanaDelAnuncio(r.source_id);
+    const tel = String(f.telefono || "").replace(/\D/g, "");
+
+    /* El titular del anuncio dice qué venía buscando mejor que cualquier otra
+       cosa: es lo que la persona leyó antes de escribir. */
+    const dePublicidad = r.headline ? ` Venía del anuncio «${String(r.headline).slice(0,120)}».` : "";
+    const linea = (String(f.texto || "").trim() || "(sin texto)");
+
+    const ya = tel ? state.prospectos.find(p =>
+      !p.clienteId && String(p.telefono || "").replace(/\D/g, "") === tel) : null;
+
+    if (ya){
+      ya.notas = [ya.notas, "Escribió otra vez por WhatsApp: «" + linea + "»"]
+        .filter(Boolean).join(" ").slice(0, 2000);
+      if (!ya.campanaId && camp) ya.campanaId = camp.id;
+      ya.updatedAt = new Date().toISOString();
+    } else {
+      state.prospectos.push(saneaProspecto({
+        nombre: String(f.perfil || "").trim() || "(sin nombre)",
+        telefono: tel,
+        canal: camp ? camp.canal : "meta",
+        campanaId: camp ? camp.id : "",
+        capturadoPor: camp ? camp.responsable : "",
+        fecha: String(f.recibido || new Date().toISOString()).slice(0, 16).replace("T", " "),
+        notas: "Escribió por WhatsApp: «" + linea + "»." + dePublicidad,
+        createdAt: new Date().toISOString()
+      }));
+    }
+
+    aplicadas.push(f.id);
+    parte.aplicadas++;
+    if (r.source_id && !camp)
+      parte.notas.push("Llegó un mensaje del anuncio " + r.source_id +
+        ", que todavía no está enlazado a ninguna campaña. Éste entra sin ella; " +
+        "sincronizando Meta, los siguientes ya salen amarrados.");
+  }
+
+  if (aplicadas.length){
+    // Se marcan DESPUÉS de crearlos, como en el otro buzón: si se cortara la
+    // luz entre una cosa y la otra, más vale recoger dos veces al mismo que
+    // perderlo.
+    try{
+      await api(`/rest/v1/crm_wa?id=in.(${aplicadas.join(",")})`, {
+        method: "PATCH",
+        headers: { "Prefer": "return=minimal" },
+        body: JSON.stringify({ aplicada: true })
+      });
+    }catch(e){
+      parte.notas.push("Se recogieron los mensajes pero no se pudieron marcar: " + e.message);
+    }
+    parte.hubo = true;
+    guardar();
+  }
+  return parte;
+}
+
+/**
+ * De qué campaña del CRM es un anuncio de Meta.
+ *
+ * Anuncio → su conjunto → la campaña del CRM que tenga ese conjunto enlazado.
+ * Si el anuncio no está en el catálogo todavía —porque no se ha sincronizado
+ * Meta desde que se creó—, devuelve null y el lead se guarda sin campaña. No
+ * se adivina: un lead colgado de la campaña equivocada ensucia el costo por
+ * lead de las dos.
+ */
+function campanaDelAnuncio(idAnuncio){
+  const id = String(idAnuncio || "").trim();
+  if (!id) return null;
+  const conjunto = padreDe(id);
+  if (!conjunto) return null;
+  return state.campanas.find(c =>
+    (c.metaIds || []).some(x => String(x) === conjunto)) || null;
+}
+
 async function recogerAltas(){
   const parte = { hubo:false, buzon:true, pendientes:0, aplicadas:0, notas:[] };
   if (!nubeActiva()){ parte.buzon = false; return parte; }
