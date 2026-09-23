@@ -735,7 +735,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.23-62";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.23-63";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -7162,33 +7162,90 @@ const nombreCampana = id => (campana(id) || {}).nombre || "";
 const leadsDeCampana = id => state.prospectos.filter(p => p.campanaId === id).length;
 
 /**
- * "Conjunto de anuncios de «Bodas verano»", bajo el nombre de la campaña.
+ * De qué campaña de Meta viene esta campaña del CRM, para su columna.
  *
- * Se saca del catálogo cada vez que se pinta, no se guarda: en Meta renombran
- * las campañas cada temporada, y un nombre guardado aquí envejecería mal sin
- * que nadie se diera cuenta.
+ * Sale del catálogo cada vez que se pinta, no se guarda: en Meta renombran las
+ * campañas cada temporada, y un nombre guardado aquí envejecería mal sin que
+ * nadie se diera cuenta.
  */
 function deQueCampana(c){
   const ids = (c.metaIds || []).map(String).filter(esConjunto);
   if (!ids.length) return "";
   const padres = [...new Set(ids.map(padreDe).filter(Boolean).map(nombreMeta))];
-  if (!padres.length) return "";
-  return `<div class="hint">Conjunto de anuncios de ${esc(padres.join(" · "))}</div>`;
+  return padres.join(" · ");
 }
+
+/**
+ * ¿Esta campaña del CRM es una campaña de Meta a la que ya se le trajeron sus
+ * conjuntos de anuncios?
+ *
+ * Ésas son las que estorban en la lista: en esta cuenta el presupuesto se
+ * asigna POR CONJUNTO —cada uno trae su "diario, no compartido"—, así que el
+ * renglón de la campaña no representa una decisión de nadie. Su gasto residual,
+ * sus prospectos y su ingreso siguen contando en el tablero de marketing; lo
+ * único que cambia es que no ocupan un renglón entre las cosas que sí se
+ * manejan.
+ *
+ * Las dos condiciones importan. Sin la segunda, una campaña a la que todavía no
+ * se le han traído los conjuntos desaparecería sin nada que la reemplace, y su
+ * gasto se quedaría sin representar en ninguna parte.
+ */
+function laTapanSusConjuntos(c){
+  const mios = (c.metaIds || []).map(String).filter(id => !esConjunto(id));
+  if (!mios.length) return false;
+  const padre = new Set(mios);
+  for (const otra of state.campanas){
+    if (otra === c) continue;
+    for (const id of otra.metaIds || [])
+      if (esConjunto(id) && padre.has(padreDe(String(id)))) return true;
+  }
+  return false;
+}
+
+/* Qué enseña la pantalla de Campañas. Arranca en los conjuntos, que es lo que
+   se quiere ver de diario, y no se guarda a propósito: el logo CORE recarga, y
+   al recargar conviene volver a lo de siempre. */
+let verCampanas = "conjuntos";
 
 function renderCampanas(){
   const cont = document.getElementById("tblCampanas");
-  const cs = campanasVisibles();
+  const todas = campanasVisibles();
+
+  /* El filtro vive AQUÍ y no en campanasVisibles(), que la comparten esta
+     pantalla, la de UTMs y el tablero de marketing. Si se escondieran allá,
+     saldrían también de los totales —con su inversión, sus prospectos y su
+     ingreso— y el costo por lead de arriba dejaría de cuadrar. Esta lista es
+     para trabajar; el tablero es para las cuentas, y ahí no se esconde nada. */
+  const tapadas = todas.filter(laTapanSusConjuntos);
+  const cs = verCampanas === "todas"
+    ? todas : todas.filter(c => !tapadas.includes(c));
+  const leadsTapados = tapadas.reduce((a, c) => a + leadsDeCampana(c.id), 0);
 
   const [mDesde, mHasta] = rangoMkt();
   const conMeta = cs.some(c => (c.metaIds || []).length);
+  const conPadre = cs.some(c => deQueCampana(c));
 
   const cab = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
       <b style="font-size:15px">Campañas</b>
       <span class="hint">${cs.length} en total</span>
+      ${tapadas.length ? `<label class="hint" for="verCamp">Ver</label>
+        <select class="field" id="verCamp" style="width:auto;padding:4px 8px">
+          <option value="conjuntos"${verCampanas === "conjuntos" ? " selected" : ""}>Conjuntos de anuncios</option>
+          <option value="todas"${verCampanas === "todas" ? " selected" : ""}>Todas</option>
+        </select>` : ""}
       <span style="flex:1"></span>
       <button class="btn primary" id="bNuevaCamp">+ Nueva campaña</button></div>
     ${tiraMeta()}
+    ${(tapadas.length && verCampanas !== "todas") ? `<div class="note">
+      <b>${tapadas.length} campaña${tapadas.length === 1 ? "" : "s"} de Meta
+      ${tapadas.length === 1 ? "está escondida" : "están escondidas"}</b> porque sus conjuntos
+      de anuncios ya están aquí, y el presupuesto se asigna por conjunto.
+      ${leadsTapados ? `<b>${tapadas.length === 1 ? "Trae" : "Traen"} ${leadsTapados}
+        prospecto${leadsTapados === 1 ? "" : "s"}</b> —las ligas de los anuncios todavía
+        apuntan a ${tapadas.length === 1 ? "ella" : "ellas"}—, y sigue${
+          tapadas.length === 1 ? "" : "n"}` : (tapadas.length === 1 ? "Sigue" : "Siguen")}
+      contando en el tablero de marketing.
+      <button class="btn sm" id="bVerTapadas" style="margin-left:8px">Verlas</button></div>` : ""}
     <div class="note">Una campaña es lo que el hotel sale a hacer para que llegue gente.
       Lo que se mide es <b>cuánto costó y qué trajo</b>, así que de aquí cuelgan los
       prospectos: la liga que se genera en <i>Atribución &amp; UTMs</i> es la que los amarra.</div>`;
@@ -7202,7 +7259,9 @@ function renderCampanas(){
       : `<div class="vacio">Todavía no hay campañas.</div>`);
   } else {
     cont.innerHTML = cab + `<table class="data">
-      <thead><tr><th>Campaña</th><th>Canal</th><th>Periodo</th>
+      <thead><tr><th>Campaña</th>${conPadre
+          ? `<th title="La campaña de Meta de la que cuelga este conjunto de anuncios">Campaña de Meta</th>`
+          : ""}<th>Canal</th><th>Periodo</th>
         <th class="num">Presupuesto</th><th class="num">Gastado</th>
         ${conMeta ? `<th class="num" title="Lo que dice Meta en el mismo periodo">Según Meta</th>` : ""}
         <th class="num">Leads</th><th>Estado</th><th>Responsable</th></tr></thead>
@@ -7211,7 +7270,9 @@ function renderCampanas(){
         const sobre = c.presupuesto && gasto > c.presupuesto;
         return `<tr class="row-link" data-id="${c.id}">
           <td><b>${esc(c.nombre || "(sin nombre)")}</b>${c.objetivo
-            ? `<div class="hint">${esc(c.objetivo)}</div>` : ""}${deQueCampana(c)}</td>
+            ? `<div class="hint">${esc(c.objetivo)}</div>` : ""}</td>
+          ${conPadre ? `<td>${deQueCampana(c)
+            ? esc(deQueCampana(c)) : `<span class="hint">—</span>`}</td>` : ""}
           <td>${esc(infoCanal(c.canal).name)}</td>
           <td class="nowrap">${c.desde ? esc(fechaCorta(c.desde)) : "—"}${
             c.hasta ? " → " + esc(fechaCorta(c.hasta)) : ""}</td>
@@ -7228,6 +7289,11 @@ function renderCampanas(){
     cont.querySelectorAll("tr[data-id]").forEach(tr =>
       tr.addEventListener("click", () => editarCampana(tr.dataset.id)));
   }
+
+  const selVer = cont.querySelector("#verCamp");
+  if (selVer) selVer.onchange = e => { verCampanas = e.target.value; renderCampanas(); };
+  const bVer = cont.querySelector("#bVerTapadas");
+  if (bVer) bVer.onclick = () => { verCampanas = "todas"; renderCampanas(); };
 
   enganchaTiraMeta(cont, () => renderCampanas());
   cargaMeta(() => { if (vista === "campanas") renderCampanas(); });

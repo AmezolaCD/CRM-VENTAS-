@@ -62,6 +62,17 @@ búsqueda pagada, una feria.
   ya está enseñando en sus conjuntos; donde diga **· desglosada**, ahí sale sólo lo que sobró.
   La campaña padre **no se desenlaza**, para no borrar de la pantalla los meses de historia que
   sólo existen a ese nivel. Está explicado con detalle en **[META.md](META.md)**.
+
+- **La lista enseña los conjuntos, no las campañas.** En cuanto los conjuntos de una campaña
+  están en el CRM, esa campaña **se esconde de la lista**: el presupuesto se asigna por
+  conjunto —cada uno trae su *«diario, no compartido»*—, así que su renglón no representa una
+  decisión de nadie. De cuál cuelga cada conjunto sale en la columna **Campaña de Meta**.
+
+  Se esconde de la lista, **no de las cuentas**: su gasto, sus prospectos y su ingreso siguen
+  contando en el tablero de marketing. Arriba de la tabla dice cuántas se escondieron y cuántos
+  prospectos traen, con un botón para verlas; el selector **Ver** las alterna. Una campaña a la
+  que todavía **no** se le han traído los conjuntos no se esconde, porque no habría nada que la
+  reemplazara.
 - **Presupuesto y gasto**: el gasto se captura **mes por mes**, como lo cobra la plataforma. La
   pantalla va sumando y **avisa en rojo cuando se pasa del presupuesto**.
 - **Leads**: la columna dice cuántos prospectos trajo. Hoy se llena cuando el prospecto se
