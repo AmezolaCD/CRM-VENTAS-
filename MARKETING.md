@@ -245,8 +245,9 @@ firmas. No había cómo saber cuántas había abiertas ni dónde quedó el archi
 
 **El camino de una orden**, en cinco pasos:
 
-1. **La pide.** El jefe del área abre la liga, escoge la hoja, la llena, adjunta hasta 3
-   archivos de referencia y **firma ahí mismo**, con el dedo.
+1. **La pide.** El jefe del área abre la liga, escoge la hoja, **escoge su departamento de una
+   lista cerrada** —y el nombre de quien firma aparece solo, sin poder teclearlo—, la llena,
+   adjunta hasta 3 archivos de referencia y **firma ahí mismo**, con el dedo.
 2. **Entra sola** a la pestaña, con su folio —`AV-2026-001` o `DG-2026-001`, cada hoja con su
    propia serie— y marcada *Falta la firma del director*.
 3. **La autoriza.** La coordinadora le manda al director un enlace; él firma desde su teléfono
@@ -263,11 +264,19 @@ detienen el trabajo: la del jefe que pide y la del director.
 servidor dejaría que sólo él la reescribiera, y el día que Pedro tocara una de Sidney le
 rebotaría la subida entera. A quién le toca es un dato, no un permiso.
 
-**Una advertencia que conviene saber:** cualquiera con la liga puede levantar una orden y
-firmarla con el nombre que quiera. Es el mismo trato que la liga del lobby —pedirle una cuenta a
-cada jefe de área sería garantizar que nadie la use—, y la defensa es de proceso: la
-coordinadora ve de dónde viene cada una y puede cancelarla, y nada empieza hasta que el director
-firma. Si la liga se filtra, se cambia la clave y las viejas dejan de servir de golpe.
+**El departamento es una lista cerrada, con su firmante ya puesto.** Son siete, y se editan
+desde Ajustes sin tocar el programa. El jefe de área escoge el suyo y el nombre sale solo; el
+CRM lo vuelve a confirmar contra esa misma lista al recoger la orden, así que el nombre no
+depende de lo que haya mandado el navegador. Como la liga se abre sin sesión, la lista le llega
+por una función del servidor que entrega **esa lista y nada más** a cambio de la clave de la
+liga: ningún otro ajuste del hotel sale por ahí.
+
+**Una advertencia que conviene saber:** esto evita el error, no la suplantación. Cualquiera con
+la liga puede escoger un departamento y firmar con el dedo aunque no sea esa persona. Es el
+mismo trato que la liga del lobby —pedirle una cuenta a cada jefe de área sería garantizar que
+nadie la use—, y la defensa es de proceso: la coordinadora ve de dónde viene cada una y puede
+cancelarla, y nada empieza hasta que el director firma. Si la liga se filtra, se cambia la clave
+y las viejas dejan de servir de golpe.
 
 Todo el detalle está en **[ODTS.md](ODTS.md)**.
 

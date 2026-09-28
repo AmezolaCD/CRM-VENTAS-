@@ -445,7 +445,8 @@ decidió así—: ve sus campañas, sus ligas y los prospectos, y nada más.
   es lo que hace que el lead le aparezca.
 - **ODTS.** Las órdenes de trabajo que los demás departamentos le piden a marketing: las dos
   hojas que hoy circulan en papel —*Solicitud Audiovisual* y *Solicitud Diseño Gráfico*—. El
-  jefe del área las llena y las **firma desde un enlace**, el director las firma desde otro, la
+  jefe del área escoge su departamento de una **lista cerrada** que trae ya puesto quién firma
+  por cada uno —se edita en Ajustes—, las llena y las **firma desde un enlace**, el director las firma desde otro, la
   coordinadora las reparte entre su gente, y el producto terminado queda colgado de la orden con
   su vista previa. Los pasos están en **[ODTS.md](ODTS.md)**.
 - **WhatsApp.** Los anuncios del hotel son de *mensajes*: la gente da clic y escribe. Con la

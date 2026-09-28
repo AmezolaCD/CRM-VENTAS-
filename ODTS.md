@@ -14,7 +14,7 @@ CRM hasta que el producto está entregado y se puede ver ahí mismo.
 
 | | |
 |---|---|
-| **1. La pide** | El jefe del área abre el enlace, escoge la hoja, la llena, **adjunta hasta 3 archivos** de referencia y **firma** ahí mismo. |
+| **1. La pide** | El jefe del área abre el enlace, escoge la hoja, **escoge su departamento de una lista**, la llena, **adjunta hasta 3 archivos** de referencia y **firma** ahí mismo. |
 | **2. Entra sola** | Aparece en la pestaña **ODTS** con su folio —`AV-2026-001` o `DG-2026-001`—, marcada *Falta la firma del director*. |
 | **3. La autoriza** | La coordinadora le manda al director un enlace. Él firma desde su teléfono, sin cuenta ni contraseña. La orden pasa a **Abierta**. |
 | **4. Se reparte** | La coordinadora se la asigna a Pedro o a Sidney. A ella misma no se la puede asignar, pero las ve todas. |
@@ -64,11 +64,37 @@ que viene del plan gratuito en 50 MB, y ningún almacén puede pasarlo:
 
 Sin eso, el CRM deja escoger el video y Supabase lo rechaza al subirlo.
 
-### 5. Repartir la liga a los jefes de área
+### 5. Revisar quién firma por cada departamento
 
-En el CRM, en **Ajustes**, sale la liga de las órdenes de trabajo con un botón para copiarla.
-Ésa es la que se les manda a los jefes de departamento: recepción, ama de llaves, alimentos y
-bebidas, ventas, banquetes, mantenimiento.
+En el CRM, en **Ajustes**, hay una tabla de dos columnas: **Departamento** y **Jefe que firma**.
+Viene con éstos puestos:
+
+| Departamento | Jefe que firma |
+|---|---|
+| SPA | Cinthia Jiménez |
+| Ama de llaves | Adriana Luna |
+| Banquetes | Efren Iglesias |
+| Restaurante | Ricardo Infante |
+| Ventas | Alicia Rocha |
+| RH | Adriana Landeros |
+| Sistemas | Marco Ramírez |
+
+Es **la única lista** que el formulario ofrece: quien abre la liga escoge su departamento y
+**el nombre aparece solo**, sin poder teclearlo ni cambiarlo. No hay un «Otro».
+
+Se agregan, se quitan y se cambian nombres desde ahí mismo, sin tocar el programa. **Dos
+advertencias:**
+
+- Los cambios llegan a la liga **después de sincronizar**. El formulario baja esta lista del
+  servidor, no de la computadora donde se editó.
+- Si se quita un departamento, las **órdenes viejas de ese departamento no se borran ni se
+  quedan en blanco**: siguen diciendo de dónde vinieron. Lo que deja de poderse es levantar
+  órdenes nuevas a su nombre.
+
+### 6. Repartir la liga a los jefes de área
+
+En el CRM, en la pestaña **ODTS**, arriba a la derecha está el botón **Copiar la liga para
+pedir**. Ésa es la que se les manda a los siete jefes de área de la tabla del paso anterior.
 
 Es **una sola liga fija** para todos, como la del lobby. Se pega en un correo, se manda por
 WhatsApp, o se deja en el escritorio de quien la use seguido.
@@ -77,9 +103,14 @@ WhatsApp, o se deja en el escritorio de quien la use seguido.
 
 ## Lo que conviene que sepa antes de repartirla
 
-**Cualquiera que tenga la liga puede levantar una orden, y firmarla con el nombre que quiera.**
-Es el mismo trato que la liga del lobby: no hay contraseña, porque pedirle una cuenta a cada
-jefe de área sería garantizar que nadie la use.
+**Cualquiera que tenga la liga puede levantar una orden a nombre de cualquiera de los siete
+departamentos.** Es el mismo trato que la liga del lobby: no hay contraseña, porque pedirle una
+cuenta a cada jefe de área sería garantizar que nadie la use.
+
+La lista de departamentos **evita el error, no la suplantación**. Se acabó el departamento mal
+escrito y el nombre inventado por descuido —eso era lo que llenaba la pestaña de «A y B», «AYB»
+y «Alimentos y bebidas» como si fueran tres—. Pero quien tenga la liga puede escoger
+«Banquetes» y firmar con el dedo aunque no sea Efren.
 
 La defensa no es técnica, es de proceso: la coordinadora ve de qué departamento y de quién viene
 cada orden antes de moverla, y puede cancelar la que no cuadre. Y nada empieza a trabajarse
@@ -116,6 +147,13 @@ hay sorpresas de miles de pesos, pero conviene saber que el contador existe.
 
 **«Este enlace todavía no está habilitado»** al abrir el formulario → falta el paso 1.
 
+**El formulario pide el departamento tecleado, en vez de la lista** → o falta el paso 1, o se
+corrió una versión vieja de `odts.sql`. Vuelva a correrlo completo. La orden se manda igual
+mientras tanto; nada más se pierde la lista.
+
+**Un jefe de área dice que su departamento no está** → agréguelo en Ajustes (paso 5) y
+sincronice. Mientras no sincronice, él no lo va a ver.
+
 **El director abre su enlace y dice «este enlace ya no sirve»** → casi siempre falta el paso 2.
 También pasa si la orden todavía no ha subido a la nube desde el equipo de la coordinadora: el
 CRM lo avisa antes de dejar mandar el enlace.
@@ -142,6 +180,18 @@ los archivos adjuntos viajan dentro de la orden y es el CRM quien los guarda en 
 recogerla: darle permiso de escribir en el almacén para ahorrarse ese paso sería abrirle una
 puerta que hoy no tiene.
 
+**El nombre se vuelve a confirmar de este lado.** El formulario lo pone solo, pero el
+formulario corre en el teléfono de alguien más y eso se puede saltar con las herramientas
+adecuadas. Cuando el CRM recoge la orden vuelve a sacar el nombre de **su** lista a partir del
+departamento: el departamento manda, el nombre no se cree. Lo que no se puede confirmar es el
+**trazo** de la firma, y ahí seguimos en el mismo trato de arriba.
+
+**La lista viaja por una puerta propia, no por los ajustes.** Quien abre la liga no tiene
+sesión y no puede leer nada del hotel; para que vea los departamentos hay una función en el
+servidor que entrega **esa lista y nada más**, a cambio de la clave de la liga. Ni el nombre
+fiscal, ni las cuentas, ni la clave del lobby salen por ahí. Es la única función del sistema
+que contesta sin cuenta, y contesta una sola pregunta.
+
 **La clave de las órdenes es propia, no la de la liga del lobby.** Esa va pegada en los anuncios
 de Facebook y la ve cualquiera; no tiene por qué servir para levantar órdenes de trabajo. Son
 dos públicos distintos y dos claves distintas, y así revocar una no tumba la otra.
@@ -161,8 +211,8 @@ permiso.
 
 ## Para deshacerlo
 
-Al final de `odts.sql` están las líneas para tirar la tabla y las funciones. Las órdenes que ya
-se recogieron **no se pierden**: viven en el CRM, no en el buzón. Lo que se pierde es la
+Al final de `odts.sql` están las líneas para tirar la tabla y las dos funciones —la de la clave
+y la de los jefes—. Las órdenes que ya se recogieron **no se pierden**: viven en el CRM, no en el buzón. Lo que se pierde es la
 posibilidad de levantarlas desde fuera, y la liga deja de funcionar —el CRM lo dice en la
 pantalla en vez de fallar callado—.
 

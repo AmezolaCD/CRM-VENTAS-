@@ -770,7 +770,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.28-68";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.28-69";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -881,6 +881,25 @@ const HOTEL_DEF = {
   tokenAlta: "",             // la clave de la liga pública de registro
   logo: "",                 // data URI; si está vacío se usa el monograma
   marcaAgua: "monograma",   // monograma | logo | ninguna
+
+  /* Quién firma por cada departamento del hotel cuando pide algo a marketing.
+     El jefe de área escoge su departamento en el formulario y el nombre sale
+     solo: se acaban «A y B», «AYB» y «Alimentos y bebidas» como si fueran tres
+     departamentos, y se acaba el nombre inventado por descuido.
+
+     Se edita desde Ajustes, así que esto es nada más el arranque. Ojo: NO es
+     lo mismo que DEPARTAMENTOS (ventas / banquetes / marketing), que son las
+     áreas que trabajan DENTRO del CRM. Aquí son los departamentos del hotel
+     que le piden cosas a marketing. Nombres parecidos, conceptos distintos. */
+  jefes: [
+    { depto:"SPA",           jefe:"Cinthia Jiménez"  },
+    { depto:"Ama de llaves", jefe:"Adriana Luna"     },
+    { depto:"Banquetes",     jefe:"Efren Iglesias"   },
+    { depto:"Restaurante",   jefe:"Ricardo Infante"  },
+    { depto:"Ventas",        jefe:"Alicia Rocha"     },
+    { depto:"RH",            jefe:"Adriana Landeros" },
+    { depto:"Sistemas",      jefe:"Marco Ramírez"    }
+  ],
 
   /* Los datos fiscales y bancarios del contrato de banquetes van vacíos a
      propósito: este archivo es público. Se capturan una vez en
@@ -1750,7 +1769,11 @@ function sanear(s){
     usuarios:     Array.isArray(s.usuarios) ? s.usuarios.map(saneaUsuario) : USUARIOS_DEF.map(saneaUsuario),
     habitaciones: catalogo(s.habitaciones),
     ajustes: {
-      hotel:  Object.assign({}, HOTEL_DEF, (s.ajustes && s.ajustes.hotel) || {}),
+      hotel:  (() => {
+        const h = Object.assign({}, HOTEL_DEF, (s.ajustes && s.ajustes.hotel) || {});
+        h.jefes = saneaJefes(h.jefes);
+        return h;
+      })(),
       textos: Object.assign({}, TEXTOS_DEF, (s.ajustes && s.ajustes.textos) || {}),
       grupos: saneaGrupos(s.ajustes && s.ajustes.grupos),
       moneda: (s.ajustes && s.ajustes.moneda) || "MXN",
@@ -2281,6 +2304,41 @@ function saneaGrupos(g){
   for (const k of Object.keys(GRUPOS_DEF))
     out[k] = Object.assign({}, GRUPOS_DEF[k], (g && g[k]) || {});
   return out;
+}
+
+/**
+ * La lista de departamentos con su jefe que firma.
+ *
+ * Tiene saneador propio porque el renglón que arma ajustes.hotel en sanear()
+ * es un Object.assign pelón: lo que venga guardado pisa a HOTEL_DEF tal cual.
+ * Sin esto, un `jefes` que quedara hecho pedazos en el navegador —un texto en
+ * vez de un arreglo, un renglón sin nombre— tumbaría la carga entera.
+ *
+ * Quita repetidos por departamento porque el desplegable del formulario se
+ * arma de aquí: dos «Banquetes» serían dos renglones idénticos y quien lo
+ * llena no sabría cuál escoger.
+ */
+function saneaJefes(j){
+  const vistos = new Set();
+  return (Array.isArray(j) ? j : HOTEL_DEF.jefes)
+    .map(x => ({ depto: String((x && x.depto) || "").trim(),
+                 jefe:  String((x && x.jefe)  || "").trim() }))
+    .filter(x => {
+      if (!x.depto) return false;                    // sin departamento no sirve de nada
+      const k = x.depto.toLowerCase();
+      if (vistos.has(k)) return false;
+      vistos.add(k);
+      return true;
+    })
+    .slice(0, 40);
+}
+
+/** El jefe que le toca a un departamento, o "" si ese departamento no está. */
+function jefeDe(depto, lista){
+  const d = String(depto || "").trim().toLowerCase();
+  const x = (lista || state.ajustes.hotel.jefes || []).find(y =>
+    String(y.depto || "").trim().toLowerCase() === d);
+  return x ? x.jefe : "";
 }
 
 /**
@@ -6154,6 +6212,27 @@ function renderAjustes(){
         <b>no crea su cuenta</b>: eso se hace en Supabase, en <i>Authentication → Users</i>,
         con el mismo correo.</p>
 
+      <h3 class="sec">Quién firma por cada departamento</h3>
+      <div class="note"><b>Esto es para las órdenes de trabajo de marketing.</b>
+        Cuando un jefe de área abre la liga para pedir algo, escoge aquí su departamento
+        y <b>el nombre sale solo</b>: no lo teclea ni lo puede cambiar. Así se acaban
+        «A y B», «AYB» y «Alimentos y bebidas» como si fueran tres departamentos distintos.
+        Esta lista es <b>la única</b> que se le ofrece: quien no esté aquí no puede pedir
+        a nombre de su área.</div>
+      <div class="note warn"><b>Evita el error, no la suplantación.</b> Cualquiera que tenga
+        la liga puede escoger un departamento y firmar con el dedo aunque no sea esa persona,
+        igual que con la liga del lobby. Lo que se acaba es el nombre mal escrito y el
+        departamento inventado por descuido; lo demás lo revisa marketing antes de mover
+        la orden, y nada se trabaja hasta que el director firma.</div>
+      <div style="overflow:auto"><table class="data" id="tJefes">
+        <thead><tr><th>Departamento</th><th>Jefe que firma</th><th></th></tr></thead>
+        <tbody></tbody></table></div>
+      <p style="margin:10px 0 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn" id="bAddJefe">+ Agregar departamento</button></p>
+      <p class="hint" style="margin:6px 0 0">Se guarda con el botón del final de la pantalla.
+        Los cambios llegan a la liga <b>después de sincronizar</b>: el formulario baja esta
+        lista del servidor, no de esta computadora.</p>
+
       <div id="huerfanos" style="margin-top:22px"></div>
 
       <h3 class="sec">Datos legales del contrato de banquetes</h3>
@@ -6304,6 +6383,18 @@ function renderAjustes(){
       <td><button class="btn sm danger" data-delu="${u.id}">Quitar</button></td></tr>`).join("") +
     `<datalist id="listaEje">${nombresCartera.map(n => `<option value="${esc(n)}">`).join("")}</datalist>`;
 
+  /* Los departamentos que piden cosas a marketing, con su firmante. Se pintan
+     por posición y no por id porque no tienen id: son dos palabras, no una
+     entidad del CRM. El índice basta mientras no se repinte a media edición,
+     que es lo mismo que hacen las filas de habitaciones. */
+  const cuerpoJefes = p.querySelector("#tJefes tbody");
+  if (cuerpoJefes) cuerpoJefes.innerHTML = h.jefes.map((j, i) => `<tr data-j="${i}">
+      <td><input class="field" data-jk="depto" value="${esc(j.depto)}" style="width:100%"
+            placeholder="Como lo conocen en el hotel"></td>
+      <td><input class="field" data-jk="jefe" value="${esc(j.jefe)}" style="width:100%"
+            placeholder="Nombre completo"></td>
+      <td><button class="btn sm danger" data-delj="${i}">Quitar</button></td></tr>`).join("");
+
   /**
    * Los nombres que quedaron escritos y no son de nadie del equipo. Salen de
    * importaciones viejas o de los clientes de ejemplo. Mientras estén así, esos
@@ -6392,6 +6483,11 @@ function renderAjustes(){
     });
     state.usuarios = state.usuarios.filter(u => u.correo || u.nombre).map(saneaUsuario);
 
+    h.jefes = saneaJefes([...p.querySelectorAll("#tJefes tr[data-j]")].map(tr => ({
+      depto: tr.querySelector('[data-jk="depto"]').value,
+      jefe:  tr.querySelector('[data-jk="jefe"]').value
+    })));
+
     p.querySelectorAll("#tHab tr[data-id]").forEach(tr => {
       const x = state.habitaciones.find(y => y.id === tr.dataset.id);
       if (!x) return;
@@ -6436,6 +6532,25 @@ function renderAjustes(){
     state.usuarios.push(saneaUsuario({ correo:"", nombre:"", rol:"ejecutivo" }));
     guardar(); renderAjustes();
   };
+  p.querySelector("#bAddJefe").onclick = () => {
+    recogerAjustes();
+    h.jefes.push({ depto:"", jefe:"" });
+    guardar(); renderAjustes();
+  };
+  p.querySelectorAll("[data-delj]").forEach(b => b.onclick = () => {
+    /* Se quita de lo que está EN PANTALLA, no de la lista ya guardada. Recoger
+       pasa por saneaJefes, que tira los renglones sin departamento; si se
+       borrara por índice DESPUÉS de recoger, un renglón vacío más arriba
+       recorrería los demás y el botón se llevaría al vecino. */
+    const filas = [...p.querySelectorAll("#tJefes tr[data-j]")].map(tr => ({
+      depto: tr.querySelector('[data-jk="depto"]').value,
+      jefe:  tr.querySelector('[data-jk="jefe"]').value
+    }));
+    filas.splice(Number(b.dataset.delj), 1);
+    recogerAjustes();
+    h.jefes = saneaJefes(filas);
+    guardar(); renderAjustes();
+  });
   p.querySelectorAll("[data-delu]").forEach(b => b.onclick = () => {
     const u = state.usuarios.find(x => x.id === b.dataset.delu);
     if (!u) return;
@@ -8375,13 +8490,60 @@ async function depositarOdt(token, tipo, datos, firma, adjuntos){
 const opcionOdt = (dentro, texto) =>
   `<label>${dentro}<span><i class="tic">✓</i>${esc(texto)}</span></label>`;
 
+/**
+ * Baja la lista de departamentos con su jefe, para el desplegable.
+ *
+ * Esto NO se puede sacar del estado, aunque el administrador la edite en
+ * Ajustes: esta pantalla corre en el teléfono de alguien que nunca ha entrado
+ * al CRM, así que su `state` trae nada más los valores compilados en este
+ * archivo. Por eso hay un RPC —el único de todo el proyecto que se puede
+ * llamar sin cuenta— que la entrega a cambio de la clave de la liga. Ver el
+ * punto 2b de odts.sql, donde está explicado por qué no abre nada.
+ *
+ * Si no contesta, devuelve lista vacía y el formulario vuelve a la caja de
+ * texto de siempre: que el hotel no haya corrido el archivo todavía no puede
+ * dejar a un jefe de área sin poder pedir nada.
+ */
+async function jefesDeLaLiga(token){
+  /* Se mira la dirección y la llave pública, NO nubeActiva(): ésa exige sesión
+     y quien abre la liga nunca tiene una. Es la misma pareja de datos con la
+     que depositarOdt manda la orden. */
+  if (!nube.url || !nube.anon) return [];
+  try{
+    const r = await fetch(nube.url + "/rest/v1/rpc/crm_odt_jefes", {
+      method: "POST",
+      headers: { apikey: nube.anon, "Content-Type": "application/json" },
+      body: JSON.stringify({ p_token: token })
+    });
+    if (!r.ok) return [];
+    const lista = await r.json();
+    return saneaJefes(Array.isArray(lista) ? lista : []);
+  }catch(e){ return []; }
+}
+
 /** Los campos de cada hoja, en el orden en que están impresos. */
-function camposOdt(tipo){
-  const comun1 = `
+function camposOdt(tipo, jefes){
+  /* Con la lista abajo, el departamento se escoge y el nombre sale solo: se
+     acaban «A y B», «AYB» y «Alimentos y bebidas» como tres departamentos, y
+     se acaba el nombre inventado por descuido. Sin la lista —el hotel no ha
+     corrido odts.sql, o el servidor no contestó— se teclea como antes, que es
+     peor pero funciona. */
+  const comun1 = (jefes && jefes.length ? `
+    <div><label class="lbl">Tu departamento *</label>
+      <select class="field" id="odDepto" style="width:100%">
+        <option value="">— Escoge —</option>
+        ${jefes.map(j => `<option value="${esc(j.depto)}">${esc(j.depto)}</option>`).join("")}
+      </select></div>
+    <div><label class="lbl">Quién firma</label>
+      <div class="field" id="odQuien" data-fijo="1"
+        style="width:100%;display:flex;align-items:center;min-height:38px;color:var(--muted)"
+        >Escoge tu departamento</div>
+      <p class="hint" style="margin:4px 0 0">Lo pone el hotel. Si no es quien debería firmar,
+        avísale a marketing.</p></div>` : `
     <div><label class="lbl">Tu departamento *</label>
       <input class="field" id="odDepto" style="width:100%" autocomplete="organization"></div>
     <div><label class="lbl">Tu nombre *</label>
-      <input class="field" id="odQuien" style="width:100%" autocomplete="name"></div>
+      <input class="field" id="odQuien" style="width:100%" autocomplete="name"></div>`) + `
     <div class="full"><label class="lbl">Tu correo *</label>
       <input class="field" id="odMail" type="email" style="width:100%" autocomplete="email"></div>
     <div class="full"><label class="lbl">¿Para qué es? *</label>
@@ -8461,6 +8623,13 @@ function pantallaOdtPublica(datos){
   document.body.innerHTML = `<div id="firmaCliente"></div>`;
   const caja = document.getElementById("firmaCliente");
 
+  /* La lista de departamentos se pide UNA vez, mientras la persona todavía
+     está escogiendo qué hoja quiere. Para cuando pica una, ya llegó, y nadie
+     vio una pantalla esperando. Si no llega, `jefes` se queda vacío y el
+     formulario sale con la caja de texto de siempre. */
+  let jefes = [];
+  const bajando = jefesDeLaLiga(datos.token).then(l => { jefes = l; });
+
   const escoger = () => {
     caja.innerHTML = `
       <div class="note"><b>Solicitud a marketing.</b> Escoge qué necesitas. No hace falta
@@ -8478,13 +8647,14 @@ function pantallaOdtPublica(datos){
       b.onclick = () => llenar(b.dataset.tipo));
   };
 
-  const llenar = tipo => {
+  const llenar = async tipo => {
     const t = infoTipoOdt(tipo);
+    await bajando;                 // ya llegó, o ya se supo que no va a llegar
     caja.innerHTML = `
       <p><button class="btn sm" id="odVolver">← Cambiar de solicitud</button></p>
       <div class="note"><b>${t.icono} Solicitud ${esc(t.name.toLowerCase())}.</b>
         Lo que lleva asterisco hace falta. Al final firmas con el dedo y se manda.</div>
-      <div class="grid">${camposOdt(tipo)}</div>
+      <div class="grid">${camposOdt(tipo, jefes)}</div>
 
       <h3 class="sec">Archivos de referencia</h3>
       <p class="hint">Hasta ${MAX_ADJUNTOS_ODT} archivos de ${pesoLegible(MAX_ADJUNTO_ODT)}
@@ -8513,6 +8683,18 @@ function pantallaOdtPublica(datos){
     q("#odBorrar").onclick = limpiar;
     q("#odVolver").onclick = escoger;
 
+    /* Quién firma. Con lista, sale del departamento y no se puede teclear;
+       sin lista, es la caja de texto de siempre y esto no hace nada. */
+    const fijo = q("#odQuien") && q("#odQuien").dataset.fijo;
+    const quienFirma = () => fijo ? jefeDe(q("#odDepto").value, jefes)
+                                  : q("#odQuien").value.trim();
+    if (fijo) q("#odDepto").onchange = () => {
+      const n = quienFirma();
+      q("#odQuien").textContent = n || "Escoge tu departamento";
+      q("#odQuien").style.color = n ? "var(--text)" : "var(--muted)";
+      q("#odQuien").style.fontWeight = n ? "600" : "400";
+    };
+
     /* Se revisa el peso AL ESCOGER y no al mandar: enterarse de que no cabe
        después de llenar toda la hoja es enterarse tarde. */
     let archivos = [];
@@ -8537,7 +8719,7 @@ function pantallaOdtPublica(datos){
       const val = id => (q("#" + id) || {}).value || "";
       const falta = [];
       if (!val("odDepto").trim()) falta.push("tu departamento");
-      if (!val("odQuien").trim()) falta.push("tu nombre");
+      if (!quienFirma())          falta.push(fijo ? "escoger un departamento de la lista" : "tu nombre");
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(val("odMail").trim())) falta.push("un correo válido");
       if (!val("odObj").trim())   falta.push("para qué es");
       if (!val("odEntrega"))      falta.push("para cuándo la necesitas");
@@ -8552,7 +8734,7 @@ function pantallaOdtPublica(datos){
       b.disabled = true; b.textContent = "Mandando…";
       try{
         const d = {
-          departamento: val("odDepto").trim(), solicitante: val("odQuien").trim(),
+          departamento: val("odDepto").trim(), solicitante: quienFirma(),
           email: val("odMail").trim(), objetivo: val("odObj").trim(),
           elementos: val("odElem").trim(), notas: val("odNotas").trim(),
           fechaEntrega: val("odEntrega"), fecha: hoyISO()
@@ -8977,10 +9159,29 @@ async function recogerOdts(){
       }
     }
 
+    /* El nombre se vuelve a sacar de NUESTRA lista, no de lo que venía en la
+       petición. El formulario ya lo pone solo, pero el formulario corre en el
+       navegador de alguien más y un navegador se salta con curl: quien tenga
+       la clave puede mandar el departamento de banquetes con el nombre que se
+       le ocurra. Aquí el departamento manda y el nombre se confirma.
+
+       Si el departamento no está en la lista —una orden vieja, o uno que el
+       administrador borró después— se queda el que venía: perder el dato sería
+       peor que tenerlo sin confirmar.
+
+       Esto cierra el hueco del NOMBRE. No cierra el de la FIRMA: el trazo del
+       dedo lo hace quien sea que tenga la liga, y eso es el trato de siempre de
+       las ligas sin contraseña. Está dicho así en ODTS.md. */
+    const jefe = jefeDe(d.departamento) || d.solicitante
+              || (f.firma && f.firma.nombre) || "";
+
     state.odts.push(saneaOdt(Object.assign({}, d, {
       tipo, folio, origenId: marca,
       estado: "por_director",
-      firmaJefe: f.firma && f.firma.img ? f.firma : null,
+      solicitante: jefe,
+      firmaJefe: f.firma && f.firma.img
+        ? Object.assign({}, f.firma, jefe ? { nombre: jefe } : {})
+        : null,
       tokenFirma: nuevoToken(),      // el enlace que se le manda al director
       adjuntos,
       fecha: d.fecha || String(f.creado || "").slice(0, 10) || hoyISO(),
@@ -9046,9 +9247,15 @@ function nuevaOdtAMano(){
               ${TIPOS_ODT.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("")}
             </select></div>
           <div><label class="lbl">Departamento</label>
-            <input class="field" id="omDepto" style="width:100%"></div>
+            <select class="field" id="omDepto" style="width:100%">
+              <option value="">— Escoge —</option>
+              ${state.ajustes.hotel.jefes.map(j =>
+                `<option value="${esc(j.depto)}">${esc(j.depto)}</option>`).join("")}
+            </select></div>
           <div><label class="lbl">Quién lo pide</label>
-            <input class="field" id="omQuien" style="width:100%"></div>
+            <div class="field" id="omQuien"
+              style="width:100%;display:flex;align-items:center;min-height:38px;color:var(--muted)"
+              >Escoge el departamento</div></div>
           <div class="full"><label class="lbl">¿Para qué es?</label>
             <textarea class="field" id="omObj" rows="2" style="width:100%"></textarea></div>
           <div><label class="lbl">Para cuándo</label>
@@ -9061,8 +9268,20 @@ function nuevaOdtAMano(){
         <button class="btn primary" id="bOkOdtMano">Crear</button></div>
     </div>`);
 
+  /* Mismo trato que la liga: el nombre sale del departamento y no se teclea.
+     Aquí sí se puede leer del estado, porque esto corre dentro del CRM. */
+  ov.querySelector("#omDepto").onchange = e => {
+    const n = jefeDe(e.target.value);
+    const c = ov.querySelector("#omQuien");
+    c.textContent = n || "Escoge el departamento";
+    c.style.color = n ? "var(--text)" : "var(--muted)";
+    c.style.fontWeight = n ? "600" : "400";
+  };
+
   ov.querySelector("#bOkOdtMano").onclick = async () => {
-    const q = sel => ov.querySelector(sel).value.trim();
+    // Con "#": sin él querySelector busca una etiqueta <omDepto> que no existe
+    // y esto reventaba al picar Crear, sin decir nada en pantalla.
+    const q = sel => String((ov.querySelector("#" + sel) || {}).value || "").trim();
     if (!q("omDepto") || !q("omObj")){
       ov.querySelector("#omErr").innerHTML = `<div class="errbox">Hace falta el departamento
         y para qué es: sin eso la orden no le dice nada a quien la trabaje.</div>`;
@@ -9074,7 +9293,7 @@ function nuevaOdtAMano(){
     try{ folio = await apartarFolio("odt_" + tipo, infoTipoOdt(tipo).prefijo, anio); }catch(e){}
     state.odts.push(saneaOdt({
       tipo, folio: folio || folioLocalOdt(tipo, anio),
-      departamento: q("omDepto"), solicitante: q("omQuien"),
+      departamento: q("omDepto"), solicitante: jefeDe(q("omDepto")),
       objetivo: q("omObj"), fechaEntrega: ov.querySelector("#omEntrega").value,
       fecha: hoyISO(), estado: "por_director", tokenFirma: nuevoToken(),
       createdAt: new Date().toISOString()

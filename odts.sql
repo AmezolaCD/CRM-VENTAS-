@@ -106,6 +106,52 @@ as $$
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 2b. ¿Quién firma por cada departamento?
+--
+--    Ésta es la ÚNICA función de todo el proyecto que se puede llamar sin
+--    tener cuenta, y por eso va explicado. No es un descuido: es la manera de
+--    que el jefe de área vea la lista de departamentos en el formulario.
+--
+--    El formulario corre en el teléfono de alguien que nunca ha entrado al
+--    CRM. No baja nada del servidor —su única petición es dejar la orden—, así
+--    que la lista que el administrador edita en Ajustes no le llegaría jamás.
+--    Las salidas eran tres: dejar la lista escrita dentro del programa (y
+--    entonces el administrador no la puede cambiar, que es justo lo que pidió),
+--    abrirle los ajustes enteros a cualquiera (no), o esto.
+--
+--    Lo que la hace aceptable:
+--
+--      · Pide la clave. Sin la clave buena contesta una lista vacía.
+--      · Devuelve UNA cosa: el arreglo de pares departamento/jefe. El recorte
+--        se hace AQUÍ DENTRO, no en el navegador, así que ni el nombre fiscal
+--        ni la clave del lobby ni nada más de ajustes:global sale por aquí.
+--      · Es exactamente lo que esa persona va a ver en pantalla dos segundos
+--        después. No revela nada que no fuera a ver de todos modos.
+--
+--    Si la clave se filtra se cambia desde Ajustes, igual que la de la liga, y
+--    esto deja de contestar con las viejas.
+-- ---------------------------------------------------------------------------
+create or replace function public.crm_odt_jefes(p_token text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(
+    (select d.datos -> 'hotel' -> 'jefes'
+       from public.crm_datos d
+      where d.id = 'ajustes:global'
+        and d.borrado = false
+        and coalesce(d.datos -> 'hotel' ->> 'tokenOdt', '') <> ''
+        and d.datos -> 'hotel' ->> 'tokenOdt' = p_token),
+    '[]'::jsonb);
+$$;
+
+revoke all on function public.crm_odt_jefes(text) from public;
+grant execute on function public.crm_odt_jefes(text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
 -- 3. ¿Quien pregunta es del equipo?
 --
 --    La misma de firmas.sql, archivos.sql, folios.sql, prospectos.sql,
@@ -285,6 +331,7 @@ grant execute on function public.crm_odts_limpia() to authenticated;
 --
 --      drop function if exists public.crm_odts_limpia();
 --      drop function if exists public.crm_odt_token_ok(text);
+--      drop function if exists public.crm_odt_jefes(text);
 --      drop table if exists public.crm_odts;
 --
 --    Las órdenes que ya se recogieron NO se pierden: viven en el CRM, no aquí.
