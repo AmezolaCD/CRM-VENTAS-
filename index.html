@@ -446,6 +446,39 @@
   textarea{resize:vertical; min-height:70px}
   textarea.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px}
   .hint{color:var(--muted); font-size:12px}
+
+  /* ----- Opciones que se prenden -----------------------------------------
+     Un grupo de "escoge varias". La casilla DE VERDAD sigue dentro, nada más
+     que escondida: así el teclado, el lector de pantalla y el propio navegador
+     siguen marcando, desmarcando y mandando el formulario. Con un <div> y un
+     onclick habría que reimplementar todo eso a mano, y saldría peor.
+
+     El escogido se pinta como .pill.strong, que es como esta aplicación ya
+     dice "esto está marcado". Así se ve parte del CRM y no pegado con cinta, y
+     funciona en claro y en oscuro sin tocar nada, porque son variables. */
+  .opciones{display:flex; flex-wrap:wrap; gap:8px}
+  .opciones label{cursor:pointer}
+  /* Fuera de la vista pero DENTRO del formulario: opacity y no display:none,
+     para que siga recibiendo el foco del teclado. El width:0 además anula el
+     .grid input{width:100%} de más arriba, que si no la estiraría. */
+  .opciones input{position:absolute; width:0; height:0; margin:0; opacity:0}
+  .opciones input + span{
+    display:inline-flex; align-items:center; gap:7px;
+    padding:10px 15px; border:1px solid var(--line); border-radius:999px;
+    background:var(--panel-2); color:var(--muted);
+    font-size:13.5px; font-weight:600; line-height:1.2;
+    /* Que "De productos / comida" no se parta en tres renglones. */
+    white-space:nowrap;
+    transition:background .12s, border-color .12s, color .12s}
+  /* La palomita ocupa su lugar SIEMPRE, marcada o no: si apareciera sólo al
+     escoger, la píldora cambiaría de ancho y la fila daría un brinco. Y va
+     porque lo marcado no puede distinguirse SÓLO por el color. */
+  .opciones .tic{visibility:hidden; font-style:normal; font-size:12px}
+  .opciones label:hover input + span{border-color:var(--accent)}
+  .opciones input:focus-visible + span{outline:2px solid var(--accent); outline-offset:2px}
+  .opciones input:checked + span{
+    background:var(--accent-soft); color:var(--accent); border-color:var(--accent)}
+  .opciones input:checked + span .tic{visibility:visible}
   .note{background:var(--accent-soft); color:var(--text); border-radius:6px; padding:10px 12px; font-size:13px; margin-bottom:14px}
   .note.warn{background:var(--warn-soft)}
   h3.sec{margin:22px 0 8px; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted)}
@@ -737,7 +770,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.28-67";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.28-68";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -7993,7 +8026,7 @@ function editarCampana(id, alCerrar){
       return;
     }
     cajaMeta.innerHTML = metaIds.map(id => `<span class="estado-chip"
-      style="background:var(--col);color:var(--tinta);margin:0 6px 6px 0;display:inline-block">
+      style="background:var(--col);color:var(--text);margin:0 6px 6px 0;display:inline-block">
       ${esc(nombreMeta(id))} <span class="hint">${esc(id)}</span>
       <a href="#" data-quitameta="${esc(id)}" style="margin-left:6px">✕</a></span>`).join("");
     cajaMeta.querySelectorAll("[data-quitameta]").forEach(a => a.onclick = ev => {
@@ -8040,7 +8073,7 @@ function editarCampana(id, alCerrar){
     cajaMeta.innerHTML = `<div class="note" style="margin:0 0 8px">Enlace una campaña
         <b>o</b> sus conjuntos de anuncios, no las dos cosas: el gasto de los conjuntos ya
         viene dentro del de su campaña, y contarlo dos veces descuadra el costo por lead.</div>
-      <div style="max-height:230px;overflow:auto;border:1px solid var(--linea);
+      <div style="max-height:230px;overflow:auto;border:1px solid var(--line);
         border-radius:8px;padding:8px">
       ${camps.length ? `<div class="hint" style="font-weight:700;margin:2px 0 4px">
         Campañas de Meta</div>${camps.map(opcion).join("")}` : ""}
@@ -8332,6 +8365,16 @@ async function depositarOdt(token, tipo, datos, firma, adjuntos){
   }
 }
 
+/**
+ * Una opción que se prende.
+ *
+ * La casilla de verdad va dentro, escondida por CSS: así el teclado y el
+ * navegador siguen haciendo su trabajo y lo único que cambia es cómo se ve.
+ * Ver la clase .opciones en la hoja de estilos.
+ */
+const opcionOdt = (dentro, texto) =>
+  `<label>${dentro}<span><i class="tic">✓</i>${esc(texto)}</span></label>`;
+
 /** Los campos de cada hoja, en el orden en que están impresos. */
 function camposOdt(tipo){
   const comun1 = `
@@ -8354,15 +8397,15 @@ function camposOdt(tipo){
         ${FORMATOS_AV.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join("")}
       </select></div>
     <div class="full"><label class="lbl">Sonido</label>
-      <div style="display:flex;gap:18px;flex-wrap:wrap">
-        <label style="display:flex;align-items:center;gap:6px">
-          <input type="checkbox" id="odAudio"> Lleva audio</label>
-        <label style="display:flex;align-items:center;gap:6px">
-          <input type="checkbox" id="odVoz"> Lleva voz en off</label></div></div>
+      <div class="opciones">
+        ${opcionOdt(`<input type="checkbox" id="odAudio">`, "Lleva audio")}
+        ${opcionOdt(`<input type="checkbox" id="odVoz">`, "Lleva voz en off")}
+      </div></div>
     <div class="full"><label class="lbl">¿Qué clase de tomas?</label>
-      <div style="display:flex;gap:18px;flex-wrap:wrap">
-        ${TOMAS_AV.map(x => `<label style="display:flex;align-items:center;gap:6px">
-          <input type="checkbox" class="odToma" value="${x.id}"> ${esc(x.name)}</label>`).join("")}
+      <p class="hint" style="margin:0 0 6px">Puedes escoger varias.</p>
+      <div class="opciones">
+        ${TOMAS_AV.map(x => opcionOdt(
+          `<input type="checkbox" class="odToma" value="${x.id}">`, x.name)).join("")}
       </div></div>
     <div><label class="lbl">Lugar</label>
       <input class="field" id="odLugar" style="width:100%" placeholder="Salón Cristal, alberca…"></div>
@@ -13876,7 +13919,7 @@ function pintaEntregas(ov, o){
   caja.innerHTML = (o.entregas.length
     ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">${
         o.entregas.map((x, i) => `
-        <div style="border:1px solid var(--linea);border-radius:10px;padding:8px;width:170px">
+        <div style="border:1px solid var(--line);border-radius:10px;padding:8px;width:170px">
           <div style="height:96px;background:#f2f0f5;border-radius:6px;overflow:hidden;
                       display:flex;align-items:center;justify-content:center"
                data-miniatura="${i}">
