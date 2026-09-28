@@ -68,15 +68,14 @@ create index if not exists crm_odts_pend_idx on public.crm_odts (aplicada) where
 
 alter table public.crm_odts enable row level security;
 
--- Por si el archivo se corrió antes de que existiera el check.
-do $tope$
-begin
-  if not exists (select 1 from pg_constraint where conname = 'crm_odts_cabe') then
-    alter table public.crm_odts
-      add constraint crm_odts_cabe check (octet_length(adjuntos::text) <= 20000000);
-  end if;
-end;
-$tope$;
+-- Por si el archivo se corrió antes de que existiera el check. Se tira y se
+-- vuelve a poner en vez de preguntar si ya estaba: así son dos renglones
+-- sueltos que se pueden correr solos, y no un bloque que hay que mandar
+-- entero. El editor de Supabase corre lo que uno tenga seleccionado, y media
+-- instrucción de varios renglones no significa nada.
+alter table public.crm_odts drop constraint if exists crm_odts_cabe;
+alter table public.crm_odts
+  add constraint crm_odts_cabe check (octet_length(adjuntos::text) <= 20000000);
 
 -- ---------------------------------------------------------------------------
 -- 2. ¿La clave es la del hotel?
@@ -189,23 +188,15 @@ grant execute on function public.crm_del_equipo() to authenticated;
 --    permiso de todo sobre cada tabla nueva a quien entra con su cuenta, y a
 --    `anon` le deja lo suyo; lo que hoy impide que alguien lea es que no exista
 --    una regla que se lo permita. Eso basta, pero es una sola línea de defensa.
-do $permisos$
-declare r text;
-begin
-  foreach r in array array['anon', 'authenticated'] loop
-    if exists (select 1 from pg_roles where rolname = r) then
-      execute format('revoke all on public.crm_odts from %I', r);
-    end if;
-  end loop;
-  if exists (select 1 from pg_roles where rolname = 'anon') then
-    execute 'grant insert on public.crm_odts to anon';
-    execute 'grant usage, select on sequence public.crm_odts_id_seq to anon';
-  end if;
-  if exists (select 1 from pg_roles where rolname = 'authenticated') then
-    execute 'grant select, update, delete on public.crm_odts to authenticated';
-  end if;
-end;
-$permisos$;
+--    Van como instrucciones sueltas y no dentro de un bloque que pregunte si
+--    el papel existe: en Supabase `anon` y `authenticated` existen siempre, la
+--    pregunta nunca servía de nada, y un bloque de varios renglones falla si
+--    el editor manda nada más un pedazo —que es lo que hace cuando uno deja
+--    texto seleccionado—. Cada renglón de aquí se puede correr solo.
+revoke all on public.crm_odts from anon, authenticated;
+grant insert on public.crm_odts to anon;
+grant usage, select on sequence public.crm_odts_id_seq to anon;
+grant select, update, delete on public.crm_odts to authenticated;
 
 drop policy if exists "jefe deja su orden" on public.crm_odts;
 create policy "jefe deja su orden" on public.crm_odts for insert to anon
