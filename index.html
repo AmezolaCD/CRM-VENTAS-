@@ -770,7 +770,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.28-69";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.28-70";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -8503,26 +8503,60 @@ const opcionOdt = (dentro, texto) =>
  * Si no contesta, devuelve lista vacía y el formulario vuelve a la caja de
  * texto de siempre: que el hotel no haya corrido el archivo todavía no puede
  * dejar a un jefe de área sin poder pedir nada.
+ *
+ * Pero SÍ dice por qué. Caerse callado a la caja de texto deja a quien la abre
+ * pensando que así es el formulario, y a marketing sin enterarse de que falta
+ * un paso del montaje. Por eso devuelve también el motivo, y el formulario lo
+ * enseña en un renglón chico.
  */
 async function jefesDeLaLiga(token){
   /* Se mira la dirección y la llave pública, NO nubeActiva(): ésa exige sesión
      y quien abre la liga nunca tiene una. Es la misma pareja de datos con la
      que depositarOdt manda la orden. */
-  if (!nube.url || !nube.anon) return [];
+  if (!nube.url || !nube.anon) return { lista:[], motivo:"sin-nube" };
   try{
     const r = await fetch(nube.url + "/rest/v1/rpc/crm_odt_jefes", {
       method: "POST",
-      headers: { apikey: nube.anon, "Content-Type": "application/json" },
+      headers: { apikey: nube.anon, "Content-Type": "application/json",
+                 "Accept": "application/json" },
       body: JSON.stringify({ p_token: token })
     });
-    if (!r.ok) return [];
-    const lista = await r.json();
-    return saneaJefes(Array.isArray(lista) ? lista : []);
-  }catch(e){ return []; }
+    if (!r.ok){
+      const detalle = await r.text().catch(() => "");
+      /* Que la función no exista y que el servidor esté de malas son dos cosas
+         distintas: la primera la arregla el hotel corriendo odts.sql, la
+         segunda se arregla sola. Decirlas iguales manda a alguien a correr un
+         archivo que ya corrió. */
+      return { lista:[], motivo: /PGRST202|PGRST205|not find the function|does not exist|404/i
+                 .test(detalle + " " + r.status) ? "sin-funcion" : "sin-respuesta" };
+    }
+    const crudo = await r.json();
+    const lista = saneaJefes(Array.isArray(crudo) ? crudo : []);
+    return { lista, motivo: lista.length ? "" : "sin-lista" };
+  }catch(e){ return { lista:[], motivo:"sin-respuesta" }; }
 }
 
+/**
+ * Por qué no salió la lista de departamentos.
+ *
+ * Se le dice a quien está llenando la hoja, no a un técnico: él no puede
+ * arreglarlo y no tiene por qué saber qué es un RPC. Lo que sí necesita es
+ * saber que escribirlo a mano está bien y que no es culpa suya. El dato de
+ * qué falta va entre paréntesis, para que cuando le reenvíe la captura a
+ * marketing, marketing sepa qué hacer.
+ */
+const AVISO_SIN_JEFES = {
+  "sin-funcion":   "Escribe tu departamento y tu nombre a mano: el hotel todavía no " +
+                   "termina de montar la lista (falta correr odts.sql en Supabase).",
+  "sin-lista":     "Escribe tu departamento y tu nombre a mano: la lista del hotel todavía " +
+                   "no ha subido al servidor (marketing tiene que sincronizar).",
+  "sin-respuesta": "Escribe tu departamento y tu nombre a mano: no se pudo consultar la " +
+                   "lista del hotel en este momento.",
+  "sin-nube":      ""   // sin servidor no hay nada que avisar: esto es una prueba
+};
+
 /** Los campos de cada hoja, en el orden en que están impresos. */
-function camposOdt(tipo, jefes){
+function camposOdt(tipo, jefes, motivo){
   /* Con la lista abajo, el departamento se escoge y el nombre sale solo: se
      acaban «A y B», «AYB» y «Alimentos y bebidas» como tres departamentos, y
      se acaba el nombre inventado por descuido. Sin la lista —el hotel no ha
@@ -8543,7 +8577,10 @@ function camposOdt(tipo, jefes){
     <div><label class="lbl">Tu departamento *</label>
       <input class="field" id="odDepto" style="width:100%" autocomplete="organization"></div>
     <div><label class="lbl">Tu nombre *</label>
-      <input class="field" id="odQuien" style="width:100%" autocomplete="name"></div>`) + `
+      <input class="field" id="odQuien" style="width:100%" autocomplete="name"></div>
+    ${AVISO_SIN_JEFES[motivo]
+      ? `<p class="hint full" id="odSinLista" style="margin:-4px 0 0">${
+           esc(AVISO_SIN_JEFES[motivo])}</p>` : ""}`) + `
     <div class="full"><label class="lbl">Tu correo *</label>
       <input class="field" id="odMail" type="email" style="width:100%" autocomplete="email"></div>
     <div class="full"><label class="lbl">¿Para qué es? *</label>
@@ -8627,8 +8664,9 @@ function pantallaOdtPublica(datos){
      está escogiendo qué hoja quiere. Para cuando pica una, ya llegó, y nadie
      vio una pantalla esperando. Si no llega, `jefes` se queda vacío y el
      formulario sale con la caja de texto de siempre. */
-  let jefes = [];
-  const bajando = jefesDeLaLiga(datos.token).then(l => { jefes = l; });
+  let jefes = [], porQueNo = "";
+  const bajando = jefesDeLaLiga(datos.token)
+    .then(r => { jefes = r.lista; porQueNo = r.motivo; });
 
   const escoger = () => {
     caja.innerHTML = `
@@ -8654,7 +8692,7 @@ function pantallaOdtPublica(datos){
       <p><button class="btn sm" id="odVolver">← Cambiar de solicitud</button></p>
       <div class="note"><b>${t.icono} Solicitud ${esc(t.name.toLowerCase())}.</b>
         Lo que lleva asterisco hace falta. Al final firmas con el dedo y se manda.</div>
-      <div class="grid">${camposOdt(tipo, jefes)}</div>
+      <div class="grid">${camposOdt(tipo, jefes, porQueNo)}</div>
 
       <h3 class="sec">Archivos de referencia</h3>
       <p class="hint">Hasta ${MAX_ADJUNTOS_ODT} archivos de ${pesoLegible(MAX_ADJUNTO_ODT)}

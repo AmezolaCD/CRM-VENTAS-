@@ -147,9 +147,18 @@ hay sorpresas de miles de pesos, pero conviene saber que el contador existe.
 
 **«Este enlace todavía no está habilitado»** al abrir el formulario → falta el paso 1.
 
-**El formulario pide el departamento tecleado, en vez de la lista** → o falta el paso 1, o se
-corrió una versión vieja de `odts.sql`. Vuelva a correrlo completo. La orden se manda igual
-mientras tanto; nada más se pierde la lista.
+**El formulario pide el departamento tecleado, en vez de la lista** → **el formulario mismo dice
+por qué**, en un renglón chico debajo de las dos cajas. Son dos cosas distintas y se arreglan
+distinto:
+
+| Lo que dice el renglón | Qué hacer |
+|---|---|
+| «…el hotel todavía no termina de montar la lista (falta correr `odts.sql`…)» | El paso 1. O se corrió una versión vieja del archivo: vuelva a pegarlo completo. |
+| «…la lista del hotel todavía no ha subido al servidor (marketing tiene que sincronizar)» | Entre al CRM y sincronice. La lista viaja con los ajustes. |
+| «…no se pudo consultar la lista del hotel en este momento» | Se cayó la conexión un momento. Vuelva a abrir la liga. |
+
+En los tres casos **la orden se manda igual**, con el departamento tecleado. Lo único que se
+pierde mientras tanto es la lista.
 
 **Un jefe de área dice que su departamento no está** → agréguelo en Ajustes (paso 5) y
 sincronice. Mientras no sincronice, él no lo va a ver.
