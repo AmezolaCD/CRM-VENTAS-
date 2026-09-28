@@ -79,7 +79,7 @@ as $$
      where d.id = case when position(':' in p_doc) > 0
                        then p_doc
                        else 'convenios:' || p_doc end
-       and d.tipo in ('convenios', 'contratos')
+       and d.tipo in ('convenios', 'contratos', 'odts')
        and d.borrado = false
        and coalesce(d.datos ->> 'tokenFirma', '') <> ''
        and d.datos ->> 'tokenFirma' = p_token);
@@ -155,11 +155,17 @@ $$;
 --    "los convenios" ni "los contratos": es el renglón cuyo tokenFirma coincide
 --    con el encabezado que mandó. Sin clave no ve nada, y con la clave de uno
 --    no ve el de al lado.
+--
+--    Los tres tipos de la lista son los que se firman desde fuera: convenios y
+--    contratos los firma el cliente, y las órdenes de trabajo de marketing las
+--    firma el director. La lista está cerrada a propósito: una clave que se
+--    filtre no puede servir para leer un cliente ni una campaña, sólo el
+--    documento que le toca.
 drop policy if exists "cliente lee su convenio"   on public.crm_datos;
 drop policy if exists "cliente lee su documento"  on public.crm_datos;
 create policy "cliente lee su documento" on public.crm_datos for select to anon
 using (
-  tipo in ('convenios', 'contratos')
+  tipo in ('convenios', 'contratos', 'odts')
   and borrado = false
   and public.crm_token_pedido() is not null
   and coalesce(datos ->> 'tokenFirma', '') <> ''

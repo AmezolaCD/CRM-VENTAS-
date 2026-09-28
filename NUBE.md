@@ -429,10 +429,31 @@ Sin correrlo, los mensajes de los anuncios se siguen capturando a mano con el bo
 pestaña Leads, y el CRM lo avisa ahí mismo. El paso a paso —incluido lo que hay que hacer en
 el proveedor— está en **[WHATSAPP.md](WHATSAPP.md)**.
 
+## Las órdenes de trabajo de marketing
+
+`odts.sql` monta el buzón donde cae cada solicitud que un jefe de área le manda a marketing, y
+el almacén donde viven sus archivos. Se corre una vez y se puede repetir.
+
+El visitante —el jefe que pide— tiene **un solo permiso en todo el servidor**: dejar su
+solicitud. No lee nada, ni siquiera lo que él mismo acaba de mandar. Por eso los archivos de
+referencia viajan **dentro** del renglón y es el CRM quien los pasa al almacén al recogerlos:
+darle permiso de escribir en el almacén para ahorrarse ese paso sería abrirle una puerta.
+
+La clave de esa liga es **propia**, no la de la liga del lobby. Ésa va pegada en los anuncios de
+Facebook y la ve cualquiera; no tiene por qué servir para levantar órdenes de trabajo.
+
+Hay que **volver a correr `firmas.sql`** para que el enlace de firma acepte este tercer tipo de
+documento —sin eso el director no puede firmar— y **`roles.sql`**, o ventas y banquetes
+recibirían las órdenes de marketing.
+
+Sin correrlo, el CRM funciona igual: las órdenes se capturan a mano con el botón de la pestaña
+ODTS, y la pantalla lo dice. El paso a paso está en **[ODTS.md](ODTS.md)**.
+
 ## Los archivos .sql se corren en el orden que sea
 
 `nube.sql` va primero, porque crea la tabla. Los demás —`roles.sql`, `firmas.sql`,
-`archivos.sql`, `folios.sql`, `prospectos.sql`, `marketing.sql`, `meta.sql`, `whatsapp.sql`— no
+`archivos.sql`, `folios.sql`, `prospectos.sql`, `marketing.sql`, `meta.sql`, `whatsapp.sql`,
+`odts.sql`— no
 dependen unos de otros: se corren en cualquier orden, cuantas veces haga falta, y cada uno se reemplaza
 entero en vez de acumularse.
 

@@ -673,6 +673,7 @@ window.CORE_NUBE = { url:"", anon:"" };
     <button data-view="contratosbq">Contratos banquetes</button>
     <button data-view="mktdash">Tablero de marketing</button>
     <button data-view="campanas">Campañas</button>
+    <button data-view="odts">ODTS</button>
     <button data-view="calendario">Calendario</button>
     <button data-view="reportes">Reportes</button>
     <button data-view="confirmaciones">Confirmaciones</button>
@@ -709,6 +710,7 @@ window.CORE_NUBE = { url:"", anon:"" };
   <section class="view" id="v-contratosbq"><div class="table-wrap" id="tblContratosBq"></div></section>
   <section class="view" id="v-mktdash"><div class="table-wrap" id="tblMktDash"></div></section>
   <section class="view" id="v-campanas"><div class="table-wrap" id="tblCampanas"></div></section>
+  <section class="view" id="v-odts"><div class="table-wrap" id="tblOdts"></div></section>
   <section class="view" id="v-calendario"><div class="table-wrap" id="tblCalendario"></div></section>
   <section class="view" id="v-reportes"><div class="table-wrap" id="tblReportes"></div></section>
   <section class="view" id="v-confirmaciones"><div class="table-wrap" id="tblConfirm"></div></section>
@@ -735,7 +737,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.23-66";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.28-67";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1166,7 +1168,7 @@ const USUARIOS_DEF = [
  * otra pestaña a la que pueda irse.
  */
 const VISTAS = ["tablero","clientes","actividades","convenios","contratos",
-                "eventos","contratosbq","mktdash","campanas","calendario","reportes",
+                "eventos","contratosbq","mktdash","campanas","odts","calendario","reportes",
                 "confirmaciones","leads","formulario","ajustes"];
 /* Lo de banquetes es de banquetes. Gerencia de ventas ve toda la cartera y
    todo el hospedaje, pero los eventos son de otro departamento: no le
@@ -1175,7 +1177,7 @@ const VISTAS = ["tablero","clientes","actividades","convenios","contratos",
 const SOLO_BANQUETES = ["eventos","contratosbq"];
 /* Y lo de marketing es de marketing: ventas y banquetes no tienen por qué
    cargar con las campañas ni con el armador de ligas. */
-const SOLO_MARKETING = ["mktdash","campanas"];
+const SOLO_MARKETING = ["mktdash","campanas","odts"];
 
 /**
  * Los departamentos del hotel.
@@ -1198,8 +1200,8 @@ const DEPARTAMENTOS = [
     vistas:["tablero","clientes","actividades","eventos","contratosbq",
             "calendario","reportes","leads","formulario"] },
   { id:"marketing", name:"Marketing", icono:"📣",
-    sub:"Campañas, ligas con UTMs y los prospectos que traen",
-    vistas:["mktdash","campanas","leads","formulario"] }
+    sub:"Campañas, órdenes de trabajo y los prospectos que traen",
+    vistas:["mktdash","campanas","odts","leads","formulario"] }
 ];
 
 /** Qué departamentos alcanza cada papel. Vacío = no aplica, no se le pregunta. */
@@ -1274,8 +1276,8 @@ const VISTAS_ROL = {
                   "calendario","reportes","leads","formulario"],
   /* Marketing no alcanza la cartera: lo suyo son las campañas, las ligas y los
      prospectos que ellos mismos levantan. Se decidió así a propósito. */
-  marketing:     ["mktdash","campanas","leads","formulario"],
-  gte_marketing: ["mktdash","campanas","leads","formulario"]
+  marketing:     ["mktdash","campanas","odts","leads","formulario"],
+  gte_marketing: ["mktdash","campanas","odts","leads","formulario"]
 };
 
 /** ¿A esta persona le toca ver los eventos de banquetes? */
@@ -1574,6 +1576,65 @@ const ESTADOS_CAMP = {
   cerrada:  { name:"Cerrada",   bg:"var(--panel-2)", fg:"var(--muted)" }
 };
 
+/* ==========================================================================
+   LAS ÓRDENES DE TRABAJO DE MARKETING (ODTs)
+
+   Marketing recibe sus encargos en papel: dos hojas, Solicitud Audiovisual y
+   Solicitud Diseño Gráfico, que el jefe del área que pide llena a mano, firma,
+   y persigue por el hotel hasta juntar las demás firmas.
+
+   Estos catálogos viven AQUÍ ARRIBA por la misma razón que los canales: los
+   consulta saneaOdt(), que corre dentro de cargar(), que es de lo primero que
+   pasa. Más abajo, la aplicación no arrancaría.
+   ========================================================================== */
+
+/* Las dos hojas. El id es el que viaja en los datos; el prefijo es el de su
+   serie de folios, que van aparte: una orden de video y una de diseño no
+   compiten por el mismo número. */
+const TIPOS_ODT = [
+  { id:"audiovisual", name:"Audiovisual",    prefijo:"AV", icono:"🎬",
+    sub:"Fotografía, video, audio y voz en off" },
+  { id:"diseno",      name:"Diseño gráfico", prefijo:"DG", icono:"🎨",
+    sub:"Piezas digitales y para impresión" }
+];
+const infoTipoOdt = id => TIPOS_ODT.find(t => t.id === id) || TIPOS_ODT[0];
+
+/* El camino de una orden. "por_director" es el estado en el que nace: llega
+   del formulario ya firmada por quien la pide, y lo que falta es el director.
+   A quién le toca trabajarla NO es un estado: una orden se puede repartir
+   antes de que el director firme, y la pantalla dice lo que falta. */
+const ESTADOS_ODT = {
+  por_director: { name:"Falta la firma del director", bg:"var(--oro-suave)", fg:"var(--oro-tinta)" },
+  abierta:      { name:"Abierta",    bg:"var(--ok-soft)",  fg:"var(--ok)" },
+  entregada:    { name:"Entregada",  bg:"var(--panel-2)",  fg:"var(--muted)" },
+  cancelada:    { name:"Cancelada",  bg:"var(--panel-2)",  fg:"var(--muted)" }
+};
+
+/* Diseño gráfico: para qué es la pieza. Una de las tres. */
+const SALIDAS_DG = [
+  { id:"digital",   name:"Diseño digital" },
+  { id:"impresion", name:"Diseño para impresión" },
+  { id:"ambos",     name:"Ambos" }
+];
+
+/* Audiovisual: qué se va a producir. Una de las tres. */
+const FORMATOS_AV = [
+  { id:"foto",  name:"Fotografía" },
+  { id:"video", name:"Video" },
+  { id:"ambos", name:"Ambos" }
+];
+
+/* Y qué clase de tomas. Aquí sí varias a la vez: una orden puede pedir foto de
+   espacio y de producto en la misma sesión. */
+const TOMAS_AV = [
+  { id:"espacio",     name:"De espacio" },
+  { id:"experiencia", name:"De experiencia" },
+  { id:"stock",       name:"De stock" },
+  { id:"evento",      name:"De evento" },
+  { id:"retrato",     name:"Fotorretrato" },
+  { id:"producto",    name:"De productos / comida" }
+];
+
 /**
  * Lo que el último sanear() dejó fuera por no encontrarle cliente.
  *
@@ -1651,6 +1712,7 @@ function sanear(s){
     contratos:    Array.isArray(s.contratos) ? s.contratos.map(saneaContrato) : [],
     eventos:      Array.isArray(s.eventos) ? s.eventos.map(saneaEvento) : [],
     campanas:     Array.isArray(s.campanas) ? s.campanas.map(saneaCampana) : [],
+    odts:         Array.isArray(s.odts) ? s.odts.map(saneaOdt) : [],
     huespedes:    Array.isArray(s.huespedes) ? s.huespedes.map(saneaHuesped) : [],
     usuarios:     Array.isArray(s.usuarios) ? s.usuarios.map(saneaUsuario) : USUARIOS_DEF.map(saneaUsuario),
     habitaciones: catalogo(s.habitaciones),
@@ -1777,6 +1839,93 @@ function saneaCampana(c){
     .map(x => String(x || "").trim())
     .filter((x, i, a) => x && /^\d+$/.test(x) && a.indexOf(x) === i)
     .slice(0, 20);
+  return o;
+}
+
+/**
+ * Una orden de trabajo de marketing.
+ *
+ * Los campos son los de las dos hojas de papel, tal cual: lo común arriba, y
+ * abajo lo que sólo pregunta una de las dos. Se guardan todos aunque la orden
+ * sea del otro tipo —no estorban y valen vacíos— para que cambiar una orden de
+ * tipo no borre lo que ya se había escrito.
+ */
+function saneaOdt(o){
+  const d = Object.assign({ id:"", folio:"", tipo:"diseno", estado:"por_director",
+    // De dónde viene y quién la pide
+    departamento:"", solicitante:"", email:"", fecha:"", fechaEntrega:"",
+    // Lo que pide, en las dos hojas
+    objetivo:"", elementos:"", notas:"",
+    // Sólo diseño gráfico
+    salida:"", medidas:"", informacion:"",
+    // Sólo audiovisual
+    duracion:"", formato:"", audio:false, vozOff:false, tomas:[],
+    lugar:"", dia:"", hora:"", plataformas:"",
+    // Las dos rondas de correcciones, que las anota marketing
+    cambio1:"", cambio2:"",
+    // Las dos firmas
+    firmaJefe:null, firmaDirector:null, tokenFirma:"", avisado:false,
+    // El reparto. Es un DATO, no un permiso: ver duenioDe().
+    asignadoA:"",
+    // Los archivos de referencia que mandó quien la pide, y lo que se entregó
+    adjuntos:[], entregas:[],
+    // De qué renglón del buzón salió, para no recogerla dos veces
+    origenId:"", createdAt:"", updatedAt:"" }, o || {});
+
+  d.id = d.id || nuevoId("o");
+  d.tipo = TIPOS_ODT.some(t => t.id === d.tipo) ? d.tipo : "diseno";
+  d.estado = ESTADOS_ODT[d.estado] ? d.estado : "por_director";
+  for (const k of ["folio","departamento","solicitante","email","objetivo","elementos",
+                   "notas","medidas","informacion","duracion","lugar","plataformas",
+                   "cambio1","cambio2","asignadoA","tokenFirma","origenId"])
+    d[k] = String(d[k] || "").trim();
+  for (const k of ["fecha","fechaEntrega","dia"]) d[k] = String(d[k] || "").slice(0, 10);
+  d.hora = String(d.hora || "").slice(0, 5);
+  d.salida  = SALIDAS_DG.some(x => x.id === d.salida)   ? d.salida  : "";
+  d.formato = FORMATOS_AV.some(x => x.id === d.formato) ? d.formato : "";
+  d.audio  = !!d.audio;
+  d.vozOff = !!d.vozOff;
+  d.tomas = (Array.isArray(d.tomas) ? d.tomas : [])
+    .filter((x, i, a) => TOMAS_AV.some(t => t.id === x) && a.indexOf(x) === i);
+  d.firmaJefe     = saneaFirma(d.firmaJefe);
+  d.firmaDirector = saneaFirma(d.firmaDirector);
+  d.avisado = !!d.avisado;
+  d.adjuntos = (Array.isArray(d.adjuntos) ? d.adjuntos : []).map(saneaAdjunto).slice(0, 3);
+  d.entregas = (Array.isArray(d.entregas) ? d.entregas : []).map(saneaEntrega).slice(0, 20);
+  return d;
+}
+
+/**
+ * Un archivo de referencia de los que manda quien pide la orden.
+ *
+ * `ruta` es dónde quedó en el almacén. Mientras va en camino —del formulario
+ * público al CRM— viaja como texto dentro del buzón, pero aquí ya no: el
+ * registro entero se replica a cada equipo en cada sincronización, y un PDF
+ * incrustado haría lenta la aplicación de todo el hotel.
+ */
+function saneaAdjunto(a){
+  const o = Object.assign({ nombre:"", ruta:"", tipoMime:"", tam:0 }, a || {});
+  for (const k of ["nombre","ruta","tipoMime"]) o[k] = String(o[k] || "").trim();
+  o.tam = Number(o.tam) || 0;
+  return o;
+}
+
+/**
+ * Lo que marketing entregó. Plural a propósito: una orden de diseño casi
+ * siempre da varias piezas.
+ *
+ * Dos clases. "archivo" vive en el almacén del hotel y se ve completo. "enlace"
+ * es para el video: un video de verdad no cabe —el almacén topa en 20 MB por
+ * archivo— así que se pega la dirección de donde vive y se sube una portada,
+ * que sí cabe y es lo que se ve en la lista.
+ */
+function saneaEntrega(e){
+  const o = Object.assign({ clase:"archivo", nombre:"", ruta:"", tipoMime:"", tam:0,
+    url:"", portada:"", cuando:"", quien:"" }, e || {});
+  o.clase = o.clase === "enlace" ? "enlace" : "archivo";
+  for (const k of ["nombre","ruta","tipoMime","url","portada","cuando","quien"])
+    o[k] = String(o[k] || "").trim();
+  o.tam = Number(o.tam) || 0;
   return o;
 }
 
@@ -2677,7 +2826,7 @@ function menuSesion(){
 /* ----- Traducción entre el estado y las filas de la tabla ----- */
 
 const COLECCIONES = ["clientes","actividades","convenios","contratos","eventos","prospectos",
-                     "campanas","huespedes","habitaciones","usuarios"];
+                     "campanas","odts","huespedes","habitaciones","usuarios"];
 /** Lo que roles.sql sólo deja escribir al administrador. */
 const SOLO_ADMIN = ["ajustes","usuarios","habitaciones"];
 
@@ -2690,9 +2839,13 @@ function filasDeEstado(){
 }
 
 function estadoDesdeFilas(filas){
+  /* Ojo: esta lista se escribe a mano y tiene que traer TODAS las de
+     COLECCIONES. Un tipo que falte aquí no da error: `bruto[f.tipo]` sale
+     undefined y las filas se tiran en silencio, que es la peor manera de
+     perder datos —nadie se entera hasta que alguien pregunta por lo suyo—. */
   const bruto = { clientes:[], actividades:[], convenios:[], contratos:[], eventos:[],
-                  prospectos:[], campanas:[], huespedes:[], habitaciones:[], usuarios:[],
-                  ajustes:null };
+                  prospectos:[], campanas:[], odts:[], huespedes:[], habitaciones:[],
+                  usuarios:[], ajustes:null };
   for (const f of filas){
     if (f.tipo === "ajustes") bruto.ajustes = f.datos;
     else if (bruto[f.tipo]) bruto[f.tipo].push(f.datos);
@@ -2752,8 +2905,16 @@ function duenioDe(fila){
      quien lo tecleó, que muchas veces es marketing y no tiene cartera. */
   if (fila.tipo === "prospectos")  return String(fila.datos.asignadoA || "").trim() ||
                                           String(fila.datos.capturadoPor || "").trim() || null;
-  // Las campañas no se reparten: son del área, no de quien las capturó. Sin
-  // dueño marcado, el servidor se las entrega a todo marketing.
+  /* Las campañas y las órdenes de trabajo no se reparten: son del área, no de
+     quien las capturó. Sin dueño marcado, el servidor se las entrega a todo
+     marketing.
+
+     En las ODT esto NO es un descuido, aunque tengan un asignado. Si el dueño
+     fuera el asignado, la regla de roles.sql dejaría que sólo él la
+     reescribiera, y el día que Pedro tocara una de Sidney el servidor le
+     rebotaría la subida ENTERA —PostgREST manda el lote en un solo POST, así
+     que un renglón rechazado se lleva a los demás—. A quién le toca trabajarla
+     se guarda dentro del renglón: es un dato, no un permiso. */
   return null;
 }
 
@@ -2830,42 +2991,25 @@ async function recogerFirmas(){
 
   parte.pendientes = (filas || []).length;
   for (const f of filas || []){
-    /* El buzón guarda el documento con su tipo adelante cuando es un contrato
-       —'contratos:k123'—; un convenio va pelado, como se mandó siempre. */
-    const crudo = String(f.convenio_id || "");
-    const esContrato = crudo.startsWith("contratos:");
-    const v = esContrato
-      ? state.contratos.find(x => x.id === crudo.slice("contratos:".length))
-      : state.convenios.find(x => x.id === crudo);
+    /* El buzón guarda el documento con su tipo adelante —'contratos:k123',
+       'odts:o123'—; un convenio va pelado, como se mandó siempre. */
+    const { tipo, id } = docDelBuzon(f.convenio_id);
+    const info = infoDoc(tipo);
+    const v = info.lista().find(x => x.id === id);
     if (!v){
       parte.notas.push(`Hay una firma de ${f.nombre || "un cliente"} para un documento que este equipo no tiene bajado.`);
       continue;                                  // no se marca: otro equipo la aplicará
     }
     const firma = { nombre:f.nombre, puesto:f.puesto, celular:f.celular,
                     fecha:f.creado || new Date().toISOString(), img:f.img };
-    if (esContrato ? v.firmaCliente : v.firmaEmpresa){
+    if (v[info.campoFirma]){
       parte.notas.push(`${v.folio} ya estaba firmado; se descartó una firma repetida.`);
     } else if (!v.tokenFirma || v.tokenFirma !== f.token){
-      // Suele pasar si se rehizo el enlace: el cliente firmó con el viejo.
+      // Suele pasar si se rehizo el enlace: firmaron con el viejo.
       parte.notas.push(`La firma de ${f.nombre || "el cliente"} para ${v.folio} llegó con una clave que ya no corresponde. ` +
         "Vuelve a mandarle el enlace.");
-    } else if (esContrato){
-      v.firmaCliente = saneaFirma(firma);
-      v.estado = "aceptado";
-      /* La clave deja de servir en cuanto se firma: el enlace anda por
-         WhatsApp y por correo, y un documento firmado no tiene por qué seguir
-         abriéndose desde fuera. Igual que en los convenios. */
-      v.tokenFirma = "";
-      v.avisado = false;          // que el ejecutivo se entere al volver
-      v.updatedAt = new Date().toISOString();
-      registrarAuto(v.clienteId, `${infoTipoCt(v.tipo).name} ${v.folio} aceptada por el cliente`,
-        `Firmó ${f.nombre || "el cliente"} desde el enlace que se le envió.`, ejecutivoDeCt(v));
-      guardar();
-      parte.aplicadas++;
-      parte.hubo = true;
     } else {
-      cerrarConvenio(v, firma,
-        "Firmado por el cliente desde el enlace que se le envió.", "");
+      info.aplica(v, firma, f);
       parte.aplicadas++;
       parte.hubo = true;
     }
@@ -2955,6 +3099,8 @@ async function sincronizar(){
     // Y los de WhatsApp, que entran por el mismo camino y son los que más se
     // perdían: los anuncios del hotel son de mensajes.
     if (!nube.sinBuzonWa && (await recogerWhatsApp()).hubo) render();
+    // Y las órdenes que levantaron los jefes de área desde su liga.
+    if (!nube.sinBuzonOdts && (await recogerOdts()).hubo) render();
     if (resolverFoliosRepetidos()) render();
 
     const actuales = filasDeEstado();
@@ -3107,7 +3253,7 @@ async function bajarTodo(){
 
 const NOMBRE_TIPO = { clientes:"clientes", actividades:"actividades", convenios:"convenios",
   prospectos:"prospectos", huespedes:"huéspedes", habitaciones:"tipos de habitación",
-  usuarios:"usuarios", ajustes:"ajustes" };
+  usuarios:"usuarios", ajustes:"ajustes", odts:"órdenes de trabajo" };
 
 function pantallaPermisos(){
   const ov = modal(`
@@ -3489,7 +3635,7 @@ function candado(){
   // Ni el cliente que viene a firmar ni quien viene de un anuncio entran al
   // CRM: su pantalla es otra cosa y no tienen por qué dar una contraseña que
   // no tienen.
-  if (enlaceDeFirma() || enlaceDeAlta()) return false;
+  if (enlaceDeFirma() || enlaceDeAlta() || enlaceDeOdt()) return false;
   const cerrado = !!(nube.url && nube.anon) && !nube.sesion;
   document.body.classList.toggle("sin-sesion", cerrado);
   if (cerrado && !document.getElementById("entrada")) pantallaEntrada();
@@ -4116,6 +4262,7 @@ function render(){
   if (vista === "contratosbq") renderContratosBq();
   if (vista === "mktdash") renderMktDash();
   if (vista === "campanas") renderCampanas();
+  if (vista === "odts") renderOdts();
   if (vista === "calendario") renderCalendario();
   if (vista === "reportes") renderReportes();
   if (vista === "confirmaciones") renderConfirmaciones();
@@ -8089,6 +8236,329 @@ function armaLiga(base, utm){
    liga se arma desde Atribución & UTMs y no se escribe a mano.
    ========================================================================== */
 
+/* ==========================================================================
+   LA LIGA DE LAS ÓRDENES DE TRABAJO
+
+   Una sola y fija, que marketing le reparte a los jefes de área. Quien la abre
+   no entra al CRM: escoge la hoja, la llena, adjunta lo que haga falta, firma
+   con el dedo y termina.
+
+   Es una clave PROPIA, no la de la liga del lobby: esa va pegada en los
+   anuncios de Facebook y la ve cualquiera, y no tiene por qué servir para
+   levantar órdenes de trabajo. Dos públicos, dos claves, y revocar una no
+   tumba la otra.
+   ========================================================================== */
+
+/** ¿La dirección trae la liga de las órdenes? */
+function enlaceDeOdt(){
+  const m = String(location.hash || "").match(/[#&]odt=([A-Za-z0-9_-]+)/);
+  return m ? { token: m[1] } : null;
+}
+
+/**
+ * La clave de la liga. La inventa el administrador y nadie más.
+ *
+ * Por lo mismo que la de altas: la clave vive en los ajustes, y con roles.sql
+ * corrido los ajustes sólo los escribe el administrador. Si la inventara
+ * marketing se quedaría en esa computadora, el servidor nunca la conocería, y
+ * la liga repartida rebotaría a todos los jefes de área.
+ */
+function tokenOdt(){
+  const h = state.ajustes.hotel;
+  if (!h.tokenOdt && (!nubeActiva() || esAdmin())){
+    h.tokenOdt = nuevoToken();
+    guardar();
+  }
+  return h.tokenOdt || "";
+}
+
+/** ¿La clave ya está en el servidor? Si no, la liga no abriría. */
+const claveOdtPublicada = () => {
+  if (!nubeActiva()) return true;
+  const t = tokenOdt();
+  return !!t && String(sincronizado.get("ajustes:global") || "").includes(t);
+};
+
+const ligaDeOdt = () => {
+  const t = tokenOdt();
+  return t ? location.origin + location.pathname + "#odt=" + t : "";
+};
+
+/* Hasta tres archivos de referencia, de 5 MB cada uno. El tope es del lado del
+   servidor también —un check en la tabla—, porque el navegador se puede
+   saltar: quien conozca la clave puede mandar lo que quiera con curl.
+
+   Éstos viajan DENTRO del renglón del buzón, no por el almacén, porque el
+   visitante no tiene permiso de escribir ahí. Por eso su tope no depende del
+   plan de Supabase sino de lo que es razonable meter en una sola petición. */
+const MAX_ADJUNTO_ODT = 5 * 1024 * 1024;
+const MAX_ADJUNTOS_ODT = 3;
+
+/* Lo que entrega marketing SÍ va al almacén, y ahí el tope lo pone el plan.
+   En el gratuito ningún archivo pasa de 50 MB y un video no cabía; con el Pro
+   caben cientos de GB. 200 MB es un punto intermedio a propósito: alcanza de
+   sobra para un spot en buena calidad y evita que alguien suba por error el
+   archivo de edición de 4 GB. Tiene que coincidir con el file_size_limit del
+   balde en odts.sql, y ninguno de los dos puede pasar el tope global que hay
+   en Storage → Settings del proyecto. */
+const MAX_ENTREGA_ODT = 200 * 1024 * 1024;
+
+/**
+ * Deja la orden en el buzón.
+ *
+ * Con return=minimal, igual que las altas: el visitante no tiene permiso de
+ * LEER la tabla, y si la petición pidiera de vuelta el renglón, el servidor la
+ * rechazaría entera aunque la orden estuviera bien.
+ */
+async function depositarOdt(token, tipo, datos, firma, adjuntos){
+  const r = await fetch(nube.url + "/rest/v1/crm_odts", {
+    method: "POST",
+    headers: { apikey: nube.anon, "Content-Type": "application/json",
+               "Prefer": "return=minimal" },
+    body: JSON.stringify({ token, tipo, datos, firma, adjuntos, aplicada: false })
+  });
+  if (!r.ok){
+    const detalle = await r.text().catch(() => "");
+    // La clave mala va PRIMERO: el aviso de que la regla lo rechazó nombra la
+    // tabla, así que preguntar antes por la tabla haría que una clave inventada
+    // se reportara como "falta montarlo" y nadie entendería nada.
+    if (/row-level security/i.test(detalle))
+      throw new Error("Esta liga ya no está vigente. Pídele una nueva a marketing.");
+    if (/crm_odts_cabe|check constraint/i.test(detalle))
+      throw new Error("Los archivos pesan de más para mandarlos juntos. Quita alguno.");
+    if (/schema cache|PGRST205|does not exist/i.test(detalle))
+      throw new Error("La liga todavía no está lista del lado del hotel.");
+    throw new Error(detalle || ("Error " + r.status));
+  }
+}
+
+/** Los campos de cada hoja, en el orden en que están impresos. */
+function camposOdt(tipo){
+  const comun1 = `
+    <div><label class="lbl">Tu departamento *</label>
+      <input class="field" id="odDepto" style="width:100%" autocomplete="organization"></div>
+    <div><label class="lbl">Tu nombre *</label>
+      <input class="field" id="odQuien" style="width:100%" autocomplete="name"></div>
+    <div class="full"><label class="lbl">Tu correo *</label>
+      <input class="field" id="odMail" type="email" style="width:100%" autocomplete="email"></div>
+    <div class="full"><label class="lbl">¿Para qué es? *</label>
+      <textarea class="field" id="odObj" rows="2" style="width:100%"
+        placeholder="Qué quieres lograr con esta pieza"></textarea></div>`;
+
+  const propios = tipo === "audiovisual" ? `
+    <div><label class="lbl">Duración</label>
+      <input class="field" id="odDur" style="width:100%" placeholder="30 segundos"></div>
+    <div><label class="lbl">¿Qué se produce?</label>
+      <select class="field" id="odFormato" style="width:100%">
+        <option value="">— Escoge —</option>
+        ${FORMATOS_AV.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join("")}
+      </select></div>
+    <div class="full"><label class="lbl">Sonido</label>
+      <div style="display:flex;gap:18px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px">
+          <input type="checkbox" id="odAudio"> Lleva audio</label>
+        <label style="display:flex;align-items:center;gap:6px">
+          <input type="checkbox" id="odVoz"> Lleva voz en off</label></div></div>
+    <div class="full"><label class="lbl">¿Qué clase de tomas?</label>
+      <div style="display:flex;gap:18px;flex-wrap:wrap">
+        ${TOMAS_AV.map(x => `<label style="display:flex;align-items:center;gap:6px">
+          <input type="checkbox" class="odToma" value="${x.id}"> ${esc(x.name)}</label>`).join("")}
+      </div></div>
+    <div><label class="lbl">Lugar</label>
+      <input class="field" id="odLugar" style="width:100%" placeholder="Salón Cristal, alberca…"></div>
+    <div><label class="lbl">Día</label>
+      <input class="field" id="odDia" type="date" style="width:100%"></div>
+    <div><label class="lbl">Hora</label>
+      <input class="field" id="odHora" type="time" style="width:100%"></div>
+    <div class="full"><label class="lbl">¿Dónde se va a publicar?</label>
+      <input class="field" id="odPlat" style="width:100%"
+        placeholder="Instagram, Facebook, pantallas del lobby…"></div>`
+  : `
+    <div class="full"><label class="lbl">¿Para qué es la pieza?</label>
+      <select class="field" id="odSalida" style="width:100%">
+        <option value="">— Escoge —</option>
+        ${SALIDAS_DG.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join("")}
+      </select></div>
+    <div class="full"><label class="lbl">Medidas requeridas</label>
+      <input class="field" id="odMedidas" style="width:100%"
+        placeholder="1080×1080, media carta, lona de 2×1 m…"></div>
+    <div class="full"><label class="lbl">¿Qué información lleva?</label>
+      <textarea class="field" id="odInfo" rows="3" style="width:100%"
+        placeholder="Los textos, precios y datos que tienen que aparecer"></textarea></div>`;
+
+  const comun2 = `
+    <div class="full"><label class="lbl">Elementos requeridos</label>
+      <textarea class="field" id="odElem" rows="2" style="width:100%"
+        placeholder="Logotipos, fotos, colores, lo que haya que incluir"></textarea></div>
+    <div class="full"><label class="lbl">Notas adicionales</label>
+      <textarea class="field" id="odNotas" rows="2" style="width:100%"></textarea></div>
+    <div><label class="lbl">¿Para cuándo la necesitas? *</label>
+      <input class="field" id="odEntrega" type="date" style="width:100%"></div>`;
+
+  return comun1 + propios + comun2;
+}
+
+/**
+ * La pantalla que ve el jefe de área que abre la liga.
+ *
+ * Primero escoge la hoja, porque las dos preguntan cosas distintas y enseñarle
+ * las dos juntas sería pedirle que ignore la mitad.
+ */
+function pantallaOdtPublica(datos){
+  document.documentElement.classList.add("modo-firma");
+  document.documentElement.classList.remove("intro-activa");
+  for (const el of [document.documentElement, document.body]){
+    el.style.setProperty("height", "auto", "important");
+    el.style.setProperty("min-height", "100%", "important");
+    el.style.setProperty("max-height", "none", "important");
+    el.style.setProperty("overflow", "visible", "important");
+    el.style.setProperty("display", "block", "important");
+    el.style.setProperty("position", "static", "important");
+  }
+  document.body.innerHTML = `<div id="firmaCliente"></div>`;
+  const caja = document.getElementById("firmaCliente");
+
+  const escoger = () => {
+    caja.innerHTML = `
+      <div class="note"><b>Solicitud a marketing.</b> Escoge qué necesitas. No hace falta
+        instalar nada ni crear ninguna cuenta.</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px">
+        ${TIPOS_ODT.map(t => `
+          <button class="btn" data-tipo="${t.id}"
+            style="flex:1;min-width:220px;padding:20px;text-align:left;font-size:15px">
+            <div style="font-size:28px">${t.icono}</div>
+            <b>${esc(t.name)}</b>
+            <div class="hint" style="margin-top:4px">${esc(t.sub)}</div>
+          </button>`).join("")}
+      </div>`;
+    caja.querySelectorAll("[data-tipo]").forEach(b =>
+      b.onclick = () => llenar(b.dataset.tipo));
+  };
+
+  const llenar = tipo => {
+    const t = infoTipoOdt(tipo);
+    caja.innerHTML = `
+      <p><button class="btn sm" id="odVolver">← Cambiar de solicitud</button></p>
+      <div class="note"><b>${t.icono} Solicitud ${esc(t.name.toLowerCase())}.</b>
+        Lo que lleva asterisco hace falta. Al final firmas con el dedo y se manda.</div>
+      <div class="grid">${camposOdt(tipo)}</div>
+
+      <h3 class="sec">Archivos de referencia</h3>
+      <p class="hint">Hasta ${MAX_ADJUNTOS_ODT} archivos de ${pesoLegible(MAX_ADJUNTO_ODT)}
+        cada uno: una foto de ejemplo, el logotipo, un PDF con los textos. Opcional.</p>
+      <input class="field" id="odFiles" type="file" multiple style="width:100%"
+        accept="image/*,application/pdf">
+      <div id="odFilesLista"></div>
+
+      <h3 class="sec">Tu firma</h3>
+      <p class="hint">Firmas como jefe del departamento que lo pide. Después marketing le
+        consigue la firma de dirección.</p>
+      <div class="grid">
+        <div><label class="lbl">Tu puesto</label>
+          <input class="field" id="odPuesto" style="width:100%"></div>
+        <div><label class="lbl">Tu celular</label>
+          <input class="field" id="odCel" style="width:100%" inputmode="tel"></div>
+      </div>
+      <canvas class="sign-pad" id="pad"></canvas>
+      <p><button class="btn sm" id="odBorrar">Borrar y volver a firmar</button></p>
+      <div id="odErr"></div>
+      <p><button class="btn ok" id="odOk" style="width:100%;font-size:16px;padding:12px">
+        Mandar la solicitud</button></p>`;
+
+    const q = sel => caja.querySelector(sel);
+    const limpiar = prepararPad(q("#pad"));
+    q("#odBorrar").onclick = limpiar;
+    q("#odVolver").onclick = escoger;
+
+    /* Se revisa el peso AL ESCOGER y no al mandar: enterarse de que no cabe
+       después de llenar toda la hoja es enterarse tarde. */
+    let archivos = [];
+    q("#odFiles").onchange = ev => {
+      const malos = [];
+      archivos = [...ev.target.files].filter(f => {
+        if (f.size > MAX_ADJUNTO_ODT){ malos.push(f.name + " (" + pesoLegible(f.size) + ")"); return false; }
+        return true;
+      }).slice(0, MAX_ADJUNTOS_ODT);
+      q("#odFilesLista").innerHTML =
+        (archivos.length ? `<p class="hint">Van a ir: ${archivos.map(f =>
+            esc(f.name) + " · " + esc(pesoLegible(f.size))).join(", ")}</p>` : "") +
+        (malos.length ? `<div class="errbox">Estos pesan más de ${pesoLegible(MAX_ADJUNTO_ODT)}
+          y no se pueden mandar:
+          ${esc(malos.join(", "))}.<br>Mándalos por correo, o sube una versión más chica.</div>` : "") +
+        ([...ev.target.files].length > MAX_ADJUNTOS_ODT
+          ? `<p class="hint">Sólo se mandan los primeros ${MAX_ADJUNTOS_ODT}.</p>` : "");
+    };
+
+    q("#odOk").onclick = async ev => {
+      const err = q("#odErr");
+      const val = id => (q("#" + id) || {}).value || "";
+      const falta = [];
+      if (!val("odDepto").trim()) falta.push("tu departamento");
+      if (!val("odQuien").trim()) falta.push("tu nombre");
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(val("odMail").trim())) falta.push("un correo válido");
+      if (!val("odObj").trim())   falta.push("para qué es");
+      if (!val("odEntrega"))      falta.push("para cuándo la necesitas");
+      if (!q("#pad").dataset.trazado) falta.push("tu firma");
+      if (falta.length){
+        err.innerHTML = `<div class="errbox">Falta ${esc(falta.join(", "))}.</div>`;
+        err.scrollIntoView({ behavior:"smooth", block:"center" });
+        return;
+      }
+      err.innerHTML = "";
+      const b = ev.currentTarget, antes = b.textContent;
+      b.disabled = true; b.textContent = "Mandando…";
+      try{
+        const d = {
+          departamento: val("odDepto").trim(), solicitante: val("odQuien").trim(),
+          email: val("odMail").trim(), objetivo: val("odObj").trim(),
+          elementos: val("odElem").trim(), notas: val("odNotas").trim(),
+          fechaEntrega: val("odEntrega"), fecha: hoyISO()
+        };
+        if (tipo === "audiovisual"){
+          Object.assign(d, {
+            duracion: val("odDur").trim(), formato: val("odFormato"),
+            audio: q("#odAudio").checked, vozOff: q("#odVoz").checked,
+            tomas: [...caja.querySelectorAll(".odToma:checked")].map(x => x.value),
+            lugar: val("odLugar").trim(), dia: val("odDia"), hora: val("odHora"),
+            plataformas: val("odPlat").trim() });
+        } else {
+          Object.assign(d, { salida: val("odSalida"), medidas: val("odMedidas").trim(),
+                             informacion: val("odInfo").trim() });
+        }
+        const adj = [];
+        for (const f of archivos)
+          adj.push({ nombre: f.name, tipoMime: f.type, tam: f.size, b64: await comoDataURL(f) });
+
+        await depositarOdt(datos.token, tipo, d, {
+          nombre: d.solicitante, puesto: val("odPuesto").trim(),
+          celular: val("odCel").trim(), img: padAPng(q("#pad")),
+          fecha: new Date().toISOString()
+        }, adj);
+
+        caja.innerHTML = `<div class="note" style="border-left:3px solid var(--ok)">
+          <b>Listo, ${esc(d.solicitante)}. Tu solicitud ya llegó a marketing.</b><br><br>
+          Ellos le consiguen la firma de dirección y te avisan. Si necesitas otra cosa,
+          vuelve a abrir esta misma liga.</div>`;
+        window.scrollTo(0, 0);
+      }catch(ex){
+        err.innerHTML = `<div class="errbox">No se pudo mandar.<br>${esc(ex.message)}
+          <br><br>Inténtalo de nuevo, o avísale a marketing.</div>`;
+        b.disabled = false; b.textContent = antes;
+      }
+    };
+  };
+
+  escoger();
+}
+
+/** Un archivo, como texto, para que quepa dentro del renglón del buzón. */
+const comoDataURL = f => new Promise((ok, mal) => {
+  const r = new FileReader();
+  r.onload = () => ok(String(r.result));
+  r.onerror = () => mal(new Error("No se pudo leer " + f.name));
+  r.readAsDataURL(f);
+});
+
 /** ¿La dirección trae una liga de registro? */
 function enlaceDeAlta(){
   const m = String(location.hash || "").match(/[#&]alta=([A-Za-z0-9_-]+)/);
@@ -8383,6 +8853,191 @@ function campanaDelAnuncio(idAnuncio){
   if (!conjunto) return null;
   return state.campanas.find(c =>
     (c.metaIds || []).some(x => String(x) === conjunto)) || null;
+}
+
+/**
+ * Recoge del buzón las órdenes que levantaron los jefes de área.
+ *
+ * Calcada de recogerAltas(), con DOS cuidados que aquélla no necesita:
+ *
+ * 1. NO DUPLICAR. Recoger es "at-least-once" a propósito: se crean primero y
+ *    se marcan después, porque si se corta la luz en medio más vale recoger
+ *    dos veces que perder lo que alguien capturó. En los prospectos eso deja
+ *    un registro repetido y ya; aquí subiría los archivos otra vez y gastaría
+ *    folio. Por eso cada orden recuerda de qué renglón salió.
+ *
+ * 2. LOS ARCHIVOS NO SE QUEDAN EN EL RENGLÓN. Vienen como texto porque el
+ *    visitante no tiene permiso de escribir en el almacén, pero de aquí en
+ *    adelante viven en el almacén: el registro entero se replica a cada equipo
+ *    en cada sincronización, y tres PDF incrustados harían lenta la aplicación
+ *    de todo el hotel.
+ */
+async function recogerOdts(){
+  const parte = { hubo:false, buzon:true, pendientes:0, aplicadas:0, notas:[] };
+  if (!nubeActiva()){ parte.buzon = false; return parte; }
+
+  let filas;
+  try{
+    filas = await api("/rest/v1/crm_odts?select=id,tipo,datos,firma,adjuntos,creado"
+                      + "&aplicada=is.false&order=creado.asc&limit=50");
+  }catch(e){
+    if (/crm_odts|schema cache|does not exist|404|PGRST205/i.test(e.message)){
+      nube.sinBuzonOdts = true;
+      parte.buzon = false;
+      parte.notas.push("El buzón de órdenes no existe todavía: falta correr odts.sql en Supabase.");
+      return parte;
+    }
+    parte.notas.push("No se pudo leer el buzón de órdenes: " + e.message);
+    return parte;
+  }
+
+  parte.pendientes = (filas || []).length;
+  const aplicadas = [];
+  for (const f of filas || []){
+    const marca = String(f.id);
+
+    // Ya la habíamos recogido: se marca y se sigue, sin crear nada ni subir nada.
+    if (state.odts.some(o => o.origenId === marca)){ aplicadas.push(f.id); continue; }
+
+    const d = f.datos || {};
+    const tipo = TIPOS_ODT.some(t => t.id === f.tipo) ? f.tipo : "diseno";
+    const t = infoTipoOdt(tipo);
+
+    /* El folio se aparta AQUÍ y no en el formulario: el contador es un RPC que
+       pide sesión, y quien llena la hoja no tiene ninguna. Dos series, una por
+       hoja: una orden de video y una de diseño no compiten por el número. */
+    const anio = String(d.fecha || hoyISO()).slice(0, 4);
+    let folio = "";
+    try{ folio = await apartarFolio("odt_" + tipo, t.prefijo, anio); }catch(e){}
+    if (!folio) folio = folioLocalOdt(tipo, anio);
+
+    /* Los adjuntos, al almacén. La ruta es DETERMINISTA —sale del renglón del
+       buzón— para que si esto se corre dos veces el segundo intento pise el
+       mismo archivo en vez de dejar basura suelta que nadie va a limpiar. */
+    const adjuntos = [];
+    for (let i = 0; i < (f.adjuntos || []).length && i < MAX_ADJUNTOS_ODT; i++){
+      const a = f.adjuntos[i] || {};
+      if (!a.b64) continue;
+      try{
+        const blob = await (await fetch(a.b64)).blob();
+        const ext = (String(a.nombre || "").match(/\.([A-Za-z0-9]{1,8})$/) || [, "bin"])[1].toLowerCase();
+        const ruta = `ref/${marca}/${i}.${ext}`;
+        await subirEscaneo(new File([blob], a.nombre || ("archivo." + ext),
+                                    { type: a.tipoMime || blob.type }),
+                           DEPOSITO_ODTS, ruta);
+        adjuntos.push(saneaAdjunto({ nombre:a.nombre, ruta, tipoMime:a.tipoMime, tam:a.tam }));
+      }catch(e){
+        /* Perder el archivo es malo; perder la orden es peor. Entra sin él y se
+           dice, que es mejor que rebotarle la solicitud a quien ya la firmó. */
+        parte.notas.push(`No se pudo guardar el archivo "${a.nombre || "sin nombre"}" de ` +
+          `${d.solicitante || "la orden"}: ${e.message}`);
+      }
+    }
+
+    state.odts.push(saneaOdt(Object.assign({}, d, {
+      tipo, folio, origenId: marca,
+      estado: "por_director",
+      firmaJefe: f.firma && f.firma.img ? f.firma : null,
+      tokenFirma: nuevoToken(),      // el enlace que se le manda al director
+      adjuntos,
+      fecha: d.fecha || String(f.creado || "").slice(0, 10) || hoyISO(),
+      createdAt: f.creado || new Date().toISOString()
+    })));
+
+    aplicadas.push(f.id);
+    parte.aplicadas++;
+  }
+
+  if (aplicadas.length){
+    // Se marcan DESPUÉS de crearlas, como en los otros buzones: si se cortara
+    // la luz en medio, más vale recoger dos veces que perder la orden. El
+    // origenId de arriba es lo que hace que recoger dos veces no duplique.
+    try{
+      await api(`/rest/v1/crm_odts?id=in.(${aplicadas.join(",")})`, {
+        method: "PATCH",
+        headers: { "Prefer": "return=minimal" },
+        body: JSON.stringify({ aplicada: true })
+      });
+    }catch(e){
+      parte.notas.push("Se recogieron las órdenes pero no se pudieron marcar: " + e.message);
+    }
+    parte.hubo = true;
+    guardar();
+  }
+  return parte;
+}
+
+/**
+ * El folio cuando no hay contador en el servidor.
+ *
+ * Cuenta con lo que este equipo tiene bajado, que es lo mismo que hace el de
+ * los convenios. Si dos equipos recogieran a la vez podrían repetirlo; con
+ * folios.sql corrido eso no pasa, porque el servidor reparte el turno.
+ */
+function folioLocalOdt(tipo, anio){
+  const pre = infoTipoOdt(tipo).prefijo;
+  const usados = state.odts
+    .map(o => (String(o.folio || "").match(new RegExp("^" + pre + "-" + anio + "-(\\d+)$")) || [])[1])
+    .filter(Boolean).map(Number);
+  const n = (usados.length ? Math.max(...usados) : 0) + 1;
+  return `${pre}-${anio}-${String(n).padStart(3, "0")}`;
+}
+
+/**
+ * Una orden capturada a mano, para lo que llegue por otro lado.
+ *
+ * Marketing no debería estar tecleando órdenes —para eso está la liga—, pero
+ * pasa: alguien la pide de palabra en el pasillo y hay que dejar constancia.
+ */
+function nuevaOdtAMano(){
+  const ov = modal(`
+    <div class="modal" style="max-width:560px">
+      <div class="modal-head"><h2>Orden a mano</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note">Para lo que se pidió de palabra. Lo normal es que el jefe del área
+          la levante desde la liga y la firme ahí; ésta entra <b>sin su firma</b>.</div>
+        <div class="grid">
+          <div class="full"><label class="lbl">¿Qué se pide?</label>
+            <select class="field" id="omTipo" style="width:100%">
+              ${TIPOS_ODT.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join("")}
+            </select></div>
+          <div><label class="lbl">Departamento</label>
+            <input class="field" id="omDepto" style="width:100%"></div>
+          <div><label class="lbl">Quién lo pide</label>
+            <input class="field" id="omQuien" style="width:100%"></div>
+          <div class="full"><label class="lbl">¿Para qué es?</label>
+            <textarea class="field" id="omObj" rows="2" style="width:100%"></textarea></div>
+          <div><label class="lbl">Para cuándo</label>
+            <input class="field" id="omEntrega" type="date" style="width:100%"></div>
+        </div>
+        <div id="omErr"></div>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="bOkOdtMano">Crear</button></div>
+    </div>`);
+
+  ov.querySelector("#bOkOdtMano").onclick = async () => {
+    const q = sel => ov.querySelector(sel).value.trim();
+    if (!q("omDepto") || !q("omObj")){
+      ov.querySelector("#omErr").innerHTML = `<div class="errbox">Hace falta el departamento
+        y para qué es: sin eso la orden no le dice nada a quien la trabaje.</div>`;
+      return;
+    }
+    const tipo = ov.querySelector("#omTipo").value;
+    const anio = hoyISO().slice(0, 4);
+    let folio = "";
+    try{ folio = await apartarFolio("odt_" + tipo, infoTipoOdt(tipo).prefijo, anio); }catch(e){}
+    state.odts.push(saneaOdt({
+      tipo, folio: folio || folioLocalOdt(tipo, anio),
+      departamento: q("omDepto"), solicitante: q("omQuien"),
+      objetivo: q("omObj"), fechaEntrega: ov.querySelector("#omEntrega").value,
+      fecha: hoyISO(), estado: "por_director", tokenFirma: nuevoToken(),
+      createdAt: new Date().toISOString()
+    }));
+    guardar(); render(); ov.remove();
+  };
 }
 
 async function recogerAltas(){
@@ -10562,15 +11217,20 @@ function rutaEscaneo(nombre){
  * no se vuelve a intentar en esta sesión: el escaneado se guarda incrustado,
  * como antes, para no dejar a nadie sin poder registrar su documento.
  */
-async function subirEscaneo(archivo){
-  const ruta = rutaEscaneo(archivo.name);
-  const r = await fetch(`${nube.url}/storage/v1/object/${DEPOSITO}/${ruta}`, {
+async function subirEscaneo(archivo, deposito, rutaFija){
+  /* Dos depósitos: `escaneados` guarda los convenios firmados; `odts`, lo de
+     marketing. Y una ruta fija cuando la quiere quien llama: al recoger una
+     orden dos veces hace falta volver a subir el MISMO archivo a la MISMA
+     ruta, y para eso el `x-upsert` tiene que dejar pisar lo que ya está. */
+  deposito = deposito || DEPOSITO;
+  const ruta = rutaFija || rutaEscaneo(archivo.name);
+  const r = await fetch(`${nube.url}/storage/v1/object/${deposito}/${ruta}`, {
     method: "POST",
     headers: {
       apikey: nube.anon,
       Authorization: "Bearer " + (nube.sesion && nube.sesion.access_token),
       "Content-Type": archivo.type || "application/octet-stream",
-      "x-upsert": "false"
+      "x-upsert": rutaFija ? "true" : "false"
     },
     body: archivo
   });
@@ -10583,8 +11243,8 @@ async function subirEscaneo(archivo){
 }
 
 /** Trae el archivo del almacén como una dirección que el navegador pueda abrir. */
-async function bajarEscaneo(ruta){
-  const r = await fetch(`${nube.url}/storage/v1/object/${DEPOSITO}/${ruta}`, {
+async function bajarEscaneo(ruta, deposito){
+  const r = await fetch(`${nube.url}/storage/v1/object/${deposito || DEPOSITO}/${ruta}`, {
     headers: {
       apikey: nube.anon,
       Authorization: "Bearer " + (nube.sesion && nube.sesion.access_token)
@@ -10921,13 +11581,18 @@ function verContratoExterno(k, alCerrar){
 }
 
 /** Enseña el escaneado que se subió, sin sacarlo de la aplicación. */
-function verEscaneado(manual, titulo){
+function verEscaneado(manual, titulo, deposito){
   if (!traeEscaneo(manual)){ alert("Este documento no trae archivo."); return; }
 
   const nombre = manual.archivo || "documento";
   const esImagen = manual.pdf
     ? /^data:image\//.test(manual.pdf)
     : /^image\//.test(manual.tipoMime || "") || /\.(jpe?g|png|gif|webp|heic)$/i.test(nombre);
+  /* Un video metido en un <iframe> se ve a medias en unos navegadores y en
+     otros no se ve: no era una decisión, era que nadie había subido uno. */
+  const esVideo = manual.pdf
+    ? /^data:video\//.test(manual.pdf)
+    : /^video\//.test(manual.tipoMime || "") || /\.(mp4|webm|mov|m4v)$/i.test(nombre);
 
   const ov = modal(`
     <div class="modal wide">
@@ -10948,8 +11613,11 @@ function verEscaneado(manual, titulo){
     ov.querySelector("#escCaja").outerHTML = esImagen
       ? `<img src="${esc(src)}" alt="${esc(nombre)}"
            style="max-width:100%;display:block;margin:0 auto;background:#fff">`
-      : `<iframe src="${esc(src)}" title="${esc(nombre)}"
-           style="border:0;width:100%;height:70vh;background:#fff"></iframe>`;
+      : esVideo
+        ? `<video src="${esc(src)}" controls playsinline
+             style="max-width:100%;display:block;margin:0 auto;background:#000"></video>`
+        : `<iframe src="${esc(src)}" title="${esc(nombre)}"
+             style="border:0;width:100%;height:70vh;background:#fff"></iframe>`;
     const b = ov.querySelector("#bBajarEsc");
     b.disabled = false;
     b.onclick = () => {
@@ -10963,7 +11631,7 @@ function verEscaneado(manual, titulo){
   // sesi\u00f3n, porque el dep\u00f3sito es privado y no se abre con una liga suelta.
   if (manual.pdf) return pintar(manual.pdf);
 
-  bajarEscaneo(manual.ruta)
+  bajarEscaneo(manual.ruta, deposito)
     .then(src => {
       pintar(src);
       // La direcci\u00f3n temporal se suelta al cerrar; si no, el archivo se queda
@@ -12674,6 +13342,96 @@ function pintarBotonIA(){
    estuviera de mirón, no podría leer convenios ajenos ni alterar el suyo.
    ========================================================================== */
 
+/**
+ * Los documentos que se firman desde fuera, y en qué se diferencian.
+ *
+ * Antes esto eran dos, y el código preguntaba `esContrato ? … : …` en seis
+ * lugares distintos. Con un tercero —las órdenes de trabajo, que firma el
+ * director— esa pregunta ya no alcanza: cada rama habría que abrirla a tres, y
+ * el día que alguien agregue una y olvide otra, el enlace abre el documento
+ * equivocado. Aquí se dice UNA VEZ en qué se diferencian y el resto no
+ * pregunta.
+ *
+ * Todo lo que hay dentro son funciones a propósito: así este objeto se puede
+ * declarar donde se lee mejor, sin depender de dónde estén definidas las que
+ * llama.
+ */
+const DOCS_FIRMABLES = {
+  convenios: {
+    // En el buzón el convenio va PELADO, sin tipo adelante, como se mandó
+    // siempre. Cambiarlo rompería las firmas que ya están en camino.
+    prefijo: "",
+    campoFirma: "firmaEmpresa",
+    lista: () => state.convenios,
+    sanea: d => saneaConv(d),
+    abriendo: () => "su convenio",
+    comoSeLlama: () => "carta-convenio",
+    destinatario: v => v.destinatario || {},
+    cuerpo: (v, c) => cuerpoConvenio(v, c),
+    pdf: (v, c) => pdfDeConvenio(v, c),
+    nombrePdf: (v, c) => nombrePdfConvenio(v, c),
+    aplica: (v, firma) => cerrarConvenio(v, firma,
+      "Firmado por el cliente desde el enlace que se le envió.", "")
+  },
+  contratos: {
+    prefijo: "contratos:",
+    campoFirma: "firmaCliente",
+    lista: () => state.contratos,
+    sanea: d => saneaContrato(d),
+    abriendo: () => "su documento",
+    comoSeLlama: v => infoTipoCt(v.tipo).name.toLowerCase(),
+    destinatario: v => v.destinatario || {},
+    cuerpo: (v, c) => cuerpoContrato(v, c),
+    pdf: (v, c) => pdfDeDocumento(cuerpoContrato(v, c)),
+    nombrePdf: (v, c) => nombrePdfContrato(v, c),
+    aplica: (v, firma, f) => {
+      v.firmaCliente = saneaFirma(firma);
+      v.estado = "aceptado";
+      /* La clave deja de servir en cuanto se firma: el enlace anda por
+         WhatsApp y por correo, y un documento firmado no tiene por qué seguir
+         abriéndose desde fuera. Igual que en los convenios. */
+      v.tokenFirma = "";
+      v.avisado = false;          // que el ejecutivo se entere al volver
+      v.updatedAt = new Date().toISOString();
+      registrarAuto(v.clienteId, `${infoTipoCt(v.tipo).name} ${v.folio} aceptada por el cliente`,
+        `Firmó ${(f && f.nombre) || "el cliente"} desde el enlace que se le envió.`, ejecutivoDeCt(v));
+      guardar();
+    }
+  },
+  odts: {
+    prefijo: "odts:",
+    campoFirma: "firmaDirector",
+    lista: () => state.odts,
+    sanea: d => saneaOdt(d),
+    abriendo: () => "la orden de trabajo",
+    comoSeLlama: o => "orden de " + infoTipoOdt(o.tipo).name.toLowerCase(),
+    // Una orden no va dirigida a un cliente: la pide un área del hotel.
+    destinatario: () => ({}),
+    cuerpo: o => cuerpoOdt(o),
+    pdf: o => pdfDeDocumento(cuerpoOdt(o)),
+    nombrePdf: o => nombrePdfOdt(o),
+    aplica: (o, firma) => cerrarOdt(o, firma)
+  }
+};
+
+const infoDoc = t => DOCS_FIRMABLES[t] || DOCS_FIRMABLES.convenios;
+
+/**
+ * De qué documento es una firma del buzón.
+ *
+ * El buzón guarda 'contratos:k123' y 'odts:o123', pero el convenio va pelado
+ * —'v123'— porque así se mandó desde el primer día. Un prefijo que no
+ * reconozcamos se trata como convenio, que es lo que era antes de que hubiera
+ * prefijos.
+ */
+function docDelBuzon(crudo){
+  const t = String(crudo || "");
+  const i = t.indexOf(":");
+  if (i > 0 && DOCS_FIRMABLES[t.slice(0, i)])
+    return { tipo: t.slice(0, i), id: t.slice(i + 1) };
+  return { tipo: "convenios", id: t };
+}
+
 const enlaceDeFirma = () => {
   const m = String(location.hash || "").match(/[#&]firmar=([A-Za-z0-9_-]+)/);
   if (!m) return null;
@@ -12683,7 +13441,7 @@ const enlaceDeFirma = () => {
     /* Los enlaces que ya andan circulando no traen el tipo, y no hay que
        romperlos: cuando se generaron, lo único que se firmaba así era un
        convenio. */
-    d.d = d.d === "contratos" ? "contratos" : "convenios";
+    d.d = DOCS_FIRMABLES[d.d] ? d.d : "convenios";
     return d;
   }catch(e){ return null; }
 };
@@ -12710,8 +13468,8 @@ function pantallaFirmaCliente(datos){
   const caja = document.getElementById("firmaCliente");
   const aviso = (clase, html) => { caja.innerHTML = `<div class="note ${clase}">${html}</div>`; };
 
-  const esContrato = datos.d === "contratos";
-  const comoSeLlama = esContrato ? "su documento" : "su convenio";
+  const info = infoDoc(datos.d);
+  const comoSeLlama = info.abriendo();
 
   aviso("", "Abriendo " + comoSeLlama + "…");
 
@@ -12721,14 +13479,17 @@ function pantallaFirmaCliente(datos){
     }, opciones.headers || {})
   }));
 
+  /* El id en crm_datos SIEMPRE lleva su tipo adelante —'convenios:v1'—, aunque
+     en el buzón de firmas el convenio vaya pelado. Son dos tablas distintas y
+     cada una tiene su costumbre. */
   pedir(`/rest/v1/crm_datos?select=id,datos&id=eq.${
-      encodeURIComponent((esContrato ? "contratos:" : "convenios:") + datos.v)}`)
+      encodeURIComponent(datos.d + ":" + datos.v)}`)
     .then(async r => {
       const txt = await r.text();
       if (!r.ok) throw new Error(`${r.status} · ${txt.slice(0,200)}`);
       const filas = JSON.parse(txt || "[]");
       if (!filas.length) throw new Error("vacio");
-      return esContrato ? saneaContrato(filas[0].datos) : saneaConv(filas[0].datos);
+      return info.sanea(filas[0].datos);
     })
     .then(v => dibujarParaFirmar(caja, v, datos, pedir))
     .catch(e => {
@@ -12748,16 +13509,17 @@ function pantallaFirmaCliente(datos){
 
 function dibujarParaFirmar(caja, v, datos, pedir){
   const h = state.ajustes.hotel;
-  const esContrato = datos.d === "contratos";
-  /* Cómo se llama el papel que el cliente tiene enfrente. Un contrato de
+  const info = infoDoc(datos.d);
+  /* Cómo se llama el papel que quien firma tiene enfrente. Un contrato de
      hospedaje puede ser cotización o contrato, y decirle "convenio" a lo que
      dice CONTRATO en el encabezado confunde a cualquiera. */
-  const comoSeLlama = esContrato ? infoTipoCt(v.tipo).name.toLowerCase() : "carta-convenio";
-  const c = { empresa: v._empresa || (v.destinatario && v.destinatario.empresa) || "",
-              contacto: (v.destinatario && v.destinatario.contacto) || "",
-              ubicacion: (v.destinatario && v.destinatario.ubicacion) || "",
-              telefono: (v.destinatario && v.destinatario.telefono) || "",
-              email: (v.destinatario && v.destinatario.email) || "" };
+  const comoSeLlama = info.comoSeLlama(v);
+  const dest = info.destinatario(v);
+  const c = { empresa: v._empresa || dest.empresa || "",
+              contacto: dest.contacto || "",
+              ubicacion: dest.ubicacion || "",
+              telefono: dest.telefono || "",
+              email: dest.email || "" };
   const agua = h.marcaAgua === "ninguna" ? ""
              : (h.marcaAgua === "logo" && h.logo) ? `<img src="${esc(h.logo)}" alt="">`
              : monogramaQ(MORADO_QUARTZ);
@@ -12770,7 +13532,7 @@ function dibujarParaFirmar(caja, v, datos, pedir){
       <button class="btn" id="bBajarCli">Descargar en PDF</button></p>
     <div class="doc-body hoja-cliente">
       ${agua ? `<div class="doc-agua">${agua}</div>` : ""}
-      <div class="doc-contenido">${esContrato ? cuerpoContrato(v, c) : cuerpoConvenio(v, c)}</div>
+      <div class="doc-contenido">${info.cuerpo(v, c)}</div>
     </div>
     <div id="zonaFirma" style="max-width:520px;margin:26px auto 0"></div>`;
 
@@ -12778,16 +13540,14 @@ function dibujarParaFirmar(caja, v, datos, pedir){
     const b = e.currentTarget, antes = b.textContent;
     b.disabled = true; b.textContent = "Generando…";
     try{
-      const bytes = esContrato ? await pdfDeDocumento(cuerpoContrato(v, c))
-                               : await pdfDeConvenio(v, c);
-      descargarBlob(new Blob([bytes], { type:"application/pdf" }),
-                    esContrato ? nombrePdfContrato(v, c) : nombrePdfConvenio(v, c));
+      const bytes = await info.pdf(v, c);
+      descargarBlob(new Blob([bytes], { type:"application/pdf" }), info.nombrePdf(v, c));
     }catch(err){ alert("No se pudo generar el PDF: " + err.message + "\n\nUse Imprimir del navegador."); }
     finally{ b.disabled = false; b.textContent = antes; }
   };
 
   const zona = caja.querySelector("#zonaFirma");
-  if (esContrato ? v.firmaCliente : v.firmaEmpresa){
+  if (v[info.campoFirma]){
     zona.innerHTML = `<div class="note"><b>Esto ya está firmado.</b> No hay nada más
       que hacer; conserve el PDF para sus registros.</div>`;
     return;
@@ -12826,12 +13586,16 @@ function dibujarParaFirmar(caja, v, datos, pedir){
         method:"POST",
         headers:{ "Prefer":"return=minimal" },
         body: JSON.stringify({
-          // El buzón guarda el documento con su tipo adelante cuando es
-          // contrato; un convenio va pelado, como se mandó siempre.
-          convenio_id: (esContrato ? "contratos:" : "") + datos.v, token: datos.t, nombre,
+          // El buzón guarda el documento con su tipo adelante, salvo el
+          // convenio, que va pelado como se mandó siempre. Lo dice el
+          // descriptor; aquí no se decide nada.
+          convenio_id: info.prefijo + datos.v, token: datos.t, nombre,
           puesto: zona.querySelector("#cfPuesto").value.trim(),
           celular: zona.querySelector("#cfCel").value.trim(),
-          img: pad.toDataURL("image/png")
+          /* Sobre fondo blanco, no transparente. Una firma transparente se ve
+             bien en la pantalla y sale como un borrón al imprimir el PDF; la
+             del ejecutivo ya pasaba por aquí y la del cliente no. */
+          img: padAPng(pad)
         })
       });
       if (!r.ok) throw new Error(`${r.status} · ${(await r.text()).slice(0,200)}`);
@@ -12848,6 +13612,737 @@ function dibujarParaFirmar(caja, v, datos, pedir){
   };
 }
 
+/* ==========================================================================
+   LAS ÓRDENES DE TRABAJO · la pantalla
+
+   Lo que se hace aquí no es capturar —eso lo hace el jefe que pide, desde su
+   enlace—: es REPARTIR y DAR SEGUIMIENTO. De un vistazo hay que poder ver qué
+   está detenido esperando la firma del director, qué no tiene quién lo trabaje,
+   y qué ya se entregó.
+   ========================================================================== */
+
+let filtroOdt = { q:"", tipo:"", estado:"", sinAsignar:false };
+
+/** ¿A esta persona le toca ver las órdenes de trabajo? */
+const veOdts = () => puedeVer("odts");
+
+/**
+ * A quién se le puede asignar una orden.
+ *
+ * A marketing, y a la coordinadora NO. Ella reparte; si se pudiera asignar a
+ * sí misma, la columna dejaría de decir quién lo está trabajando —que es lo
+ * único que esa columna tiene que decir—.
+ */
+function quienesTrabajanOdts(){
+  /* Fuera dos grupos. La dirección y la administración alcanzan los tres
+     departamentos, pero no trabajan encargos: es la misma exclusión que ya
+     hace selectEjecutivo con nombresSinBitacora(). Y fuera la coordinación,
+     que reparte. */
+  const fuera = nombresSinBitacora();
+  for (const u of state.usuarios)
+    if (u.rol === "gte_marketing") fuera.add(String(u.nombre || "").trim().toLowerCase());
+  return nombresDelDepto("marketing")
+    .filter(n => !fuera.has(String(n).trim().toLowerCase()));
+}
+
+const odtsVisibles = () => {
+  const q = filtroOdt.q.trim().toLowerCase();
+  return state.odts.filter(o => {
+    if (filtroOdt.tipo && o.tipo !== filtroOdt.tipo) return false;
+    if (filtroOdt.estado && o.estado !== filtroOdt.estado) return false;
+    if (filtroOdt.sinAsignar && String(o.asignadoA || "").trim()) return false;
+    if (!q) return true;
+    return [o.folio, o.departamento, o.solicitante, o.email, o.objetivo,
+            o.elementos, o.notas, o.asignadoA].join(" ").toLowerCase().includes(q);
+  }).sort((a, b) => String(b.fecha || b.createdAt).localeCompare(String(a.fecha || a.createdAt)));
+};
+
+function renderOdts(){
+  const cont = document.getElementById("tblOdts");
+  const os = odtsVisibles();
+  const sinAsignar = state.odts.filter(o =>
+    !String(o.asignadoA || "").trim() && o.estado !== "cancelada" && o.estado !== "entregada").length;
+
+  const cab = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <b style="font-size:15px">Órdenes de trabajo</b>
+      <span class="hint">${os.length} de ${state.odts.length}</span>
+      <span style="flex:1"></span>
+      <button class="btn" id="bLigaOdt">Copiar la liga para pedir</button>
+      <button class="btn primary" id="bOdtMano">+ Orden a mano</button></div>
+    <div class="note">Lo que los demás departamentos le piden a marketing. Las levanta el
+      jefe del área que pide, desde la liga, y las firma ahí mismo. Aquí se les consigue la
+      <b>firma del director</b> y se <b>reparten</b>.</div>
+    ${tiraOdts()}
+    ${sinAsignar ? `<div class="note warn"><b>${sinAsignar}
+      ${sinAsignar === 1 ? "orden está" : "órdenes están"} sin asignar.</b>
+      <button class="btn sm" id="bOdtSoloSin" style="margin-left:8px">${
+        filtroOdt.sinAsignar ? "Ver todas" : "Ver sólo ésas"}</button></div>` : ""}
+    <div style="display:flex;gap:8px;align-items:center;margin:12px 0;flex-wrap:wrap">
+      <input class="field" id="qOdt" placeholder="Buscar folio, departamento, objetivo…"
+        value="${esc(filtroOdt.q)}" style="flex:1;min-width:200px">
+      <select class="field" id="fOdtTipo" style="width:auto">
+        <option value="">Los dos tipos</option>
+        ${TIPOS_ODT.map(t => `<option value="${t.id}"${
+          t.id === filtroOdt.tipo ? " selected" : ""}>${esc(t.name)}</option>`).join("")}
+      </select>
+      <select class="field" id="fOdtEstado" style="width:auto">
+        <option value="">Todos los estados</option>
+        ${Object.keys(ESTADOS_ODT).map(k => `<option value="${k}"${
+          k === filtroOdt.estado ? " selected" : ""}>${esc(ESTADOS_ODT[k].name)}</option>`).join("")}
+      </select>
+      <button class="btn" id="bCsvOdt">Exportar CSV</button></div>`;
+
+  if (!os.length){
+    cont.innerHTML = cab + `<div class="vacio">${state.odts.length
+      ? "Ninguna orden cuadra con lo que se está filtrando."
+      : "Todavía no ha entrado ninguna orden."}<br>
+      <span class="hint">${state.odts.length ? "" :
+        "Entran solas por la liga que se les reparte a los jefes de área —el botón de arriba la copia—, o a mano."}</span></div>`;
+  } else {
+    cont.innerHTML = cab + `<div style="overflow:auto"><table class="data">
+      <thead><tr><th>Folio</th><th>Qué se pide</th><th>Quién la pide</th>
+        <th>Entrega</th><th>Estado</th><th>La trabaja</th><th>Entregas</th><th></th></tr></thead>
+      <tbody>${os.map(o => {
+        const t = infoTipoOdt(o.tipo);
+        const e = ESTADOS_ODT[o.estado] || ESTADOS_ODT.por_director;
+        const tarde = o.fechaEntrega && o.fechaEntrega < hoyISO() &&
+                      o.estado !== "entregada" && o.estado !== "cancelada";
+        return `<tr data-odt="${o.id}">
+          <td class="nowrap"><b>${esc(o.folio || "—")}</b>
+            <div class="hint">${esc(t.icono + " " + t.name)}</div></td>
+          <td>${esc(String(o.objetivo || "").slice(0, 90))}${
+            String(o.objetivo || "").length > 90 ? "…" : ""}</td>
+          <td class="nowrap">${esc(o.departamento || "—")}${o.solicitante
+            ? `<div class="hint">${esc(o.solicitante)}</div>` : ""}</td>
+          <td class="nowrap">${o.fechaEntrega
+            ? `<span${tarde ? ' style="color:var(--bad);font-weight:600"' : ""}>${
+                esc(fechaCorta(o.fechaEntrega))}</span>` : `<span class="hint">—</span>`}</td>
+          <td class="nowrap"><span class="pill" style="background:${e.bg};color:${e.fg}">${
+            esc(e.name)}</span></td>
+          <td class="nowrap">${o.asignadoA
+            ? esc(o.asignadoA)
+            : `<span class="hint" style="color:var(--bad)">Sin asignar</span>`}</td>
+          <td class="nowrap">${o.entregas.length
+            ? `<b>${o.entregas.length}</b>` : `<span class="hint">—</span>`}</td>
+          <td class="nowrap"><button class="btn sm primary" data-verodt="${o.id}">Abrir</button></td>
+        </tr>`;
+      }).join("")}</tbody></table></div>`;
+  }
+
+  const q = sel => cont.querySelector(sel);
+  q("#qOdt").oninput = e => {
+    filtroOdt.q = e.target.value;
+    renderOdts();
+    const c = cont.querySelector("#qOdt");
+    c.focus(); c.setSelectionRange(c.value.length, c.value.length);
+  };
+  q("#fOdtTipo").onchange   = e => { filtroOdt.tipo = e.target.value; renderOdts(); };
+  q("#fOdtEstado").onchange = e => { filtroOdt.estado = e.target.value; renderOdts(); };
+  const bSin = q("#bOdtSoloSin");
+  if (bSin) bSin.onclick = () => { filtroOdt.sinAsignar = !filtroOdt.sinAsignar; renderOdts(); };
+  q("#bLigaOdt").onclick = copiarLigaOdt;
+  q("#bOdtMano").onclick = () => nuevaOdtAMano();
+  q("#bCsvOdt").onclick = () => {
+    const c = ["Folio","Tipo","Departamento","Solicitante","Correo","Objetivo",
+               "Fecha","Entrega","Estado","La trabaja","Entregas"];
+    descargar(`odts-${hoyISO()}.csv`, toCSV([c].concat(os.map(o =>
+      [o.folio, infoTipoOdt(o.tipo).name, o.departamento, o.solicitante, o.email,
+       o.objetivo, o.fecha, o.fechaEntrega, (ESTADOS_ODT[o.estado] || {}).name || "",
+       o.asignadoA, o.entregas.length]))), "text/csv");
+  };
+  cont.querySelectorAll("[data-verodt]").forEach(b =>
+    b.onclick = () => verOdt(b.dataset.verodt));
+}
+
+/**
+ * Si las órdenes están entrando o no.
+ *
+ * Sin esto, el día que el buzón no esté montado los jefes de área llenarían el
+ * formulario, verían "gracias", y nada llegaría. Nadie se enteraría hasta que
+ * alguien preguntara por qué marketing no ha hecho su pieza.
+ */
+function tiraOdts(){
+  if (!nubeActiva()) return "";
+  if (nube.sinBuzonOdts)
+    return `<div class="note warn"><b>El buzón de órdenes todavía no está montado.</b>
+      Las que se levanten desde la liga no van a llegar. Se corre <code>odts.sql</code> en
+      Supabase; el paso a paso está en <b>ODTS.md</b>.</div>`;
+  return "";
+}
+
+/**
+ * La liga que se les reparte a los jefes de área.
+ *
+ * Es una sola y fija, como la del lobby. Se copia aquí y se manda por correo o
+ * por WhatsApp a recepción, ama de llaves, alimentos y bebidas, ventas,
+ * banquetes y mantenimiento.
+ */
+function copiarLigaOdt(){
+  const t = tokenOdt();
+  if (!t){
+    alert("Todavía no hay clave para esta liga.\n\n" +
+          "La crea el administrador: pídele que entre a Ajustes una vez y la publique.");
+    return;
+  }
+  if (!claveOdtPublicada()){
+    alert("La clave todavía no ha subido al servidor, así que la liga no abriría.\n\n" +
+          "Sincroniza y vuelve a intentarlo.");
+    return;
+  }
+  const liga = ligaDeOdt();
+  const ok = () => alert("Liga copiada.\n\nMándasela a los jefes de área: con ella levantan " +
+                         "sus órdenes y las firman, sin cuenta ni contraseña.");
+  if (navigator.clipboard) navigator.clipboard.writeText(liga).then(ok, () => prompt("Copia la liga:", liga));
+  else prompt("Copia la liga:", liga);
+}
+
+/**
+ * Asignar la orden a quien la va a trabajar.
+ *
+ * Sólo marketing, y sin la coordinadora. Es el mismo trato que los leads: sin
+ * dueño, nadie la contesta.
+ */
+function asignarOdt(id){
+  const o = state.odts.find(x => x.id === id);
+  if (!o) return;
+  const gente = quienesTrabajanOdts();
+
+  const ov = modal(`
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head"><h2>¿Quién la trabaja?</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note"><b>${esc(o.folio || "Orden nueva")}</b> ·
+          ${esc(infoTipoOdt(o.tipo).name)}${o.departamento
+            ? `<br><span class="hint">La pide ${esc(o.departamento)}</span>` : ""}
+          ${o.objetivo ? `<br><span class="hint">${esc(o.objetivo)}</span>` : ""}</div>
+        ${gente.length ? `<div class="grid">
+          <div class="full"><label class="lbl">Le toca a</label>
+            <select class="field" id="aoQuien">
+              <option value="">— Escoja —</option>
+              ${gente.map(n => `<option${n === o.asignadoA ? " selected" : ""}>${esc(n)}</option>`).join("")}
+            </select>
+            <div class="hint">Salen los de marketing. La coordinación reparte, no se asigna.</div>
+          </div></div>`
+        : `<div class="note warn">No hay a quién asignarla: en <b>Ajustes → Usuarios</b> no
+            hay nadie con el papel de marketing, aparte de la coordinación.</div>`}
+        <div id="aoErr"></div>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        ${gente.length ? `<button class="btn primary" id="bOkAsigOdt">Asignar</button>` : ""}
+      </div>
+    </div>`);
+
+  const b = ov.querySelector("#bOkAsigOdt");
+  if (b) b.onclick = () => {
+    const quien = ov.querySelector("#aoQuien").value.trim();
+    if (!quien){
+      ov.querySelector("#aoErr").innerHTML = `<div class="errbox">Escoja a quién le toca:
+        una orden sin dueño es una orden que nadie empieza.</div>`;
+      return;
+    }
+    o.asignadoA = quien;
+    o.updatedAt = new Date().toISOString();
+    guardar(); render(); ov.remove();
+  };
+}
+
+/* El almacén de marketing, aparte del de los convenios firmados. */
+const DEPOSITO_ODTS = "odts";
+
+/**
+ * De YouTube y de Vimeo se puede enseñar el video sin salir del CRM. De lo
+ * demás —Drive, Dropbox, WeTransfer— no: cada uno tiene su propia manera de
+ * bloquear que lo metan en una ventana ajena, y un recuadro en blanco se ve
+ * peor que un botón honesto.
+ */
+function videoEmbebible(url){
+  const u = String(url || "");
+  let m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+  if (m) return "https://www.youtube.com/embed/" + m[1];
+  m = u.match(/vimeo\.com\/(?:video\/)?(\d{6,})/);
+  if (m) return "https://player.vimeo.com/video/" + m[1];
+  return "";
+}
+
+/** Lo que se entregó, con su vista previa. */
+function pintaEntregas(ov, o){
+  const caja = ov.querySelector("#odtEntregas");
+  if (!caja) return;
+  const mia = !o.asignadoA || o.asignadoA === miNombre() || puedeVerTodo() ||
+              rolActual() === "gte_marketing" || rolActual() === "marketing";
+
+  caja.innerHTML = (o.entregas.length
+    ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">${
+        o.entregas.map((x, i) => `
+        <div style="border:1px solid var(--linea);border-radius:10px;padding:8px;width:170px">
+          <div style="height:96px;background:#f2f0f5;border-radius:6px;overflow:hidden;
+                      display:flex;align-items:center;justify-content:center"
+               data-miniatura="${i}">
+            <span class="hint">${x.clase === "enlace" ? "🔗 enlace" : "📄 archivo"}</span>
+          </div>
+          <div style="margin-top:6px;font-size:12px;word-break:break-word">
+            <b>${esc(x.nombre || (x.clase === "enlace" ? "Video" : "Archivo"))}</b></div>
+          <div class="hint" style="font-size:11px">${esc(x.quien || "")}${
+            x.tam ? " · " + esc(pesoLegible(x.tam)) : ""}</div>
+          <div style="display:flex;gap:4px;margin-top:6px">
+            <button class="btn sm" data-verent="${i}" style="flex:1">Ver</button>
+            ${mia ? `<button class="btn sm" data-quitent="${i}">✕</button>` : ""}
+          </div>
+        </div>`).join("")}</div>`
+    : `<p class="hint">Todavía no se ha subido nada.</p>`) +
+    (mia && o.estado !== "cancelada" ? `<div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn primary" id="bEntArchivo">Subir el producto</button>
+      <button class="btn" id="bEntEnlace">Pegar el enlace de un video</button>
+      ${o.entregas.length && o.estado !== "entregada"
+        ? `<button class="btn ok" id="bEntListo">Marcar como entregada</button>` : ""}
+    </div>
+    <p class="hint" style="margin-top:6px">Las imágenes, los PDF y los videos de hasta
+      ${pesoLegible(MAX_ENTREGA_ODT)} se suben y se ven aquí. Lo que pese más —un master de
+      edición— va por enlace, con su portada.</p>` : "");
+
+  caja.querySelectorAll("[data-verent]").forEach(b =>
+    b.onclick = () => verEntrega(o, +b.dataset.verent));
+  caja.querySelectorAll("[data-quitent]").forEach(b =>
+    b.onclick = () => {
+      if (!confirm("¿Quitar esta entrega de la orden?")) return;
+      o.entregas.splice(+b.dataset.quitent, 1);
+      o.updatedAt = new Date().toISOString();
+      guardar(); pintaEntregas(ov, o); render();
+    });
+
+  // La portada de cada entrega, traída del almacén sin trabar la pantalla.
+  o.entregas.forEach((x, i) => {
+    const ruta = x.clase === "enlace" ? x.portada : (/^image\//.test(x.tipoMime) ? x.ruta : "");
+    if (!ruta || !nubeActiva()) return;
+    bajarEscaneo(ruta, DEPOSITO_ODTS).then(src => {
+      const m = caja.querySelector(`[data-miniatura="${i}"]`);
+      if (m) m.innerHTML = `<img src="${esc(src)}" alt=""
+        style="width:100%;height:100%;object-fit:cover">`;
+    }).catch(() => {});
+  });
+
+  const bA = caja.querySelector("#bEntArchivo");
+  if (bA) bA.onclick = () => subirEntrega(o, ov, "archivo");
+  const bE = caja.querySelector("#bEntEnlace");
+  if (bE) bE.onclick = () => subirEntrega(o, ov, "enlace");
+  const bL = caja.querySelector("#bEntListo");
+  if (bL) bL.onclick = () => {
+    o.estado = "entregada";
+    o.updatedAt = new Date().toISOString();
+    guardar(); render(); ov.remove(); verOdt(o.id);
+  };
+}
+
+/** Ver una entrega: el archivo, o el video del enlace. */
+function verEntrega(o, i){
+  const x = o.entregas[i];
+  if (!x) return;
+  if (x.clase !== "enlace")
+    return verEscaneado({ archivo:x.nombre, ruta:x.ruta, tipoMime:x.tipoMime, quien:x.quien },
+                        x.nombre || "Entrega", DEPOSITO_ODTS);
+
+  const emb = videoEmbebible(x.url);
+  const ov = modal(`
+    <div class="modal wide">
+      <div class="modal-head"><h2>${esc(x.nombre || "Video")}</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body" style="background:#f2f0f5">
+        ${emb
+          ? `<iframe src="${esc(emb)}" title="${esc(x.nombre || "Video")}" allowfullscreen
+               style="border:0;width:100%;height:70vh;background:#000"></iframe>`
+          : `<div class="vacio" id="entPortada">
+               <p>El video vive fuera del CRM.</p>
+               <p class="hint" style="word-break:break-all">${esc(x.url)}</p></div>`}
+      </div>
+      <div class="modal-foot">
+        <span class="hint">${esc(x.quien || "")}</span>
+        <div class="spacer"></div>
+        <a class="btn primary" href="${esc(x.url)}" target="_blank" rel="noopener">Abrir el video</a>
+        <button class="btn" data-close>Cerrar</button></div>
+    </div>`);
+
+  // Si no se puede embeber, al menos se enseña la portada que sí subieron.
+  if (!emb && x.portada && nubeActiva())
+    bajarEscaneo(x.portada, DEPOSITO_ODTS).then(src => {
+      const c = ov.querySelector("#entPortada");
+      if (c) c.insertAdjacentHTML("afterbegin",
+        `<img src="${esc(src)}" alt="" style="max-width:100%;border-radius:8px;margin-bottom:10px">`);
+    }).catch(() => {});
+}
+
+/** Subir el producto, o pegar el enlace del video con su portada. */
+function subirEntrega(o, padre, clase){
+  const esEnlace = clase === "enlace";
+  const ov = modal(`
+    <div class="modal" style="max-width:560px">
+      <div class="modal-head"><h2>${esEnlace ? "Enlace del video" : "Subir el producto"}</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        ${esEnlace
+          ? `<div class="note">Para lo que no cabe en el almacén del hotel —un master de
+              edición, o cualquier cosa de más de ${pesoLegible(MAX_ENTREGA_ODT)}—: se pega la
+              dirección de donde vive y se sube una <b>portada</b>, que es la que se ve en la
+              lista. Si es de YouTube o de Vimeo, se puede ver sin salir del CRM.</div>
+            <div class="grid">
+              <div class="full"><label class="lbl">Cómo se llama</label>
+                <input class="field" id="enNombre" style="width:100%"
+                  placeholder="Spot de bodas, 30 segundos"></div>
+              <div class="full"><label class="lbl">Dirección del video</label>
+                <input class="field" id="enUrl" style="width:100%"
+                  placeholder="https://drive.google.com/… o https://youtu.be/…"></div>
+              <div class="full"><label class="lbl">Portada (una imagen)</label>
+                <input class="field" id="enPortada" type="file" accept="image/*" style="width:100%">
+                <div class="hint">Opcional, pero sin ella la lista se ve como una fila de cajas
+                  grises.</div></div>
+            </div>`
+          : `<div class="note">El diseño, el PDF, la foto, el video. Se sube al almacén del
+              hotel y se ve completo desde aquí. Hasta ${pesoLegible(MAX_ENTREGA_ODT)}.</div>
+            <div class="grid">
+              <div class="full"><label class="lbl">Cómo se llama</label>
+                <input class="field" id="enNombre" style="width:100%"
+                  placeholder="Menú de navidad, versión final"></div>
+              <div class="full"><label class="lbl">El archivo</label>
+                <input class="field" id="enArchivo" type="file"
+                  accept="image/*,application/pdf,video/*" style="width:100%"></div>
+            </div>`}
+        <div id="enErr"></div>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="bOkEnt">Guardar</button></div>
+    </div>`);
+
+  const q = sel => ov.querySelector(sel);
+  const falla = html => { q("#enErr").innerHTML = `<div class="errbox">${html}</div>`; };
+
+  q("#bOkEnt").onclick = async ev => {
+    const nombre = q("#enNombre").value.trim();
+    if (!nubeActiva()) return falla("Hace falta estar conectado a la nube para guardar archivos.");
+
+    const b = ev.currentTarget, antes = b.textContent;
+    b.disabled = true; b.textContent = "Guardando…";
+    try{
+      if (esEnlace){
+        const url = q("#enUrl").value.trim();
+        if (!/^https?:\/\/\S+$/i.test(url)){
+          falla("Pega la dirección completa del video, la que empieza con <b>https://</b>.");
+          b.disabled = false; b.textContent = antes; return;
+        }
+        let portada = "";
+        const f = q("#enPortada").files[0];
+        if (f){
+          if (f.size > MAX_ENTREGA_ODT){
+            falla(`La portada pesa ${pesoLegible(f.size)} y el tope son ${pesoLegible(MAX_ENTREGA_ODT)}.`);
+            b.disabled = false; b.textContent = antes; return;
+          }
+          portada = await subirEscaneo(f, DEPOSITO_ODTS);
+        }
+        o.entregas.push(saneaEntrega({ clase:"enlace", nombre: nombre || "Video", url, portada,
+          cuando: new Date().toISOString(), quien: miNombre() }));
+      } else {
+        const f = q("#enArchivo").files[0];
+        if (!f){
+          falla("Escoge el archivo.");
+          b.disabled = false; b.textContent = antes; return;
+        }
+        if (f.size > MAX_ENTREGA_ODT){
+          falla(`El archivo pesa ${pesoLegible(f.size)} y el tope son ${pesoLegible(MAX_ENTREGA_ODT)}.<br>
+            Si es un master de edición, usa el botón del enlace y sube una portada.`);
+          b.disabled = false; b.textContent = antes; return;
+        }
+        const ruta = await subirEscaneo(f, DEPOSITO_ODTS);
+        o.entregas.push(saneaEntrega({ clase:"archivo", nombre: nombre || f.name, ruta,
+          tipoMime: f.type, tam: f.size,
+          cuando: new Date().toISOString(), quien: miNombre() }));
+      }
+      o.updatedAt = new Date().toISOString();
+      guardar(); render();
+      ov.remove();
+      pintaEntregas(padre, o);
+    }catch(err){
+      falla("No se pudo guardar.<br><span class=\"hint\">" + esc(err.message) + "</span><br>" +
+            "Si dice <i>Bucket not found</i>, falta correr <code>odts.sql</code>.");
+      b.disabled = false; b.textContent = antes;
+    }
+  };
+}
+
+/**
+ * La carta de una orden: lo que se pidió, quién lo firmó y qué se entregó.
+ *
+ * Es la misma hoja que hoy circula en papel, y desde aquí se hace todo lo que
+ * antes era caminar por el hotel: conseguir la firma del director, repartirla,
+ * anotar las correcciones y colgar el producto.
+ */
+function verOdt(id){
+  const o = state.odts.find(x => x.id === id);
+  if (!o) return;
+  const t = infoTipoOdt(o.tipo);
+  const e = ESTADOS_ODT[o.estado] || ESTADOS_ODT.por_director;
+  const puedoRepartir = puedeVerTodo() || rolActual() === "gte_marketing";
+
+  const ov = modal(`
+    <div class="modal modal-doc">
+      <div class="modal-head">
+        <h2>${esc(o.folio || "Orden de trabajo")} · ${esc(t.name)}</h2>
+        <span class="pill" style="background:${e.bg};color:${e.fg};margin-left:8px">${esc(e.name)}</span>
+        <div class="spacer"></div>
+        <button class="btn" data-close>✕</button>
+      </div>
+      <div class="modal-body" id="cuerpoOdtCaja">
+        ${o.estado === "por_director" && puedeMandarLiga() && o.tokenFirma
+          ? (enlaceYaViajo(o, "odts") ? "" : avisoSinSubir()) : ""}
+
+        ${o.estado === "por_director" ? `<div class="note warn">
+          <b>Falta la firma del director.</b> Mándale el enlace y firma desde su teléfono,
+          sin cuenta ni contraseña.
+          ${puedeMandarLiga()
+            ? `<br><br><button class="btn sm primary" id="bLigaDir">Copiar el enlace para el director</button>`
+            : `<br><span class="hint">Hace falta tener la nube configurada.</span>`}</div>` : ""}
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          <button class="btn" id="bOdtPdf">Descargar en PDF</button>
+          <button class="btn" id="bOdtImp">Imprimir</button>
+          ${puedoRepartir ? `<button class="btn" id="bOdtAsig">${
+            o.asignadoA ? "Reasignar" : "Asignar"}</button>` : ""}
+          <button class="btn" id="bOdtCambios">Anotar una corrección</button>
+          <span style="flex:1"></span>
+          ${o.estado !== "cancelada" && puedoRepartir
+            ? `<button class="btn" id="bOdtCancel">Cancelar la orden</button>` : ""}
+        </div>
+
+        <div class="doc-body"><div class="doc-contenido">${cuerpoOdt(o)}</div></div>
+
+        <h3 class="sec" style="margin-top:22px">Archivos de referencia</h3>
+        ${o.adjuntos.length
+          ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${o.adjuntos.map((a, i) =>
+              `<button class="btn sm" data-verady="${i}">${esc(a.nombre || "archivo")}
+                <span class="hint">${esc(pesoLegible(a.tam))}</span></button>`).join("")}</div>`
+          : `<p class="hint">No mandó ninguno.</p>`}
+
+        <h3 class="sec" style="margin-top:22px">Lo que se entregó</h3>
+        <div id="odtEntregas"></div>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cerrar</button></div>
+    </div>`);
+
+  const q = sel => ov.querySelector(sel);
+  enganchaSubirYa(ov, o, "odts");
+
+  const bDir = q("#bLigaDir");
+  if (bDir) bDir.onclick = () => {
+    if (!o.tokenFirma){ o.tokenFirma = nuevoToken(); o.updatedAt = new Date().toISOString(); guardar(); }
+    const liga = ligaFirma(o, "odts");
+    const ok = () => alert("Enlace copiado.\n\nMándaselo al director: abre la orden, la lee " +
+                           "y la firma con el dedo. No necesita cuenta ni contraseña.");
+    if (navigator.clipboard) navigator.clipboard.writeText(liga).then(ok, () => prompt("Copia el enlace:", liga));
+    else prompt("Copia el enlace:", liga);
+  };
+
+  q("#bOdtPdf").onclick = async ev => {
+    const b = ev.currentTarget, antes = b.textContent;
+    b.disabled = true; b.textContent = "Generando…";
+    try{
+      const bytes = await pdfDeDocumento(cuerpoOdt(o));
+      descargarBlob(new Blob([bytes], { type:"application/pdf" }), nombrePdfOdt(o));
+    }catch(err){ alert("No se pudo generar el PDF: " + err.message + "\n\nUse Imprimir."); }
+    finally{ b.disabled = false; b.textContent = antes; }
+  };
+
+  q("#bOdtImp").onclick = () => {
+    fijarPagina(false);
+    ov.classList.add("printable");
+    const quitar = () => { ov.classList.remove("printable");
+                           window.removeEventListener("afterprint", quitar); };
+    window.addEventListener("afterprint", quitar);
+    window.print();
+    setTimeout(quitar, 1500);   // respaldo si el navegador no dispara afterprint
+  };
+
+  const bAs = q("#bOdtAsig");
+  if (bAs) bAs.onclick = () => { ov.remove(); asignarOdt(o.id); };
+
+  q("#bOdtCambios").onclick = () => { ov.remove(); anotarCambioOdt(o.id); };
+
+  const bCan = q("#bOdtCancel");
+  if (bCan) bCan.onclick = () => {
+    if (!confirm(`¿Cancelar la orden ${o.folio}?\n\nSe queda guardada y se puede consultar, ` +
+                 "pero deja de contar como pendiente.")) return;
+    o.estado = "cancelada";
+    o.updatedAt = new Date().toISOString();
+    guardar(); render(); ov.remove();
+  };
+
+  ov.querySelectorAll("[data-verady]").forEach(b =>
+    b.onclick = () => verEscaneado(
+      { archivo: o.adjuntos[+b.dataset.verady].nombre,
+        ruta: o.adjuntos[+b.dataset.verady].ruta,
+        tipoMime: o.adjuntos[+b.dataset.verady].tipoMime },
+      "Archivo de referencia", DEPOSITO_ODTS));
+
+  pintaEntregas(ov, o);
+}
+
+/**
+ * Las dos rondas de correcciones de la hoja.
+ *
+ * Son dos y no una lista a propósito: así está el papel, y poner tres empezaría
+ * a esconder que una pieza lleva cinco vueltas, que es justo lo que conviene
+ * que se note.
+ */
+function anotarCambioOdt(id){
+  const o = state.odts.find(x => x.id === id);
+  if (!o) return;
+  const ov = modal(`
+    <div class="modal" style="max-width:560px">
+      <div class="modal-head"><h2>Correcciones</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note">Lo que se pidió cambiar después de ver la pieza. Salen impresas en
+          la orden, para que quede constancia de cuántas vueltas llevó.</div>
+        <div class="grid">
+          <div class="full"><label class="lbl">Cambio 1</label>
+            <textarea class="field" id="oc1" rows="3" style="width:100%">${esc(o.cambio1)}</textarea></div>
+          <div class="full"><label class="lbl">Cambio 2</label>
+            <textarea class="field" id="oc2" rows="3" style="width:100%">${esc(o.cambio2)}</textarea></div>
+        </div>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="bOkCambios">Guardar</button></div>
+    </div>`);
+  ov.querySelector("#bOkCambios").onclick = () => {
+    o.cambio1 = ov.querySelector("#oc1").value.trim();
+    o.cambio2 = ov.querySelector("#oc2").value.trim();
+    o.updatedAt = new Date().toISOString();
+    guardar(); render(); ov.remove();
+    verOdt(o.id);
+  };
+}
+
+/** Un tamaño que una persona entienda. */
+const pesoLegible = n => !n ? "" : n < 1024 * 1024
+  ? Math.round(n / 1024) + " KB"
+  : (n / (1024 * 1024)).toFixed(1).replace(".0", "") + " MB";
+
+/* ==========================================================================
+   LAS ÓRDENES DE TRABAJO · la carta
+
+   La misma hoja que hoy circula en papel, pero armada por el CRM: el membrete
+   del hotel, los campos de la solicitud que corresponda, y abajo los dos
+   recuadros de firma. Se imprime y se baja en PDF con las mismas funciones que
+   los convenios, que ya son genéricas.
+   ========================================================================== */
+
+/** Un renglón de la carta. Lo vacío no se pinta: una hoja llena de rayas no
+    se lee, y lo que no se pidió no tiene por qué ocupar lugar. */
+const filaOdt = (etiqueta, valor) => !String(valor || "").trim() ? "" :
+  `<tr><th style="text-align:left;width:34%;vertical-align:top;padding:4px 8px 4px 0">
+     ${esc(etiqueta)}</th><td style="padding:4px 0">${esc(valor).replace(/\n/g, "<br>")}</td></tr>`;
+
+const siNo = b => b ? "Sí" : "No";
+
+function cuerpoOdt(o){
+  const h = state.ajustes.hotel;
+  const t = infoTipoOdt(o.tipo);
+
+  /* El mismo recuadro que usan el convenio y el contrato. Aquí los dos
+     nombres por omisión salen de la propia orden: quien la pidió y el
+     director, que son los dos que firman. */
+  const bloqueFirma = (f, titulo, nombreDef, puestoDef) => `
+    <div class="firma">
+      <h4>${esc(titulo)}</h4>
+      <div class="cv">${f ? `<img src="${f.img}" alt="Firma">` : `<span>Pendiente de firma</span>`}</div>
+      <div class="lin">
+        <i>Nombre</i> <u>${esc(f ? f.nombre : (nombreDef || ""))}</u><br>
+        <i>Puesto</i> <u>${esc(f ? f.puesto : (puestoDef || ""))}</u><br>
+        <i>Fecha</i> <u>${esc(f ? fechaFirma(f.fecha) : "")}</u><br>
+        <i>Celular</i> <u>${esc(f ? f.celular : "")}</u>
+      </div>
+    </div>`;
+
+  const propias = o.tipo === "audiovisual"
+    ? filaOdt("Duración", o.duracion) +
+      filaOdt("Qué se produce", (FORMATOS_AV.find(x => x.id === o.formato) || {}).name || "") +
+      filaOdt("Audio", o.audio || o.vozOff
+        ? [o.audio ? "Sí" : "", o.vozOff ? "con voz en off" : ""].filter(Boolean).join(", ") : "") +
+      filaOdt("Tipo de tomas",
+        o.tomas.map(x => (TOMAS_AV.find(y => y.id === x) || {}).name).filter(Boolean).join(", ")) +
+      filaOdt("Lugar", o.lugar) +
+      filaOdt("Día y hora", [o.dia ? fechaCorta(o.dia) : "", o.hora].filter(Boolean).join("  ")) +
+      filaOdt("Plataformas de exhibición", o.plataformas)
+    : filaOdt("Para qué es", (SALIDAS_DG.find(x => x.id === o.salida) || {}).name || "") +
+      filaOdt("Medidas requeridas", o.medidas) +
+      filaOdt("Información que lleva", o.informacion);
+
+  return `      <div class="doc-hotel">
+        ${h.logo
+          ? `<img class="doc-logo" src="${esc(h.logo)}" alt="${esc(h.nombre)}">`
+          : esQuartz(h.nombre)
+            ? `<div class="doc-wordmark">${logoQuartz(MORADO_QUARTZ)}</div>`
+            : `<div class="doc-mono">${monogramaQ(MORADO_QUARTZ)}</div><b>${esc(h.nombre)}</b>`}
+        <div>${esc(h.direccion)}</div>
+        <div>Tel. ${esc(h.telefono)}</div>
+      </div>
+
+      <h2 style="text-align:center;letter-spacing:.06em">SOLICITUD ${esc(t.name.toUpperCase())}</h2>
+
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        ${filaOdt("Folio", o.folio)}
+        ${filaOdt("Fecha", o.fecha ? fechaCorta(o.fecha) : "")}
+        ${filaOdt("Departamento", o.departamento)}
+        ${filaOdt("Solicitante", o.solicitante)}
+        ${filaOdt("Correo", o.email)}
+      </table>
+
+      <h3 class="sec">Lo que se pide</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        ${filaOdt("Objetivo", o.objetivo)}
+        ${propias}
+        ${filaOdt("Elementos requeridos", o.elementos)}
+        ${filaOdt("Notas adicionales", o.notas)}
+        ${filaOdt("Fecha de entrega", o.fechaEntrega ? fechaCorta(o.fechaEntrega) : "")}
+      </table>
+
+      ${o.cambio1 || o.cambio2 ? `<h3 class="sec">Correcciones</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        ${filaOdt("Cambio 1", o.cambio1)}
+        ${filaOdt("Cambio 2", o.cambio2)}
+      </table>` : ""}
+
+      ${o.asignadoA ? `<p style="font-size:12px;color:#666;margin-top:14px">
+        La trabaja <b>${esc(o.asignadoA)}</b>, del departamento de marketing.</p>` : ""}
+
+      <div class="firmas">
+        ${bloqueFirma(o.firmaJefe, "Solicita · Jefe de departamento",
+                      o.solicitante, o.departamento)}
+        ${bloqueFirma(o.firmaDirector, "Autoriza · Dirección", "", "Dirección")}
+      </div>`;
+}
+
+const nombrePdfOdt = o =>
+  "Orden-" + nombreArchivo([o.folio, infoTipoOdt(o.tipo).name].filter(Boolean).join(" ")) + ".pdf";
+
+/**
+ * El director firmó: la orden queda lista para trabajarse.
+ *
+ * Igual que un convenio: la clave deja de servir en cuanto se firma, porque el
+ * enlace anduvo por correo y una orden autorizada no tiene por qué seguir
+ * abriéndose desde fuera.
+ */
+function cerrarOdt(o, firma){
+  if (firma) o.firmaDirector = saneaFirma(firma);
+  // Una orden cancelada no revive porque alguien firme un enlace viejo.
+  if (o.estado === "por_director") o.estado = "abierta";
+  o.tokenFirma = "";
+  o.avisado = false;          // hay novedad que contarle a marketing
+  o.updatedAt = new Date().toISOString();
+  guardar();
+}
+
 /* ----- El convenio se cierra por tres caminos ----- */
 
 /**
@@ -12859,11 +14354,11 @@ function dibujarParaFirmar(caja, v, datos, pedir){
  */
 const ligaFirma = (doc, tipo) =>
   location.origin + location.pathname + "#firmar=" +
-  b64url(JSON.stringify({ v: doc.id, d: tipo === "contratos" ? "contratos" : "convenios",
+  b64url(JSON.stringify({ v: doc.id, d: DOCS_FIRMABLES[tipo] ? tipo : "convenios",
                           t: doc.tokenFirma, u: nube.url, k: nube.anon }));
 
 /** Cómo se llama ese documento en el buzón de firmas. */
-const idEnBuzon = (doc, tipo) => tipo === "contratos" ? "contratos:" + doc.id : doc.id;
+const idEnBuzon = (doc, tipo) => infoDoc(tipo).prefijo + doc.id;
 
 const puedeMandarLiga = () => !!(nube.url && nube.anon);
 
@@ -12882,7 +14377,9 @@ const puedeMandarLiga = () => !!(nube.url && nube.anon);
  */
 const enlaceYaViajo = (doc, tipo) =>
   !nubeActiva() ||
-  sincronizado.get((tipo === "contratos" ? "contratos:" : "convenios:") + doc.id) ===
+  /* En crm_datos el id SIEMPRE lleva su tipo adelante, sea cual sea. Lo que
+     va pelado es el convenio en el buzón de firmas, que es otra tabla. */
+  sincronizado.get((DOCS_FIRMABLES[tipo] ? tipo : "convenios") + ":" + doc.id) ===
     JSON.stringify(doc);
 
 /** El aviso, y el botón que lo arregla sin tener que explicarle nada a nadie. */
@@ -13640,7 +15137,15 @@ render();
 // convierte en su documento y no arranca nada del CRM.
 const _firma = enlaceDeFirma();
 const _alta  = enlaceDeAlta();
+const _odt   = enlaceDeOdt();
 if (_firma){ terminarEntrada(); pantallaFirmaCliente(_firma); }
+else if (_odt){
+  // El jefe de un área que viene a pedirle algo a marketing tampoco entra al
+  // CRM: llena su orden, la firma y ya.
+  terminarEntrada();
+  cargarNube();
+  pantallaOdtPublica(_odt);
+}
 else if (_alta){
   // Quien viene de un anuncio no entra al CRM: llena su registro y ya. Hace
   // falta la nube para depositarlo, así que se carga la configuración antes.

@@ -237,6 +237,40 @@ una bandeja dentro del CRM es otra cosa y más grande. Los pasos para conectarlo
 Mientras no esté conectado —o para lo que llegue por otro lado—, el botón **+ Lead de WhatsApp**
 lo mete a mano en diez segundos: quién es, su teléfono, de qué anuncio venía y qué pidió.
 
+## ODTS · las órdenes de trabajo
+
+Lo que los demás departamentos le piden a marketing. Hasta hoy iba en papel: dos hojas que el
+jefe del área llenaba a mano, firmaba, y luego perseguía por el hotel hasta juntar las demás
+firmas. No había cómo saber cuántas había abiertas ni dónde quedó el archivo terminado.
+
+**El camino de una orden**, en cinco pasos:
+
+1. **La pide.** El jefe del área abre la liga, escoge la hoja, la llena, adjunta hasta 3
+   archivos de referencia y **firma ahí mismo**, con el dedo.
+2. **Entra sola** a la pestaña, con su folio —`AV-2026-001` o `DG-2026-001`, cada hoja con su
+   propia serie— y marcada *Falta la firma del director*.
+3. **La autoriza.** La coordinadora le manda al director un enlace; él firma desde su teléfono
+   sin cuenta ni contraseña, igual que un cliente firma un convenio. La orden pasa a *Abierta*.
+4. **Se reparte.** La coordinadora se la asigna a Pedro o a Sidney. **A ella no se le puede
+   asignar**: ella reparte, y si pudiera asignarse a sí misma la columna dejaría de decir quién
+   lo está trabajando. La dirección y la administración tampoco salen en esa lista.
+5. **Se entrega.** Quien la trabaja sube el producto y se ve la vista previa en la misma orden.
+
+**Dos firmas, no cuatro.** El papel trae cuatro recuadros; el CRM exige las dos que de verdad
+detienen el trabajo: la del jefe que pide y la del director.
+
+**Las órdenes no llevan dueño, aunque tengan asignado.** Si el dueño fuera el asignado, el
+servidor dejaría que sólo él la reescribiera, y el día que Pedro tocara una de Sidney le
+rebotaría la subida entera. A quién le toca es un dato, no un permiso.
+
+**Una advertencia que conviene saber:** cualquiera con la liga puede levantar una orden y
+firmarla con el nombre que quiera. Es el mismo trato que la liga del lobby —pedirle una cuenta a
+cada jefe de área sería garantizar que nadie la use—, y la defensa es de proceso: la
+coordinadora ve de dónde viene cada una y puede cancelarla, y nada empieza hasta que el director
+firma. Si la liga se filtra, se cambia la clave y las viejas dejan de servir de golpe.
+
+Todo el detalle está en **[ODTS.md](ODTS.md)**.
+
 ## El tablero
 
 Es la primera pestaña del departamento y contesta tres preguntas en el mismo lugar: cuánta
@@ -311,8 +345,9 @@ del hotel, no del programa.
 | ~~3~~ | ~~Tablero: embudo, costo por lead y retorno~~ ✅ |
 | ~~4~~ | ~~Meta Ads: gasto, impresiones y costo por lead, bajados solos~~ ✅ |
 | ~~5~~ | ~~WhatsApp: el mensaje del anuncio entra solo, con su conjunto~~ ✅ |
-| 6 | Lead Ads: el formulario de Meta entra al CRM en el momento |
-| 7 | Lead Scoring, Biblioteca de Activos y Automatizaciones |
+| ~~6~~ | ~~ODTS: las órdenes de trabajo, firmadas y repartidas dentro del CRM~~ ✅ |
+| 7 | Lead Ads: el formulario de Meta entra al CRM en el momento |
+| 8 | Lead Scoring, Biblioteca de Activos y Automatizaciones |
 
 **Las OTAs no se atribuyen igual.** Booking y Expedia no entregan el contacto hasta que hay
 reserva, y no pasan por una liga con UTMs. Para esos canales no hay atribución de lead: entran

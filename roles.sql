@@ -190,7 +190,7 @@ using (
     -- sin el cliente el evento no se puede ni abrir. La pantalla le sigue
     -- enseñando nada más los suyos.
     when public.crm_rol() in ('banquetes','gte_banquetes')
-      then tipo not in ('convenios','contratos','huespedes','campanas')
+      then tipo not in ('convenios','contratos','huespedes','campanas','odts')
        and (tipo in ('ajustes','habitaciones','usuarios','clientes')
             or public.crm_rol() = 'gte_banquetes'
             or duenio is null
@@ -199,11 +199,17 @@ using (
     -- Marketing no alcanza la cartera. Lo suyo son las campañas —que no tienen
     -- dueño, son del área— y los prospectos, que son el resultado de su
     -- trabajo y los ven todos, no sólo quien los capturó.
+    --
+    -- Las órdenes de trabajo tampoco llevan dueño, y no es un descuido: si lo
+    -- llevaran, la regla de abajo dejaría que sólo el asignado las reescribiera,
+    -- y el día que Pedro tocara una de Sidney el servidor le rebotaría la
+    -- subida ENTERA —PostgREST manda el lote en un solo POST—. A quién le toca
+    -- trabajarla se guarda dentro del renglón, que es un dato, no un permiso.
     when public.crm_rol() in ('marketing','gte_marketing')
-      then tipo in ('ajustes','usuarios','campanas','prospectos')
+      then tipo in ('ajustes','usuarios','campanas','prospectos','odts')
 
     -- Ventas: todo menos los eventos de banquetes y las campañas.
-    else tipo not in ('eventos','campanas')
+    else tipo not in ('eventos','campanas','odts')
      and (tipo in ('ajustes','habitaciones','usuarios')
           or public.crm_rol() = 'gerente'
           or duenio is null

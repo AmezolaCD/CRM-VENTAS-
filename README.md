@@ -443,6 +443,11 @@ decidió así—: ve sus campañas, sus ligas y los prospectos, y nada más.
   una lista, con la campaña de la que vino. Ahí se **reparte**: de qué área es y quién lo
   trabaja. El asignado es el que lo recibe del servidor, así que asignar no es una etiqueta:
   es lo que hace que el lead le aparezca.
+- **ODTS.** Las órdenes de trabajo que los demás departamentos le piden a marketing: las dos
+  hojas que hoy circulan en papel —*Solicitud Audiovisual* y *Solicitud Diseño Gráfico*—. El
+  jefe del área las llena y las **firma desde un enlace**, el director las firma desde otro, la
+  coordinadora las reparte entre su gente, y el producto terminado queda colgado de la orden con
+  su vista previa. Los pasos están en **[ODTS.md](ODTS.md)**.
 - **WhatsApp.** Los anuncios del hotel son de *mensajes*: la gente da clic y escribe. Con la
   conexión puesta, cada mensaje entra solo a **Leads** y **sabiendo de qué conjunto de anuncios
   vino** —el primer mensaje trae el id del anuncio—, que es lo que permite saber por fin cuál
