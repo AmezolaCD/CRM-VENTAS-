@@ -770,7 +770,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.28-70";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.28-71";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -8397,6 +8397,56 @@ function armaLiga(base, utm){
    tumba la otra.
    ========================================================================== */
 
+/**
+ * La dirección del servidor, metida en la liga.
+ *
+ * Quien abre la liga del lobby o la de las órdenes está en SU teléfono, donde
+ * el CRM nunca se ha abierto: no tiene guardada la dirección del proyecto ni
+ * la llave pública, y sin eso no hay a quién preguntarle nada —ni la lista de
+ * departamentos, ni a dónde mandar lo que llenó—.
+ *
+ * La liga de firma siempre lo llevó dentro (ver ligaFirma, el `u` y el `k`).
+ * Estas dos no, y por eso sólo servían en un equipo que ya tuviera el CRM
+ * configurado. Ahora las tres hacen lo mismo.
+ *
+ * La llave que viaja es la `anon`, la pública, la misma que ya va en la liga
+ * de firma y en cualquier página que use Supabase desde el navegador: por sí
+ * sola no alcanza ni un renglón, porque quien manda son las reglas del
+ * servidor. La de service_role no sale de Supabase nunca.
+ */
+const servidorEnLiga = () =>
+  (nube.url && nube.anon) ? "&s=" + b64url(JSON.stringify({ u:nube.url, k:nube.anon })) : "";
+
+/** Lo contrario: sacarlo de la dirección al abrirla. */
+function servidorDeLaLiga(){
+  const m = String(location.hash || "").match(/[#&]s=([A-Za-z0-9_-]+)/);
+  if (!m) return null;
+  try{
+    const c = JSON.parse(deB64url(m[1]));
+    const url = normalizaUrlNube(c && c.u), anon = String((c && c.k) || "").trim();
+    return (url && anon) ? { url, anon } : null;
+  }catch(e){ return null; }
+}
+
+/**
+ * Deja puesta la dirección que venía en la liga, si este equipo no tenía una.
+ *
+ * NO se guarda en el navegador: quien llena el formulario no es del equipo, y
+ * dejarle la configuración del hotel guardada sería tratarlo como si lo fuera.
+ * Dura lo que dure la pestaña abierta, que es lo que hace falta.
+ *
+ * Si el equipo YA tenía servidor, gana el suyo: es alguien del hotel abriendo
+ * su propia liga, y cambiárselo por lo que trajera una dirección pegada sería
+ * dejar que una liga vieja le mueva a dónde se conecta.
+ */
+function usarServidorDeLaLiga(){
+  if (nube.url && nube.anon) return;
+  const c = servidorDeLaLiga();
+  if (!c) return;
+  nube.url = c.url;
+  nube.anon = c.anon;
+}
+
 /** ¿La dirección trae la liga de las órdenes? */
 function enlaceDeOdt(){
   const m = String(location.hash || "").match(/[#&]odt=([A-Za-z0-9_-]+)/);
@@ -8429,7 +8479,7 @@ const claveOdtPublicada = () => {
 
 const ligaDeOdt = () => {
   const t = tokenOdt();
-  return t ? location.origin + location.pathname + "#odt=" + t : "";
+  return t ? location.origin + location.pathname + "#odt=" + t + servidorEnLiga() : "";
 };
 
 /* Hasta tres archivos de referencia, de 5 MB cada uno. El tope es del lado del
@@ -8552,7 +8602,11 @@ const AVISO_SIN_JEFES = {
                    "no ha subido al servidor (marketing tiene que sincronizar).",
   "sin-respuesta": "Escribe tu departamento y tu nombre a mano: no se pudo consultar la " +
                    "lista del hotel en este momento.",
-  "sin-nube":      ""   // sin servidor no hay nada que avisar: esto es una prueba
+  /* Sin servidor NO es "no pasa nada": es que la liga llegó cortada. Pasa
+     cuando alguien la reenvía y el mensajero se come la mitad de la dirección,
+     que es justo lo que les quitamos de encima al meter el servidor dentro. */
+  "sin-nube":      "Escribe tu departamento y tu nombre a mano: esta liga llegó incompleta. " +
+                   "Pídele a marketing que te la vuelva a mandar."
 };
 
 /** Los campos de cada hoja, en el orden en que están impresos. */
@@ -8714,7 +8768,9 @@ function pantallaOdtPublica(datos){
       <p><button class="btn sm" id="odBorrar">Borrar y volver a firmar</button></p>
       <div id="odErr"></div>
       <p><button class="btn ok" id="odOk" style="width:100%;font-size:16px;padding:12px">
-        Mandar la solicitud</button></p>`;
+        Mandar la solicitud</button></p>
+      <p class="hint" id="odVersion" style="text-align:center;margin-top:18px;opacity:.55">
+        CORE ${esc(VERSION)}</p>`;
 
     const q = sel => caja.querySelector(sel);
     const limpiar = prepararPad(q("#pad"));
@@ -8880,7 +8936,7 @@ const claveAltaPublicada = () => {
 /** La dirección de esta misma aplicación, sin lo que traiga pegado. */
 const ligaDeAltaBase = () => {
   const t = tokenAlta();
-  return t ? location.origin + location.pathname + "#alta=" + t : "";
+  return t ? location.origin + location.pathname + "#alta=" + t + servidorEnLiga() : "";
 };
 
 /** La liga de registro ya con las etiquetas de una campaña. */
@@ -15444,6 +15500,7 @@ else if (_odt){
   // CRM: llena su orden, la firma y ya.
   terminarEntrada();
   cargarNube();
+  usarServidorDeLaLiga();   // en su teléfono no hay servidor: viene en la liga
   pantallaOdtPublica(_odt);
 }
 else if (_alta){
@@ -15451,6 +15508,7 @@ else if (_alta){
   // falta la nube para depositarlo, así que se carga la configuración antes.
   terminarEntrada();
   cargarNube();
+  usarServidorDeLaLiga();   // igual que arriba: el que viene del anuncio no lo tiene
   pantallaAltaPublica(_alta);
 }
 else {

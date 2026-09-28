@@ -99,6 +99,11 @@ pedir**. Ésa es la que se les manda a los siete jefes de área de la tabla del 
 Es **una sola liga fija** para todos, como la del lobby. Se pega en un correo, se manda por
 WhatsApp, o se deja en el escritorio de quien la use seguido.
 
+**Mándela completa.** La liga lleva dentro la dirección del servidor del hotel, porque el
+teléfono del jefe de área nunca ha abierto el CRM y no sabría a dónde mandar nada. Es larga por
+eso. Si un mensajero la corta a la mitad, el formulario abre pero dice *«esta liga llegó
+incompleta»* — ahí se vuelve a mandar, de preferencia como enlace y no como texto suelto.
+
 ---
 
 ## Lo que conviene que sepa antes de repartirla
