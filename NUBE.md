@@ -184,6 +184,26 @@ También se puede hacer a mano, repitiendo el paso 3 en cada equipo.
 - **Sin internet** la aplicación sigue abriendo y dejándote trabajar con lo
   último que bajó; cuando vuelve la señal, sube lo que hiciste.
 
+### Cuando se borra algo
+
+Un borrado **no viaja como «bórralo»**: viaja como una **lápida**, un renglón marcado como
+muerto. Si la fila desapareciera sin más, los demás equipos nunca se enterarían de que ya no
+existe — y en la siguiente bajada te la devolverían.
+
+El CRM apunta lo que borras **en este navegador**, y lo tacha de la lista sólo cuando el
+servidor confirma que recibió la lápida. Por eso:
+
+- Si borras sin señal, el borrado **no se pierde**: se sube cuando vuelva.
+- Si el servidor **rechaza** la lápida —porque ese registro no es tuyo—, sale en el semáforo
+  como *«Falta subir»*, con su nombre y su motivo. Lo demás sí se borra.
+- **Borrar un cliente se lleva lo que cuelga de él** —actividades, convenios, contratos y
+  eventos—, y cada uno viaja con su propia lápida. La confirmación te dice cuántos son antes de
+  que le piques.
+
+> **Vaciar la pantalla no es borrar.** Cerrar sesión, o enlazar el equipo a la nube por primera
+> vez, reemplazan lo que hay en pantalla de golpe. Eso **no** manda ninguna lápida. Es a
+> propósito: sin ese candado, cerrar sesión borraría la cartera de todo el hotel.
+
 ### Los folios: se asignan al firmar, no al abrir el borrador
 
 **Un borrador no tiene folio.** Se captura, se guarda, se corrige y se vuelve a guardar sin
@@ -204,7 +224,11 @@ Por qué así, que es lo que arregla los dos problemas que salieron:
   firmado de verdad.
 - **Nadie teclea nada.** El campo del folio no se escribe. Se escribe sólo en *«Subir uno
   firmado»*, que es el documento que llegó en papel con su propio número — y ése se le avisa al
-  contador para que no lo vuelva a repartir.
+  contador para que no lo vuelva a repartir. Si esa aviso no queda registrado, el CRM lo dice
+  antes de registrarlo, porque entonces el contador podría repartir ese número otra vez.
+- **Un documento de papel sin folio también pide su número al contador.** Antes lo inventaba
+  contando lo que ese equipo alcanzaba a ver, y ahí estuvo el segundo choque: cuatro convenios
+  subidos como *externos* se llevaron números que ya estaban usados.
 
 **Si el contador no contesta, no se firma.** Sale un aviso diciendo que falta correr
 `folios.sql`. Es a propósito: más vale no firmar que firmar con un número que se puede repetir.

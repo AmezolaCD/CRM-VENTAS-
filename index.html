@@ -770,7 +770,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.30-73";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.30-74";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2369,12 +2369,91 @@ function sellarTotales(){
   }
 }
 
+/* ==========================================================================
+   LO QUE SE BORRÓ Y TODAVÍA NO LO SABE EL SERVIDOR
+
+   Un borrado no viaja como "bórralo": viaja como una LÁPIDA, un renglón
+   marcado `borrado:true`. Si la fila desapareciera sin más, los demás equipos
+   nunca se enterarían de que ya no existe.
+
+   El problema era de dónde salía la lista de lápidas: se DEDUCÍA de
+   `sincronizado`, que es un Map en memoria y arranca vacío al recargar. Si el
+   registro no estaba ahí, no había lápida, no subía nada, y en la siguiente
+   bajada el servidor lo devolvía intacto. Marco borró un cliente, volvió a
+   entrar, y ahí estaba otra vez con todos sus convenios.
+
+   Así que ya no se deduce: se apunta, y se apunta EN EL NAVEGADOR, que es lo
+   que hace que sobreviva a la recarga —que es justo donde se perdía—.
+   ========================================================================== */
+let tumbas = new Set();           // ids borrados aquí, sin confirmar allá
+let idsGuardados = null;          // los ids de la última vez que se guardó
+
+const CLAVE_TUMBAS = STORE + ":tumbas";
+const CLAVE_IDS    = STORE + ":ids";
+
+function cargarTumbas(){
+  try{ tumbas = new Set(JSON.parse(localStorage.getItem(CLAVE_TUMBAS) || "[]")); }
+  catch(e){ tumbas = new Set(); }
+  try{
+    const v = JSON.parse(localStorage.getItem(CLAVE_IDS) || "null");
+    idsGuardados = Array.isArray(v) ? new Set(v) : null;
+  }catch(e){ idsGuardados = null; }
+}
+
+function guardarTumbas(){
+  try{
+    localStorage.setItem(CLAVE_TUMBAS, JSON.stringify([...tumbas]));
+    localStorage.setItem(CLAVE_IDS, JSON.stringify([...(idsGuardados || [])]));
+  }catch(e){}
+}
+
+/**
+ * Apunta lo que desapareció desde la última vez que se guardó.
+ *
+ * Va aquí y no en cada botón de borrar a propósito: hay quince lugares que
+ * borran algo, y tocarlos uno por uno es garantizar que el próximo que se
+ * escriba se olvide de apuntar. Todos terminan llamando a guardar(), así que
+ * con compararlo aquí quedan cubiertos los quince y los que vengan.
+ */
+/**
+ * EL CANDADO. Reemplazar el estado de golpe no es borrar.
+ *
+ * Hay tres momentos en que el estado entero se cambia de un jalón: al enlazar
+ * el equipo por primera vez, al aplicar lo que bajó del servidor, y al cerrar
+ * sesión. En esos tres, lo que "desaparece" no lo borró nadie.
+ *
+ * Sin esto, el siguiente guardar compararía contra los ids de ANTES y tumbaría
+ * lo que ya no está. En el peor caso —cerrar sesión y que entre un ejecutivo,
+ * que sólo recibe lo suyo— se tumbaría la cartera entera del hotel y se
+ * subiría como borrada. Por eso el punto de comparación se pone al día sin
+ * apuntar nada.
+ *
+ * Con `limpiar`, además se sueltan las lápidas pendientes: al cerrar sesión no
+ * tienen a quién pertenecer, y arrastrarlas a la sesión del siguiente sería
+ * borrarle registros que él sí alcanza y que nadie mandó borrar.
+ */
+function alDiaSinTumbar(limpiar){
+  idsGuardados = new Set(filasDeEstado().map(f => f.id));
+  if (limpiar) tumbas = new Set();
+  guardarTumbas();
+}
+
+function anotarLoQueSeFue(){
+  const ahora = new Set(filasDeEstado().map(f => f.id));
+  if (idsGuardados){
+    for (const id of idsGuardados) if (!ahora.has(id)) tumbas.add(id);
+  }
+  idsGuardados = ahora;
+}
+
 function guardar(){
   sellarTotales();
+  anotarLoQueSeFue();
   /* El índice de Meta depende de qué conjuntos están enlazados, y eso cambia
      al guardar. Tirarlo cuesta una asignación; dejarlo viejo cuesta una cifra
      equivocada en la pantalla. */
   metaIndice = null;
+  guardarTumbas();
   try{ localStorage.setItem(STORE, JSON.stringify(state)); }
   catch(e){
     console.warn("No se pudo guardar:", e);
@@ -2847,6 +2926,7 @@ async function salir(){
   // La cartera del que se va no se queda esperando al siguiente.
   sincronizado = new Map();
   state = sanear({});
+  alDiaSinTumbar(true);   // vaciar la pantalla NO es borrar: ver el candado
   /* Ni las cuentas que pidió prestadas al servidor: el ingreso por campaña y
      las cifras de Meta son de marketing, y quien entre después puede no ser
      de marketing. No se ven en su pantalla de todos modos, pero no tienen por
@@ -3242,6 +3322,11 @@ async function sincronizar(){
       const aplicadas = [];
       for (const r of remotas){
         nube.ultimo = !nube.ultimo || r.actualizado > nube.ultimo ? r.actualizado : nube.ultimo;
+        /* Esto se borró aquí y la lápida todavía no sube. Si se dejara entrar,
+           la siguiente vuelta lo metería de nuevo —y el borrado se desharía
+           solo delante de la persona que acaba de hacerlo—. */
+        if (tumbas.has(r.id) && !r.borrado) continue;
+
         const local = porId.get(r.id);
         const mismoQueSincronizado = local && sincronizado.get(r.id) === JSON.stringify(local.datos);
 
@@ -3269,6 +3354,9 @@ async function sincronizar(){
       }
       if (aplicadas.length){
         state = estadoDesdeFilas([...porId.values()]);
+        /* Lo que se cayó aquí se cayó porque el servidor mandó su lápida, no
+           porque alguien de este equipo lo borrara. No se vuelve a tumbar. */
+        alDiaSinTumbar(false);
         olvidarHuerfanos();
         try{ localStorage.setItem(STORE, JSON.stringify(state)); }catch(e){}
         // Se dan por sincronizadas SÓLO las filas que acaban de llegar. Marcar
@@ -3310,7 +3398,13 @@ async function sincronizar(){
     const cambios = actuales.filter(f =>
       deMiIncumbencia(f) && sincronizado.get(f.id) !== JSON.stringify(f.datos));
     const vivos = new Set(actuales.map(f => f.id));
-    const borrados = [...sincronizado.keys()].filter(id =>
+    /* Las lápidas salen de lo APUNTADO, no de deducirlas de `sincronizado`:
+       ése arranca vacío al recargar, y por eso un borrado se deshacía solo.
+
+       Se conserva además la deducción vieja como red: lo que el servidor nos
+       dio y aquí ya no vive, también se tumba. Una lápida de más no hace daño
+       —el renglón ya estaba muerto—; una de menos es el defecto. */
+    const borrados = [...new Set([...tumbas, ...sincronizado.keys()])].filter(id =>
       !vivos.has(id) && deMiIncumbencia({ tipo: String(id).split(":")[0] }));
     nube.rechazados = [];
     if (cambios.length || borrados.length){
@@ -3326,7 +3420,14 @@ async function sincronizar(){
       for (const f of actuales)
         if (entraron.has(f.id)) sincronizado.set(f.id, JSON.stringify(f.datos));
       for (const id of parte.subidos)
-        if (!actuales.some(f => f.id === id)) sincronizado.delete(id);   // era un borrado
+        if (!vivos.has(id)){
+          sincronizado.delete(id);
+          /* La lápida llegó: ya no hay nada que recordar. Si hubiera rebotado
+             se queda apuntada y se reintenta en la vuelta siguiente, sin
+             estorbarle al resto. */
+          tumbas.delete(id);
+        }
+      guardarTumbas();
       nube.rechazados = parte.rechazados;
     }
 
@@ -3381,6 +3482,10 @@ async function primeraSincronizacion(){
     }
   }
   state = estadoDesdeFilas(remotas);
+  /* Adoptar la nube reemplaza lo local. Eso NO es borrar: sin esto, el primer
+     guardar tumbaría toda la cartera que este equipo tenía y la subiría como
+     borrada. */
+  alDiaSinTumbar(true);
   try{ localStorage.setItem(STORE, JSON.stringify(state)); }catch(e){}
 
   // Se dan por sincronizadas SÓLO las filas que de verdad llegaron. Marcarlo
@@ -4763,8 +4868,12 @@ function renderConvenios(){
       <b>Hay ${repetidos.length} convenio(s) con el folio repetido.</b>
       Dos equipos tomaron el mismo número al mismo tiempo y estos ya estaban
       firmados o enviados, así que no se les cambió solo: el folio va impreso en
-      un PDF que ya anda con el cliente. Ábrelos y decide qué folio lleva cada uno.
-      <br>${repetidos.map(v => esc(v.folio + " · " + nombreCli(v.clienteId))).join("<br>")}</div>` : ""}
+      un PDF que ya anda con el cliente.
+      <br>${repetidos.map(v => esc(v.folio + " · " + nombreCli(v.clienteId))).join("<br>")}
+      <p style="margin:12px 0 0"><button class="btn danger" id="bRenumTodos">Darles un folio
+        nuevo a ${repetidos.length === 1 ? "éste" : "los " + repetidos.length}</button>
+        <span class="hint">El del hotel, del contador. Habrá que reenviarles el PDF.</span></p>
+      </div>` : ""}
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
       <b style="font-size:15px">Convenios</b><span class="hint">${vs.length} en total</span>
       <span style="flex:1"></span>
@@ -4805,6 +4914,66 @@ function renderConvenios(){
       editarConvenio(tr.dataset.id);
     }));
   }
+  /**
+   * Arreglar de un jalón los que quedaron repetidos.
+   *
+   * Uno por uno son cuatro confirmaciones y cuatro esperas; en la pantalla
+   * donde se está viendo el problema tiene que poder arreglarse ahí mismo.
+   *
+   * Se renumeran TODOS menos el más viejo de cada folio: el primero se queda
+   * con el número, que es el que ya anda circulando desde hace más tiempo.
+   */
+  const bRT = cont.querySelector("#bRenumTodos");
+  if (bRT) bRT.onclick = async () => {
+    const porFolio = new Map();
+    for (const v of repetidos){
+      const f = String(v.folio || "").toUpperCase();
+      if (!porFolio.has(f)) porFolio.set(f, []);
+      porFolio.get(f).push(v);
+    }
+    /* De cada folio repetido se respeta al más viejo: su número lleva más
+       tiempo circulando y es el que menos cuesta dejar quieto. */
+    const aCambiar = [];
+    for (const grupo of porFolio.values()){
+      grupo.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+      const mismoFolio = vs.filter(x =>
+        String(x.folio || "").toUpperCase() === String(grupo[0].folio || "").toUpperCase());
+      // Si el más viejo del grupo NO es el más viejo con ese folio, también cambia.
+      mismoFolio.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+      for (const v of grupo) if (v.id !== mismoFolio[0].id) aCambiar.push(v);
+    }
+    if (!aCambiar.length){
+      alert("No hay ninguno que cambiar: cada folio repetido ya tiene su dueño más antiguo.");
+      return;
+    }
+    if (!confirm(`Se le va a dar un folio nuevo a ${aCambiar.length} convenio(s).\n\n` +
+        aCambiar.map(v => `${v.folio} · ${nombreCli(v.clienteId)}`).join("\n") +
+        "\n\nEl más antiguo de cada folio conserva su número.\n\n" +
+        "OJO: el PDF que ya tiene cada cliente dice el folio anterior. " +
+        "Habrá que volver a mandárselos.\n\n¿Continuar?")) return;
+
+    bRT.disabled = true; bRT.textContent = "Pidiendo números…";
+    const hechos = [], fallidos = [];
+    for (const v of aCambiar){
+      const viejo = v.folio;
+      const nuevo = await apartarFolio("convenios", "CV", anioConvenio(v));
+      if (!nuevo){ fallidos.push(viejo); continue; }
+      v.folio = nuevo;
+      v.folioRepetido = "";
+      v.updatedAt = new Date().toISOString();
+      registrarAuto(v.clienteId, `El convenio ${viejo} se renumeró como ${nuevo}`,
+        `Otro convenio del hotel ya tenía el folio ${viejo}. Éste ya estaba firmado o ` +
+        `enviado, así que se renumeró a mano.\nHay que volver a mandarle el PDF al ` +
+        `cliente: el que tiene dice ${viejo}.`, miNombre());
+      hechos.push(`${viejo} → ${nuevo}`);
+    }
+    guardar(); render();
+    alert((hechos.length ? "Listo:\n" + hechos.join("\n") : "No se cambió ninguno.") +
+      (fallidos.length ? `\n\nNo se pudo con ${fallidos.length}: el contador no contestó. ` +
+        "Vuelve a intentarlo, o revisa en Ajustes si está montado." : "") +
+      (hechos.length ? "\n\nAcuérdate de reenviarles el PDF." : ""));
+  };
+
   cont.querySelector("#bNuevoConv").onclick = () => editarConvenio(null);
   cont.querySelector("#bSubirExtConv").onclick = () => subirDocumentoExterno("convenio");
 }
@@ -7634,18 +7803,24 @@ const AVISO_SIN_CONTADOR =
  * alguien escribió a mano. Si no se anotara, el contador lo volvería a repartir.
  */
 async function anotarFolio(tipo, folio){
-  if (!hayContador()) return;
+  if (!hayContador()) return false;   // hay servidor y no contesta: hay que decirlo
   const m = /^([A-Za-z]+)-(\d{4})-(\d+)$/.exec(String(folio || "").trim());
-  if (!m) return;   // formato de la casa: no entra a la cuenta
+  if (!m) return true;   // formato de la casa: no entra a la cuenta, y está bien
   try{
     await api("/rest/v1/rpc/crm_anota_folio", {
       method:"POST",
       body: JSON.stringify({ p_tipo:tipo, p_anio:Number(m[2]), p_numero:Number(m[3]),
                              p_folio:folio.toUpperCase(), p_quien:miNombre() })
     });
+    return true;
   }catch(e){
+    /* Devuelve si quedó anotado o no, en vez de tragárselo. Que esta anotación
+       se pierda no es un detalle: significa que el contador va a volver a
+       repartir ese número, y el papel que se acaba de registrar quedará
+       repetido con un documento nuevo. */
     if (noExisteLaFuncion(e)) nube.sinFolios = true;
     else console.warn("No se pudo anotar el folio:", e.message);
+    return false;
   }
 }
 
@@ -12048,7 +12223,7 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
 
     const bOk = ov.querySelector("#bOkEx");
     bOk.disabled = true; bOk.textContent = "Guardando…";
-    const listo = manual => { seguir(manual); };
+    const listo = manual => { seguir(manual); };   // seguir es async: ver adentro
     const seRindio = e => {
       bOk.disabled = false; bOk.textContent = "Registrar";
       falla(`No se pudo guardar el archivo en el almacén del proyecto.<br>
@@ -12087,7 +12262,22 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
       r.readAsDataURL(f);
     }
 
-    function seguir(manual){
+    /**
+     * Registrar un documento que llegó en papel.
+     *
+     * ESTE ERA EL HUECO QUE QUEDABA. Los automáticos ya toman su número del
+     * contador al firmarse, pero éstos seguían inventándolo aquí con
+     * folioLibre(), contando lo que este equipo alcanza a ver. Eduardo subió
+     * cuatro convenios de papel y les tocaron el 018, 019, 020 y 021, que
+     * Carmen ya había usado. Todos los repetidos de la pantalla decían
+     * "externo", y por esto.
+     *
+     * Ahora: si no escriben folio, lo pide al contador igual que una firma. Y
+     * si lo escriben —el papel trae el suyo— se ANOTA en el contador y se
+     * espera la respuesta, porque si esa anotación se pierde el contador
+     * volverá a repartir ese número más adelante.
+     */
+    async function seguir(manual){
       const c = cliente(cid);
       const quien = ov.querySelector('[name="exEje"]').value.trim() || miNombre();
       const folio = ov.querySelector("#exFolio").value.trim();
@@ -12098,25 +12288,49 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
                          telefono:c.telefono, email:c.email } : null;
       const nombre = TIPOS_EXTERNO.find(t => t.id === tipo).name;
 
+      const anio = String(fecha).slice(0, 4);
+
+      /* El número, antes de crear nada: si no se consigue, no se registra. Es
+         la misma regla que al firmar, y por la misma razón. */
+      const serie = tipo === "convenio"    ? ["convenios", "CV"]
+                  : tipo === "cotizacionbq" ? ["eventos_ev", "EV"]
+                  : tipo === "contratobq"   ? ["eventos_cb", "CB"]
+                                            : ["contratos", "CT"];
+      const local = () => tipo === "convenio"    ? folioLibre(anio)
+                        : tipo === "cotizacionbq" ? folioEvento("cotizacion", anio)
+                        : tipo === "contratobq"   ? folioEvento("contrato", anio)
+                                                  : folioContrato(anio);
+      const elFolio = await folioParaFirmar({ folio }, serie[0], serie[1], anio, local);
+      if (!elFolio){ alert(AVISO_SIN_CONTADOR.replace("no se firmó", "no se registró")); return; }
+
+      /* Si el folio venía escrito —del papel— hay que anotarlo, y hay que
+         ESPERAR a que quede anotado: si esa anotación se pierde, el contador
+         volverá a repartir ese mismo número y el papel quedará repetido con un
+         documento nuevo. Que es exactamente lo que pasó. */
+      if (folio && nubeActiva()){
+        const quedo = await anotarFolio(serie[0], elFolio);
+        if (quedo === false && !confirm(
+            `No se pudo apartar el folio ${elFolio} en el contador del hotel.\n\n` +
+            "Si se registra así, el contador puede volver a repartir ese número y " +
+            "quedarían dos documentos con el mismo folio.\n\n¿Registrarlo de todos modos?"))
+          return;
+      }
+
       if (tipo === "convenio"){
         const v = saneaConv({
           clienteId:cid, ejecutivo:quien, externo:true,
-          folio: folio || folioLibre(String(fecha).slice(0,4)),
+          folio: elFolio,
           fecha, vigenciaDesde:fecha, vigenciaHasta:vig, notas,
           firmaManual: manual, createdAt:new Date().toISOString()
         });
         state.convenios.push(v);
-        // Se anota en el contador del servidor: si no, volvería a repartir ese
-        // número y el convenio de papel quedaría repetido con uno nuevo.
-        anotarFolio("convenios", v.folio);
         cerrarConvenio(v, null, `Documento externo. Se subió el archivo "${f.name}".`, quien);
         v.avisado = true;     // lo registró el propio equipo: no hay novedad que avisar
       } else if (tipo === "cotizacionbq" || tipo === "contratobq"){
         const ev = saneaEvento({
           clienteId:cid, ejecutivo:quien, externo:true,
           tipo: tipo === "contratobq" ? "contrato" : "cotizacion",
-          folio: folio || folioEvento(tipo === "contratobq" ? "contrato" : "cotizacion",
-                                      String(fecha).slice(0,4)),
+          folio: elFolio,
           fecha, vigencia:vig, observaciones:notas, estado:"confirmado",
           bloques: vig ? [saneaBloqueEv({ fecha: vig })] : [],
           firmaManual: manual, destinatario: dest, createdAt:new Date().toISOString()
@@ -12127,7 +12341,7 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
       } else {
         const k = saneaContrato({
           clienteId:cid, ejecutivo:quien, externo:true, tipo,
-          folio: folio || folioContrato(String(fecha).slice(0,4)),
+          folio: elFolio,
           fecha, vigencia:vig, notas, estado:"aceptado",
           firmaManual: manual, destinatario: dest, createdAt:new Date().toISOString()
         });
@@ -15793,6 +16007,10 @@ try{
   setTimeout(quitar, 2250);
 })();
 
+/* Las lápidas pendientes ANTES del primer guardar: si no, este guardar toma
+   los ids de ahora como punto de partida y lo que se borró en la sesión
+   pasada —y no alcanzó a subir— se perdería para siempre. */
+cargarTumbas();
 if (!cargaRota) guardar();     // con la carga rota, no se pisa lo que quedó
 render();
 // Si el enlace es el de un cliente que viene a firmar, la aplicación se
