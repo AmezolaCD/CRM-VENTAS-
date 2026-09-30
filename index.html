@@ -770,7 +770,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.30-72";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.30-73";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -6131,7 +6131,7 @@ async function pdfDeDocumento(cuerpo){
 }
 
 const nombrePdfConvenio = (v, c) =>
-  "Convenio-" + nombreArchivo([v.folio, c && c.empresa].filter(Boolean).join(" ")) + ".pdf";
+  "Convenio-" + nombreArchivo([v.folio || "sin-folio", c && c.empresa].filter(Boolean).join(" ")) + ".pdf";
 
 function nombrePdf(gs){
   if (gs.length === 1){
@@ -6405,6 +6405,13 @@ function renderAjustes(){
         <b>no crea su cuenta</b>: eso se hace en Supabase, en <i>Authentication → Users</i>,
         con el mismo correo.</p>
 
+      <h3 class="sec">El contador de folios</h3>
+      <div class="note"><b>Los folios los reparte el servidor, no cada computadora.</b>
+        Un documento no recibe número hasta que se firma, y el número sale de un contador
+        que lleva el hotel entero: por eso no se repiten, van seguidos y no se salta ninguno
+        cuando alguien abandona un borrador.</div>
+      <div id="estadoFolios"></div>
+
       <h3 class="sec">Quién firma por cada departamento</h3>
       <div class="note"><b>Esto es para las órdenes de trabajo de marketing.</b>
         Cuando un jefe de área abre la liga para pedir algo, escoge aquí su departamento
@@ -6575,6 +6582,39 @@ function renderAjustes(){
         <div class="hint">${esc(infoRol(u.rol).ayuda)}</div></td>
       <td><button class="btn sm danger" data-delu="${u.id}">Quitar</button></td></tr>`).join("") +
     `<datalist id="listaEje">${nombresCartera.map(n => `<option value="${esc(n)}">`).join("")}</datalist>`;
+
+  /* Se comprueba de verdad, preguntándole al servidor: que `folios.sql` no
+     esté corrido era invisible hasta que algo salía mal. */
+  (async () => {
+    const caja = p.querySelector("#estadoFolios");
+    if (!caja) return;
+    if (!nubeActiva()){
+      caja.innerHTML = `<div class="note warn">Este equipo no está conectado a la nube,
+        así que no se puede comprobar el contador.</div>`;
+      return;
+    }
+    caja.innerHTML = `<p class="hint">Preguntándole al servidor…</p>`;
+    const anio = new Date().getFullYear();
+    let alto = null;
+    try{
+      const filas = await api(`/rest/v1/crm_folios?tipo=eq.convenios&anio=eq.${anio}` +
+        `&select=folio,numero&order=numero.desc&limit=1`);
+      alto = (filas && filas[0]) || {};
+    }catch(e){
+      caja.innerHTML = `<div class="note warn"><b>El contador no está montado.</b>
+        Mientras no lo esté, <b>nadie puede firmar</b> un convenio, un contrato ni un evento:
+        el CRM no reparte un número que no pueda garantizar.<br><br>
+        Se arregla corriendo <code>folios.sql</code> en el SQL Editor de Supabase, una vez.
+        <br><span class="hint">${esc(e.message)}</span></div>`;
+      return;
+    }
+    caja.innerHTML = `<div class="note" style="border-left:3px solid var(--ok)">
+      <b>El contador está montado y contestando.</b>
+      ${alto.folio ? `El último convenio del hotel en ${anio} es el <b>${esc(alto.folio)}</b>;
+        al siguiente que se firme le tocará el ${esc("CV-" + anio + "-" +
+        String(Number(alto.numero) + 1).padStart(3, "0"))}.`
+      : `Todavía no se ha apartado ningún folio de convenio en ${anio}.`}</div>`;
+  })();
 
   /* Los departamentos que piden cosas a marketing, con su firmante. Se pintan
      por posición y no por id porque no tienen id: son dos palabras, no una
@@ -7544,6 +7584,52 @@ async function apartarFolio(tipo, prefijo, anio){
 }
 
 /**
+ * El folio de un documento que se está firmando.
+ *
+ * AQUÍ, Y NO ANTES. Antes el número se apartaba al guardar el borrador, y eso
+ * traía los dos defectos que Marco reportó:
+ *
+ *   · HUECOS. Cada borrador guardado gastaba un número. El que se abandonaba o
+ *     se borraba dejaba un hueco en la serie para siempre.
+ *   · REPETIDOS. Si el contador no contestaba, la aplicación adivinaba el
+ *     número contando lo que ESE equipo alcanzaba a ver. Con los papeles
+ *     puestos, Carmen no ve los convenios de Eduardo: los dos adivinaron el
+ *     CV-2026-018 y los dos lo firmaron.
+ *
+ * Tomándolo en la firma, un número sólo se gasta cuando ya hay un documento de
+ * verdad. Y el contador del servidor reparte de uno en uno con un candado por
+ * tipo y año, así que dos personas al mismo segundo reciben números distintos
+ * y seguidos.
+ *
+ * Devuelve "" cuando hay servidor pero el contador no contesta. Quien llama NO
+ * FIRMA: un documento sin número garantizado es justo lo que estamos evitando.
+ * Y como no se apartó nada, tampoco se gastó un número: al volver el contador,
+ * el siguiente que firme se lleva el que tocaba.
+ *
+ * SIN SERVIDOR es otra cosa y no se bloquea. Un CRM que trabaja suelto —"Sólo
+ * este equipo"— es el único que reparte folios: no hay con quién chocar, y
+ * contar aquí da la misma serie seguida. Bloquearlo dejaría sin poder firmar a
+ * quien nunca tuvo el problema.
+ */
+async function folioParaFirmar(doc, tipo, prefijo, anio, local){
+  // Uno que ya trae folio lo conserva: vino en papel con su número, o es
+  // viejo. Cambiárselo sería peor que el problema.
+  const suyo = String((doc && doc.folio) || "").trim();
+  if (suyo) return suyo;
+  if (!nubeActiva()) return local ? local() : "";
+  return await apartarFolio(tipo, prefijo, anio);
+}
+
+/** Lo que se le dice a alguien cuando no se pudo apartar el número. */
+const AVISO_SIN_CONTADOR =
+  "No se pudo apartar el folio, así que el documento NO se firmó.\n\n" +
+  "El número lo reparte el servidor del hotel para que no se repita ni se " +
+  "salte ninguno. Sin él, firmar sería volver a arriesgarse a dos documentos " +
+  "con el mismo folio.\n\n" +
+  "Si esto sale siempre, falta correr folios.sql en Supabase. Avísale al " +
+  "administrador; en Ajustes se ve si el contador está montado.";
+
+/**
  * Anota un folio que no salió del contador: el que venía en un papel, o el que
  * alguien escribió a mano. Si no se anotara, el contador lo volvería a repartir.
  */
@@ -7628,7 +7714,7 @@ function editarConvenio(id, clientePre, alCerrar){
   const finAnio = new Date().getFullYear() + "-12-31";
   const v = existente || saneaConv({
     clienteId: clientePre || "",
-    folio: folioAuto(new Date().getFullYear()),
+    folio: "",                 // se lo pone el contador al firmar: ver folioParaFirmar
     fecha: hoyISO(),
     vigenciaDesde: hoyISO(),
     vigenciaHasta: finAnio,
@@ -7680,8 +7766,16 @@ function editarConvenio(id, clientePre, alCerrar){
             ${selectEjecutivo(v.ejecutivo || (cliente(v.clienteId) || {}).ejecutivo || miNombre(), "cEje")}
             <div class="hint">Quien firma la carta por el hotel y a quien se le avisa cuando el
               cliente la firma. La lista sale de <i>Ajustes → Usuarios y permisos</i>.</div></div>
-          <div><label class="lbl">Folio</label><input class="field" id="cFolio" value="${esc(v.folio)}">
-            <div class="hint" id="cFolioNota"></div></div>
+          <div><label class="lbl">Folio</label>
+            ${/* No se teclea. El número lo reparte el servidor en el momento de la
+                  firma, y hasta entonces no existe: así no hay dos iguales ni se
+                  salta ninguno. Ver folioParaFirmar. */""}
+            <div class="field" id="cFolio" data-folio="${esc(v.folio)}"
+              style="display:flex;align-items:center;min-height:38px;${v.folio
+                ? "font-weight:600" : "color:var(--muted)"}"
+              >${v.folio ? esc(v.folio) : "Se asigna al firmar"}</div>
+            <div class="hint" id="cFolioNota">${v.folio ? ""
+              : "El consecutivo lo lleva el hotel, no este equipo."}</div></div>
           <div><label class="lbl">Fecha de la carta</label><input class="field" type="date" id="cFecha" value="${esc(v.fecha)}"></div>
           <div><label class="lbl">Vigencia desde</label><input class="field" type="date" id="cDesde" value="${esc(v.vigenciaDesde)}"></div>
           <div><label class="lbl">Vigencia hasta</label><input class="field" type="date" id="cHasta" value="${esc(v.vigenciaHasta)}"></div>
@@ -7761,66 +7855,12 @@ function editarConvenio(id, clientePre, alCerrar){
     if (alCerrar) alCerrar();
   };
 
-  // Si se cambia la vigencia a otro año, el folio se acomoda solo. Se deja de
-  // hacer en cuanto alguien lo escribe a mano: ahí manda lo que escribió.
-  {
-    const fFolio = ov.querySelector("#cFolio"), fDesde = ov.querySelector("#cDesde");
-    const nota = ov.querySelector("#cFolioNota");
-    let ultimoAuto = existente ? null : fFolio.value;
-
-    /* El aviso de que ese folio ya es de alguien. Se dice mientras se escribe,
-       no al guardar: enterarse después de llenar toda la carta es tarde. */
-    const revisar = () => {
-      const ya = duenioDelFolio(fFolio.value, v.id);
-      fFolio.classList.toggle("campo-err", !!ya);
-      if (ya){
-        nota.innerHTML = `<b style="color:var(--bad)">Ese folio ya es del convenio de
-          ${esc(nombreCli(ya.clienteId))}.</b> Si lo dejas así, quedan dos con el mismo
-          número.`;
-        return;
-      }
-      nota.textContent = ultimoAuto !== null && fFolio.value === ultimoAuto
-        ? notaAuto : "";
-    };
-
-    let notaAuto = "";
-    /* El consecutivo del hotel, no el de lo que este equipo alcanza a ver. Se
-       pregunta al servidor y se acomoda cuando conteste; mientras, queda el
-       que se calculó aquí, que es el bueno si esta persona los ve todos. */
-    const alDia = async () => {
-      if (ultimoAuto === null) return;      // lo escribieron a mano: no se toca
-      const anio = String(fDesde.value || hoyISO()).slice(0, 4);
-      if (anio.length !== 4) return;
-      const alto = await ultimoFolioNube("convenios", anio);
-      if (ultimoAuto === null || fFolio.value !== ultimoAuto) return;   // cambió en el camino
-      const local = Number((new RegExp("^CV-" + anio + "-(\\d+)$", "i")
-        .exec(ultimoAuto) || [])[1]) || 0;
-      if (alto >= local){
-        fFolio.value = ultimoAuto = `CV-${anio}-${String(alto + 1).padStart(3, "0")}`;
-        notaAuto = `Sigue al último del hotel, el CV-${anio}-${String(alto).padStart(3, "0")}.`;
-      } else if (!hayContador() && nubeActiva()){
-        notaAuto = "";
-      }
-      revisar();
-    };
-
-    fFolio.addEventListener("input", () => {
-      if (fFolio.value !== ultimoAuto) ultimoAuto = null;
-      revisar();
-    });
-    fDesde.addEventListener("change", () => {
-      if (ultimoAuto === null || fFolio.value !== ultimoAuto) return;
-      const anio = String(fDesde.value || "").slice(0, 4);
-      if (anio.length !== 4) return;
-      fFolio.value = ultimoAuto = folioAuto(anio);
-      notaAuto = "";
-      revisar();
-      alDia();
-    });
-
-    revisar();
-    if (!existente) alDia();
-  }
+  /* Aquí vivía el adivinador del folio: proponía un número contando lo que
+     este equipo alcanzaba a ver, lo acomodaba contra el servidor, y avisaba si
+     chocaba. Se fue completo, y con él el defecto: proponer un número que no
+     va a ser el suyo es lo que hizo que Carmen y Eduardo firmaran los dos el
+     CV-2026-018. Ahora el borrador no tiene folio y el número se pide al
+     contador en el momento de firmar. Ver folioParaFirmar. */
 
   // El ejecutivo sigue al cliente mientras nadie lo haya cambiado a mano.
   {
@@ -7921,30 +7961,6 @@ function editarConvenio(id, clientePre, alCerrar){
    * sigue siendo el que puso la aplicación: si lo escribieron a mano, manda
    * lo que escribieron aunque se repita.
    */
-  async function folioAlGuardar(){
-    const escrito = ov.querySelector("#cFolio").value.trim();
-    const anio = String(ov.querySelector("#cDesde").value || escrito.slice(3, 7) ||
-                        hoyISO()).slice(0, 4);
-
-    // Uno que ya existía conserva su folio. Cambiárselo por detrás sería peor
-    // que el problema: puede andar impreso en el correo de un cliente.
-    if (existente && escrito === String(v.folio || "").trim()) return escrito;
-
-    // Escrito a mano manda lo que escribieron. Sólo se anota, para que el
-    // contador no vuelva a repartir ese número.
-    if (!folioAutomatico(escrito)){ anotarFolio("convenios", escrito); return escrito; }
-
-    // El turno lo da el servidor, que es el único que ve los folios de todo el
-    // hotel. Dos personas al mismo segundo reciben números distintos.
-    const apartado = await apartarFolio("convenios", "CV", anio);
-    if (apartado) return apartado;
-
-    // Sin contador montado: como siempre, con lo que este equipo alcanza a ver.
-    const chocado = state.convenios.some(x =>
-      x.id !== v.id && String(x.folio || "").trim().toUpperCase() === escrito.toUpperCase());
-    return chocado ? folioLibre(anio, v.id) : escrito;
-  }
-
   async function recoger(){
     const cid = ov.querySelector("#cCli").value;
     if (!cid){
@@ -7963,13 +7979,12 @@ function editarConvenio(id, clientePre, alCerrar){
     }
     pintaErrores([]);
 
-    const pedido = ov.querySelector("#cFolio").value.trim();
-    const folio = await folioAlGuardar();
-
+    /* El folio NO se toca al guardar. Un borrador no tiene número y no gasta
+       ninguno: por eso la serie deja de tener huecos cuando alguien abandona
+       un borrador. Lo toma al firmar. */
     Object.assign(v, {
       clienteId: cid,
       ejecutivo: ov.querySelector('[name="cEje"]').value.trim(),
-      folio,
       fecha: ov.querySelector("#cFecha").value || hoyISO(),
       vigenciaDesde: desde, vigenciaHasta: hasta,
       incluyeRecovery: ov.querySelector("#cRec").checked,
@@ -7979,13 +7994,6 @@ function editarConvenio(id, clientePre, alCerrar){
       updatedAt: new Date().toISOString()
     });
     if (!existente){ v.createdAt = new Date().toISOString(); state.convenios.push(v); }
-    // Si entre abrir el editor y guardar alguien más se llevó ese número, el
-    // que quedó no es el que se vio en pantalla. Queda dicho en la bitácora
-    // para que nadie ande buscando un folio que nunca existió.
-    if (pedido && folio.toUpperCase() !== pedido.toUpperCase())
-      registrarAuto(cid, `El convenio quedó con el folio ${folio}`,
-        `Al abrir el editor se propuso el ${pedido}, pero al guardar ya estaba tomado. ` +
-        "El consecutivo lo lleva el servidor, así que se le dio el siguiente libre.", "");
     guardar(); render();
     return true;
   }
@@ -10995,7 +11003,7 @@ function editarContrato(id, clientePre, alCerrar){
 
   const k = existente || saneaContrato({
     clienteId: clientePre || "",
-    folio: folioContrato(new Date().getFullYear()),
+    folio: "",                 // igual que los convenios: al firmar
     fecha: hoyISO(),
     ejecutivo: miNombre(),
     moneda: state.ajustes.moneda || "MXN",
@@ -11053,7 +11061,10 @@ function editarContrato(id, clientePre, alCerrar){
           <div><label class="lbl">Título <span class="hint">(opcional)</span></label>
             <input class="field" id="ctTitulo" value="${esc(k.titulo)}" placeholder="Tecate Península"></div>
           <div><label class="lbl">Folio</label>
-            <input class="field" id="ctFolio" value="${esc(k.folio)}"></div>
+            <div class="field" id="ctFolio"
+              style="display:flex;align-items:center;min-height:38px;${k.folio
+                ? "font-weight:600" : "color:var(--muted)"}"
+              >${k.folio ? esc(k.folio) : "Se asigna al firmar"}</div></div>
           <div><label class="lbl">Fecha del documento</label>
             <input class="field" type="date" id="ctFecha" value="${esc(k.fecha)}"></div>
           <div><label class="lbl">Vigencia hasta</label>
@@ -11154,17 +11165,8 @@ function editarContrato(id, clientePre, alCerrar){
   q("#bAddEx").onclick = () =>
     ov.querySelector("#tEx tbody").insertAdjacentHTML("beforeend", filaEx(saneaLineaExtra({})));
 
-  // El folio sigue al año de la fecha mientras nadie lo escriba a mano.
-  {
-    const fF = q("#ctFolio"), fD = q("#ctFecha");
-    let auto = existente ? null : fF.value;
-    fF.addEventListener("input", () => { if (fF.value !== auto) auto = null; });
-    fD.addEventListener("change", () => {
-      if (auto === null || fF.value !== auto) return;
-      const a = String(fD.value || "").slice(0, 4);
-      if (a.length === 4) fF.value = auto = folioContrato(a, k.id);
-    });
-  }
+  /* Aquí seguía el folio al año de la fecha. Ya no: el borrador no tiene folio
+     y el número lo reparte el contador al firmar. Ver folioParaFirmar. */
 
   const bd = q("#bDelCt");
   if (bd) bd.onclick = () => {
@@ -11214,12 +11216,9 @@ function editarContrato(id, clientePre, alCerrar){
       return false;
     }
 
-    // El folio se decide al guardar, no al abrir: entre una cosa y otra pudo
-    // haberlo tomado otro equipo.
-    let folio = q("#ctFolio").value.trim();
-    if (folioCtAutomatico(folio) && state.contratos.some(x =>
-        x.id !== k.id && String(x.folio || "").trim().toUpperCase() === folio.toUpperCase()))
-      folio = folioContrato(String(desde || folio.slice(3, 7)).slice(0, 4), k.id);
+    /* El folio no se toca al guardar: lo pone el contador al firmar. Se
+       conserva el que traiga un documento viejo. */
+    const folio = String(k.folio || "").trim();
 
     Object.assign(k, {
       clienteId: cid,
@@ -11253,7 +11252,7 @@ function editarContrato(id, clientePre, alCerrar){
 
 const nombrePdfContrato = (k, c) =>
   infoTipoCt(k.tipo).name + "-" +
-  nombreArchivo([k.folio, c && c.empresa].filter(Boolean).join(" ")) + ".pdf";
+  nombreArchivo([k.folio || "sin-folio", c && c.empresa].filter(Boolean).join(" ")) + ".pdf";
 
 function verContrato(id, alCerrar, pedirFirma){
   const k = state.contratos.find(x => x.id === id);
@@ -11320,13 +11319,19 @@ function verContrato(id, alCerrar, pedirFirma){
   const f1 = ov.querySelector("#bCtF1");
   if (f1) f1.onclick = () => padFirma("Firma del ejecutivo de ventas",
     { nombre: ejecutivoDeCt(k) || miNombre(), puesto:"Ejecutivo de ventas", celular:"" },
-    d => { firmarContrato(k, "hotel", d); ov.remove(); verContrato(k.id, alCerrar); },
+    async d => {
+      if (!await firmarContrato(k, "hotel", d)) return;
+      ov.remove(); verContrato(k.id, alCerrar);
+    },
     { recordar:true });
 
   const f2 = ov.querySelector("#bCtF2");
   if (f2) f2.onclick = () => padFirma("Firma de aceptación del cliente",
     { nombre:(c && c.contacto) || "", puesto:"", celular:(c && c.telefono) || "" },
-    d => { firmarContrato(k, "cliente", d); ov.remove(); verContrato(k.id, alCerrar); });
+    async d => {
+      if (!await firmarContrato(k, "cliente", d)) return;
+      ov.remove(); verContrato(k.id, alCerrar);
+    });
 
   const en = ov.querySelector("#bCtEnviar");
   if (en) en.onclick = () => enviarContrato(k, c);
@@ -11344,14 +11349,23 @@ function verContrato(id, alCerrar, pedirFirma){
   if (pedirFirma && !k.firmaHotel && f1) setTimeout(() => f1.click(), 60);
 }
 
-/** Aplica la firma y deja constancia en la bitácora del cliente. */
-function firmarContrato(k, quien, d){
+/**
+ * Aplica la firma y deja constancia en la bitácora del cliente.
+ *
+ * Como en los convenios, el folio se toma AQUÍ: firmar es el momento en que
+ * deja de ser un borrador. Ver folioParaFirmar.
+ */
+async function firmarContrato(k, quien, d){
   const fecha = new Date().toISOString();
   const firma = saneaFirma(Object.assign({}, d, { fecha }));
   const c = cliente(k.clienteId);
   const doc = infoTipoCt(k.tipo).name;
 
   if (quien === "hotel"){
+    const folio = await folioParaFirmar(k, "contratos", "CT", anioContrato(k),
+                                        () => folioContrato(anioContrato(k), k.id));
+    if (!folio){ alert(AVISO_SIN_CONTADOR); return false; }
+    k.folio = folio;
     k.firmaHotel = firma;
     if (k.estado === "borrador") k.estado = "firmado_hotel";
     k.tokenFirma = k.tokenFirma || nuevoToken();   // habilita el enlace del cliente
@@ -11362,6 +11376,7 @@ function firmarContrato(k, quien, d){
     registrarAuto(k.clienteId, `${doc} ${k.folio} firmada por el ejecutivo`,
       k.titulo || "", ejecutivoDeCt(k));
   } else {
+    if (!k.firmaHotel){ alert("Primero debe firmar el ejecutivo."); return false; }
     k.firmaCliente = firma;
     k.estado = "aceptado";
     registrarAuto(k.clienteId, `${doc} ${k.folio} aceptada por el cliente`,
@@ -11369,6 +11384,7 @@ function firmarContrato(k, quien, d){
   }
   k.updatedAt = new Date().toISOString();
   guardar(); render();
+  return true;
 }
 
 /** El PDF adjunto donde el aparato lo permita, y si no, el mensaje y el archivo aparte. */
@@ -11512,7 +11528,8 @@ function verConvenio(id, alCerrar, pedirFirma){
   const ov = modal(`
     <div class="modal doc">
       <div class="modal-head">
-        <h2>Convenio ${esc(v.folio || "")}</h2>
+        <h2>Convenio ${v.folio ? esc(v.folio)
+          : `<span style="color:var(--muted);font-weight:400">sin folio todavía</span>`}</h2>
         <span class="estado-chip" style="background:${ec.bg};color:${ec.fg}">${esc(ec.name)}</span>
         <button class="btn" data-close>✕</button>
       </div>
@@ -11525,6 +11542,7 @@ function verConvenio(id, alCerrar, pedirFirma){
         <button class="btn" id="bPrint">Imprimir</button>
         <button class="btn" id="bPdfC">Descargar PDF</button>
         ${v.estado === "borrador" ? `<button class="btn" id="bEdit">Editar</button>` : ""}
+        ${v.folioRepetido ? `<button class="btn danger" id="bRenum">Darle un folio nuevo</button>` : ""}
         <div class="spacer"></div>
         ${!v.firmaHotel ? `<button class="btn ok" id="bF1">Firmar como ejecutivo</button>` : ""}
         ${v.firmaHotel && v.estado !== "firmado_cliente" ? `<button class="btn primary" id="bEnviar">Enviar al cliente</button>
@@ -11535,6 +11553,43 @@ function verConvenio(id, alCerrar, pedirFirma){
           ${traeEscaneo(v.firmaManual) ? `<button class="btn sm" id="bVerEscaneo">Ver el escaneado</button>` : ""}` : ""}
       </div>
     </div>`);
+
+  /**
+   * Renumerar uno que quedó repetido.
+   *
+   * Sólo sale en un convenio marcado `folioRepetido`, o sea uno que ya estaba
+   * firmado o enviado cuando se descubrió el choque. La renumeración
+   * automática no los toca —con razón: el folio anda impreso en el correo de
+   * un cliente— así que esto es un botón que alguien pica a sabiendas.
+   *
+   * El número nuevo sale del contador, no de contar aquí: es lo mismo que hace
+   * la firma, y por la misma razón.
+   */
+  const bre = ov.querySelector("#bRenum");
+  if (bre) bre.onclick = async () => {
+    const viejo = v.folio;
+    if (!confirm(`Este convenio tiene el folio ${viejo}, que ya es de otro.\n\n` +
+        "Se le va a dar el siguiente número libre del hotel.\n\n" +
+        "OJO: el PDF que ya tiene el cliente dice el folio anterior. " +
+        "Habrá que volver a mandárselo.\n\n¿Continuar?")) return;
+    bre.disabled = true; bre.textContent = "Pidiendo número…";
+    const nuevo = await apartarFolio("convenios", "CV", anioConvenio(v));
+    if (!nuevo){
+      bre.disabled = false; bre.textContent = "Darle un folio nuevo";
+      alert(AVISO_SIN_CONTADOR.replace("no se firmó", "no se renumeró"));
+      return;
+    }
+    v.folio = nuevo;
+    v.folioRepetido = "";
+    v.updatedAt = new Date().toISOString();
+    registrarAuto(v.clienteId, `El convenio ${viejo} se renumeró como ${nuevo}`,
+      `Otro convenio del hotel ya tenía el folio ${viejo}. Éste ya estaba firmado, ` +
+      "así que se renumeró a mano.\nHay que volver a mandarle el PDF al cliente: el " +
+      "que tiene dice " + viejo + ".", miNombre());
+    guardar(); render();
+    ov.remove();
+    verConvenio(v.id, alCerrar);
+  };
 
   ov.querySelector("#bPrint").onclick = () => {
     fijarPagina(false);
@@ -11562,13 +11617,21 @@ function verConvenio(id, alCerrar, pedirFirma){
   const f1 = ov.querySelector("#bF1");
   if (f1) f1.onclick = () => padFirma("Firma del ejecutivo de ventas",
     { nombre:ejecutivoDe(v) || miNombre(), puesto:"Ejecutivo de ventas", celular:"" },
-    d => { firmar(v, "hotel", d); ov.remove(); verConvenio(v.id, alCerrar); },
+    async d => {
+      // Si no se pudo apartar folio no se firmó: se deja la carta abierta para
+      // que se vuelva a intentar, en vez de cerrarla como si hubiera pasado.
+      if (!await firmar(v, "hotel", d)) return;
+      ov.remove(); verConvenio(v.id, alCerrar);
+    },
     { recordar:true });
 
   const f2 = ov.querySelector("#bF2");
   if (f2) f2.onclick = () => padFirma("Firma del cliente",
     { nombre:(c && c.contacto) || "", puesto:"", celular:(c && c.telefono) || "" },
-    d => { firmar(v, "empresa", d); ov.remove(); verConvenio(v.id, alCerrar); });
+    async d => {
+      if (!await firmar(v, "empresa", d)) return;
+      ov.remove(); verConvenio(v.id, alCerrar);
+    });
 
   const env = ov.querySelector("#bEnviar");
   if (env) env.onclick = () => {
@@ -11582,20 +11645,32 @@ function verConvenio(id, alCerrar, pedirFirma){
   if (bs) bs.onclick = () => subirConvenioFirmado(v, () => { ov.remove(); verConvenio(v.id, alCerrar); });
 
   const bve = ov.querySelector("#bVerEscaneo");
-  if (bve) bve.onclick = () => verEscaneado(v.firmaManual, `Convenio ${v.folio} · escaneado`);
+  if (bve) bve.onclick = () =>
+    verEscaneado(v.firmaManual, `Convenio ${v.folio || "sin folio"} · escaneado`);
 
   marcarVisto(v);
 
   if (pedirFirma && !v.firmaHotel && f1) setTimeout(() => f1.click(), 60);
 }
 
-/** Aplica la firma y empuja al cliente por el embudo. */
-function firmar(v, quien, d){
+/**
+ * Aplica la firma y empuja al cliente por el embudo.
+ *
+ * La firma del ejecutivo es el momento en que el convenio deja de ser un
+ * borrador, y por eso es AQUÍ donde se le pone el folio. Ver folioParaFirmar.
+ */
+async function firmar(v, quien, d){
   const fecha = new Date().toISOString();
   const c = cliente(v.clienteId);
   const f = { nombre:d.nombre, puesto:d.puesto, celular:d.celular, fecha, img:d.img };
 
   if (quien === "hotel"){
+    /* El número, ANTES de tocar nada. Si no se consigue, no se firma y no se
+       gasta: así la serie no se queda con un hueco por un intento fallido. */
+    const folio = await folioParaFirmar(v, "convenios", "CV", anioConvenio(v),
+                                        () => folioLibre(anioConvenio(v), v.id));
+    if (!folio){ alert(AVISO_SIN_CONTADOR); return false; }
+    v.folio = folio;
     v.firmaHotel = f;
     v.estado = "firmado_ejecutiva";
     v.tokenFirma = v.tokenFirma || nuevoToken();   // habilita el enlace del cliente
@@ -11603,16 +11678,18 @@ function firmar(v, quien, d){
       ubicacion:c.ubicacion, telefono:c.telefono, email:c.email };
     if (c && !est(c.estatus).lost){ c.estatus = "cotizacion_enviada"; c.updatedAt = fecha; }
     registrarAuto(v.clienteId, `Convenio ${v.folio} firmado por el ejecutivo`,
-      `Firmado por ${d.nombre}. Listo para enviarse al cliente.\nEl cliente pasó a "Cotización enviada".`, d.nombre);
+      `Firmado por ${d.nombre}. Se le asignó el folio ${v.folio}.\n` +
+      `Listo para enviarse al cliente.\nEl cliente pasó a "Cotización enviada".`, d.nombre);
   } else {
-    if (!v.firmaHotel){ alert("Primero debe firmar el ejecutivo de ventas."); return; }
+    if (!v.firmaHotel){ alert("Primero debe firmar el ejecutivo de ventas."); return false; }
     cerrarConvenio(v, f, `Firmado por ${d.nombre}, capturado por el ejecutivo.`, ejecutivoDe(v));
     v.avisado = true;          // lo capturó el propio ejecutivo: no hay nada que avisarle
     guardar(); render();
-    return;
+    return true;
   }
   v.updatedAt = fecha;
   guardar(); render();
+  return true;
 }
 
 /**
@@ -11663,7 +11740,14 @@ function subirConvenioFirmado(v, alTerminar){
     b.disabled = true; b.textContent = "Subiendo…";
     const suelta = () => { b.disabled = false; b.textContent = "Subir y cerrar el convenio"; };
 
-    const cerrar = manual => {
+    const cerrar = async manual => {
+      /* También aquí: éste es otro momento en que el convenio deja de ser un
+         borrador, así que también necesita su número. Un convenio que el
+         cliente firmó en papel y nadie firmó en pantalla llegaba sin folio. */
+      const folio = await folioParaFirmar(v, "convenios", "CV", anioConvenio(v),
+                                          () => folioLibre(anioConvenio(v), v.id));
+      if (!folio){ alert(AVISO_SIN_CONTADOR); suelta(); return; }
+      v.folio = folio;
       v.firmaManual = manual;
       // Sin firma trazada: la constancia es el archivo.
       cerrarConvenio(v, null, `Firmado en papel. Se subió el archivo "${f.name}".`,
@@ -12445,7 +12529,7 @@ function editarEvento(id, tipoPre, alCerrar){
   const tipo = existente ? existente.tipo : (tipoPre || "cotizacion");
   const e = existente || saneaEvento({
     tipo, fecha: hoyISO(), ejecutivo: miNombre(),
-    folio: folioEvento(tipo, new Date().getFullYear()),
+    folio: "",                 // igual que los convenios: al firmar
     bloques: [saneaBloqueEv({})],
     lineas: [saneaLineaEv({})]
   });
@@ -12490,7 +12574,10 @@ function editarEvento(id, tipoPre, alCerrar){
           <div><label class="lbl">Referencia del evento</label>
             <input class="field" id="evTit" value="${esc(e.titulo)}" placeholder="Boda Claudia &amp; Ricardo"></div>
           <div><label class="lbl">Folio</label>
-            <input class="field" id="evFolio" value="${esc(e.folio)}"></div>
+            <div class="field" id="evFolio"
+              style="display:flex;align-items:center;min-height:38px;${e.folio
+                ? "font-weight:600" : "color:var(--muted)"}"
+              >${e.folio ? esc(e.folio) : "Se asigna al firmar"}</div></div>
           <div><label class="lbl">Fecha del documento</label>
             <input class="field" type="date" id="evFecha" value="${esc(e.fecha)}"></div>
           <div><label class="lbl">Vigencia hasta</label>
@@ -12665,8 +12752,14 @@ function editarEvento(id, tipoPre, alCerrar){
       return false;
     }
 
-    let folio = q("#evFolio").value.trim();
-    if (state.eventos.some(x => x.id !== e.id &&
+    /* El folio no se toca al guardar: lo pone el contador al firmar. Se lee del
+       evento, NO del campo —que ya no es un campo sino un renglón de sólo
+       lectura—, para conservar el de uno viejo que ya traía número.
+
+       El `folio &&` hace falta: sin él, dos borradores sin folio se veían como
+       el mismo ("" === "") y se les inventaba número. */
+    let folio = String(e.folio || "").trim();
+    if (folio && state.eventos.some(x => x.id !== e.id &&
         String(x.folio || "").trim().toUpperCase() === folio.toUpperCase()))
       folio = folioEvento(tipo, String(q("#evFecha").value || "").slice(0,4), e.id);
 
@@ -13003,7 +13096,7 @@ function enLetras(n){
 
 const nombrePdfEvento = (e, c) =>
   infoTipoEv(e.tipo).name + "-" +
-  nombreArchivo([e.folio, e.titulo || (c && c.empresa)].filter(Boolean).join(" ")) + ".pdf";
+  nombreArchivo([e.folio || "sin-folio", e.titulo || (c && c.empresa)].filter(Boolean).join(" ")) + ".pdf";
 
 /* ----- Ver el documento ----- */
 
@@ -13076,13 +13169,19 @@ function verEvento(id, alCerrar, pedirFirma){
   const f1 = ov.querySelector("#bEvF1");
   if (f1) f1.onclick = () => padFirma("Firma por el hotel",
     { nombre: ejecutivoDeEv(e) || miNombre(), puesto:"Banquetes", celular:"" },
-    d => { firmarEvento(e, "hotel", d); ov.remove(); verEvento(e.id, alCerrar); },
+    async d => {
+      if (!await firmarEvento(e, "hotel", d)) return;
+      ov.remove(); verEvento(e.id, alCerrar);
+    },
     { recordar:true });
 
   const f2 = ov.querySelector("#bEvF2");
   if (f2) f2.onclick = () => padFirma("Firma de aceptación del cliente",
     { nombre: e.atencion || (c && c.contacto) || "", puesto:"", celular:(c && c.telefono) || "" },
-    d => { firmarEvento(e, "cliente", d); ov.remove(); verEvento(e.id, alCerrar); });
+    async d => {
+      if (!await firmarEvento(e, "cliente", d)) return;
+      ov.remove(); verEvento(e.id, alCerrar);
+    });
 
   const en = ov.querySelector("#bEvEnviar");
   if (en) en.onclick = () => enviarEvento(e, c);
@@ -13090,13 +13189,25 @@ function verEvento(id, alCerrar, pedirFirma){
   if (pedirFirma && !e.firmaHotel && f1) setTimeout(() => f1.click(), 60);
 }
 
-function firmarEvento(e, quien, d){
+/**
+ * Igual que convenios y contratos: el folio se toma al firmar.
+ *
+ * Los eventos llevan DOS series —EV para la cotización, CB para el contrato—,
+ * así que el prefijo sale del tipo del documento. Cada serie lleva su propia
+ * cuenta en el servidor y no se estorban entre sí.
+ */
+async function firmarEvento(e, quien, d){
   const fecha = new Date().toISOString();
   const firma = saneaFirma(Object.assign({}, d, { fecha }));
   const c = cliente(e.clienteId);
   const doc = infoTipoEv(e.tipo).name;
 
   if (quien === "hotel"){
+    const serie = e.tipo === "contrato" ? "CB" : "EV";
+    const folio = await folioParaFirmar(e, "eventos_" + serie.toLowerCase(), serie, anioEvento(e),
+      () => folioEvento(e.tipo === "contrato" ? "contrato" : "cotizacion", anioEvento(e), e.id));
+    if (!folio){ alert(AVISO_SIN_CONTADOR); return false; }
+    e.folio = folio;
     e.firmaHotel = firma;
     if (e.estado === "borrador") e.estado = "firmado";
     if (c) e.destinatario = { empresa:c.empresa, contacto:c.contacto, ubicacion:c.ubicacion,
@@ -13104,6 +13215,7 @@ function firmarEvento(e, quien, d){
     registrarAuto(e.clienteId, `${doc} ${e.folio} firmada por el hotel`,
       e.titulo || "", ejecutivoDeEv(e));
   } else {
+    if (!e.firmaHotel){ alert("Primero debe firmar el hotel."); return false; }
     e.firmaCliente = firma;
     e.estado = "confirmado";
     registrarAuto(e.clienteId, `${doc} ${e.folio} aceptada por el cliente`,
@@ -13113,13 +13225,14 @@ function firmarEvento(e, quien, d){
   }
   e.updatedAt = new Date().toISOString();
   guardar(); render();
+  return true;
 }
 
 /** De cotización a contrato: se copia todo y se le agrega lo del contrato. */
 function pasarAContratoBq(cot, alCerrar){
   const k = saneaEvento(Object.assign({}, cot, {
     id:"", tipo:"contrato", cotizacionId: cot.id,
-    folio: folioEvento("contrato", anioEvento(cot)),
+    folio: "",                 // el contrato de banquetes toma el suyo al firmarse
     estado:"borrador", firmaHotel:null, firmaCliente:null, enviado:null,
     garantiaPax: String(cot.bloques.reduce((a,b) => Math.max(a, Number(b.pax) || 0), 0) || ""),
     fecha: hoyISO(), createdAt:"", updatedAt:""

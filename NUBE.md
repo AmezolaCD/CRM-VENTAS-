@@ -184,6 +184,44 @@ También se puede hacer a mano, repitiendo el paso 3 en cada equipo.
 - **Sin internet** la aplicación sigue abriendo y dejándote trabajar con lo
   último que bajó; cuando vuelve la señal, sube lo que hiciste.
 
+### Los folios: se asignan al firmar, no al abrir el borrador
+
+**Un borrador no tiene folio.** Se captura, se guarda, se corrige y se vuelve a guardar sin
+número. El folio aparece **en el momento en que el ejecutivo firma**, y sale de un contador que
+lleva el servidor para todo el hotel.
+
+Esto vale igual para los tres: **convenios** (CV), **contratos de hospedaje** (CT) y **eventos de
+banquetes** (EV y CB). Cada serie lleva su propia cuenta y no se estorban.
+
+Por qué así, que es lo que arregla los dos problemas que salieron:
+
+- **No se repiten.** El contador reparte de uno en uno con un candado: dos personas firmando al
+  mismo segundo reciben números distintos. Antes cada computadora calculaba el suyo contando lo
+  que alcanzaba a ver, y con los papeles puestos un ejecutivo **no ve** los convenios de los
+  demás. Por eso Carmen y Eduardo firmaron los dos el CV-2026-018.
+- **No hay huecos.** Antes, cada borrador que se guardaba ya gastaba un número, así que el que se
+  abandonaba dejaba un hueco para siempre. Ahora un número sólo se gasta cuando hay un documento
+  firmado de verdad.
+- **Nadie teclea nada.** El campo del folio no se escribe. Se escribe sólo en *«Subir uno
+  firmado»*, que es el documento que llegó en papel con su propio número — y ése se le avisa al
+  contador para que no lo vuelva a repartir.
+
+**Si el contador no contesta, no se firma.** Sale un aviso diciendo que falta correr
+`folios.sql`. Es a propósito: más vale no firmar que firmar con un número que se puede repetir.
+Y como no se apartó nada, tampoco se gastó: al volver el contador, el siguiente que firme se
+lleva el que tocaba.
+
+> **Un equipo suelto —«Sólo este equipo»— sí puede firmar.** Ahí no hay con quién chocar: esa
+> computadora es la única que reparte, y cuenta sola. La regla estricta es para cuando hay
+> servidor y no contesta.
+
+**En Ajustes** sale un renglón que dice si el contador está montado y cuál fue el último folio
+del hotel. Es para poder comprobarlo en vez de suponerlo.
+
+**Si dos quedaron repetidos de antes**, el convenio marcado *repetido* trae un botón **«Darle un
+folio nuevo»**: pide el siguiente al contador, lo cambia y lo anota en la bitácora. Avisa que el
+PDF que ya tiene el cliente dice el folio anterior y hay que reenviárselo.
+
 ### Cuando el semáforo dice «Falta subir»
 
 No es falta de internet: es que **el servidor no aceptó uno o varios registros**
