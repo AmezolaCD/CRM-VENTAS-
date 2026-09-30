@@ -184,6 +184,26 @@ También se puede hacer a mano, repitiendo el paso 3 en cada equipo.
 - **Sin internet** la aplicación sigue abriendo y dejándote trabajar con lo
   último que bajó; cuando vuelve la señal, sube lo que hiciste.
 
+### Qué tan rápido llega un cambio
+
+- **Lo que tú guardas sube en menos de un segundo.** Si cambias una tarifa en Ajustes, al
+  servidor llega enseguida.
+- **Lo que cambian los demás baja cada 15 segundos.**
+- **Con un formulario abierto no se aplica nada**, a propósito: si el CRM cambiara los datos
+  mientras capturas, lo que tienes en pantalla se quedaría huérfano y al guardar se perdería.
+  Pero **sí se pregunta**: si mientras armas un convenio cambia una tarifa pública, sale un
+  aviso dentro del editor diciendo qué cambió, con un botón para **actualizar los precios**.
+  Ese botón **no borra las tarifas convenio que ya tecleaste**; sólo cambia la pública y el
+  descuento.
+- **Nada se cambia solo.** Moverle los números a alguien que está negociando es otra manera de
+  provocar el error que se quiere evitar. Se avisa y decide la persona.
+- **Al cerrar el formulario se sincroniza de inmediato**, sin esperar los 15 segundos.
+
+> **Si guardas sin actualizar**, el convenio se guarda con la tarifa pública **del catálogo**, no
+> con la que veías. Es legítimo —el precio pudo pactarse antes— pero queda una línea en la
+> bitácora del cliente diciendo qué decía la pantalla y qué se guardó, para que nadie lo
+> descubra leyendo el PDF.
+
 ### Cuando se borra algo
 
 Un borrado **no viaja como «bórralo»**: viaja como una **lápida**, un renglón marcado como

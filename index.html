@@ -770,7 +770,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.30-74";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.30-75";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3445,11 +3445,80 @@ async function sincronizar(){
 
 /* ----- Sondeo ----- */
 
+/**
+ * Lo que cambió en el catálogo mientras alguien tiene un formulario abierto.
+ *
+ * `{ [tipoId]: { nombre, antes, ahora } }`, o null si no ha cambiado nada.
+ * Lo llena el sondeo y lo leen los editores para avisar.
+ */
+let tarifasCambiadas = null;
+
+/**
+ * El sondeo, con un formulario abierto: MIRAR SIN TOCAR.
+ *
+ * Antes, con cualquier formulario abierto el sondeo se saltaba entero. Y no
+ * era un descuido: al aplicar lo que baja, la sincronización REEMPLAZA el
+ * estado (`state = estadoDesdeFilas(...)`), y el editor abierto tiene en la
+ * mano el objeto de antes; si se le cambia el estado debajo, ese objeto queda
+ * huérfano y al guardar se perdería sin decir nada.
+ *
+ * Pero saltárselo tenía su propio costo, y es el que Marco señaló: un
+ * ejecutivo armando un convenio podía pasar media hora sin enterarse de que
+ * cambió una tarifa, y cotizar contra un precio que ya no existe.
+ *
+ * Así que ahora se pregunta igual, pero sólo se MIRA: no se toca `state`, no
+ * se repinta nada. Si cambió una tarifa se apunta, y el editor abierto lo
+ * dice. Lo que baje se aplica por el camino de siempre en cuanto se cierre el
+ * formulario.
+ */
+async function mirarSinTocar(){
+  if (!nubeActiva()) return;
+  let filas;
+  try{ filas = await bajar(nube.ultimo); }catch(e){ return; }
+  if (!filas || !filas.length) return;
+
+  /* `nube.ultimo` NO se mueve aquí a propósito: estas filas no se aplicaron.
+     Moverlo haría que la sincronización de verdad —la de cuando se cierre el
+     formulario— no las volviera a pedir, y se perderían. */
+  const cat = filas.filter(f => f.tipo === "habitaciones" && !f.borrado);
+  if (!cat.length) return;
+
+  const mios = new Map(state.habitaciones.map(h => [h.id, h]));
+  const cambios = {};
+  for (const f of cat){
+    const id = String(f.id).split(":")[1];
+    const mio = mios.get(id);
+    const ahora = (f.datos || {}).publica;
+    if (!mio || ahora === undefined || ahora === null) continue;
+    if (Number(mio.publica) === Number(ahora)) continue;
+    cambios[id] = { nombre: mio.nombre, antes: mio.publica, ahora };
+  }
+  if (!Object.keys(cambios).length) return;
+  tarifasCambiadas = Object.assign(tarifasCambiadas || {}, cambios);
+  avisarTarifas();
+}
+
+/** Pinta el aviso en los editores que estén abiertos y lo esperen. */
+function avisarTarifas(){
+  document.querySelectorAll("[data-aviso-tarifas]").forEach(el => {
+    if (!tarifasCambiadas){ el.innerHTML = ""; return; }
+    const lista = Object.values(tarifasCambiadas)
+      .map(c => `${esc(c.nombre)} pasó de ${money(c.antes)} a ${money(c.ahora)}`);
+    el.innerHTML = `<div class="note warn" style="margin:0 0 10px">
+      <b>Las tarifas del catálogo cambiaron mientras tenías esto abierto.</b><br>
+      ${lista.join("<br>")}
+      <p style="margin:10px 0 0"><button class="btn" data-actualizar-tarifas>Actualizar
+        precios</button> <span class="hint">Se conserva lo que ya tecleaste; sólo cambia la
+        tarifa pública y el descuento.</span></p></div>`;
+  });
+}
+
 function arrancarSondeo(){
   detenerSondeo();
   nube.timer = setInterval(() => {
-    // Con un formulario abierto no se toca el estado: alguien está capturando.
-    if (document.querySelector(".overlay")) return;
+    /* Con un formulario abierto no se aplica nada —ver mirarSinTocar—, pero sí
+       se pregunta: enterarse no mueve nada de su sitio. */
+    if (document.querySelector(".overlay")){ mirarSinTocar().catch(() => {}); return; }
     sincronizar().catch(() => {});
   }, SONDEO_MS);
 }
@@ -7190,6 +7259,18 @@ function modal(html){
     if (e.target === ov || e.target.closest("[data-close]")) ov.remove();
   });
   document.body.appendChild(ov);
+  /* Al cerrarse el ÚLTIMO formulario se sincroniza de una vez, en lugar de
+     esperar hasta quince segundos más. Mientras hubo algo abierto el sondeo
+     sólo miró —ver mirarSinTocar—, así que aquí es donde de verdad entra lo
+     que cambiaron los demás. */
+  new MutationObserver((m, obs) => {
+    if (ov.isConnected) return;
+    obs.disconnect();
+    if (!document.querySelector(".overlay")){
+      tarifasCambiadas = null;
+      sincronizar().catch(() => {});
+    }
+  }).observe(document.body, { childList: true });
   return ov;
 }
 document.addEventListener("keydown", e => {
@@ -7956,11 +8037,15 @@ function editarConvenio(id, clientePre, alCerrar){
           <div><label class="lbl">Vigencia hasta</label><input class="field" type="date" id="cHasta" value="${esc(v.vigenciaHasta)}"></div>
         </div>
 
+        ${/* Aquí sale el aviso si una tarifa cambia mientras esto está abierto.
+              Lo llena avisarTarifas(), que lo dispara el sondeo. */""}
+        <div data-aviso-tarifas></div>
+
         <h3 class="sec">Bloque ${esc(infoGrupo("deluxe").nombre)}</h3>
         <div id="cErr"></div>
         <div class="note">Marca las habitaciones que entran en este convenio. La <b>tarifa pública</b>
           viene del catálogo y no se edita aquí; <b>toda habitación marcada necesita su tarifa convenio</b>.</div>
-        <div>${bloque("deluxe")}</div>
+        <div id="bloqueDeluxe">${bloque("deluxe")}</div>
 
         <h3 class="sec">Bloque ${esc(infoGrupo("recovery").nombre)}</h3>
         <p><label><input type="checkbox" id="cRec" ${v.incluyeRecovery ? "checked" : ""}>
@@ -8029,6 +8114,47 @@ function editarConvenio(id, clientePre, alCerrar){
     guardar(); render(); ov.remove();
     if (alCerrar) alCerrar();
   };
+
+  /**
+   * Traer las tarifas nuevas sin borrar lo que ya se negoció.
+   *
+   * Se repinta la tarifa PÚBLICA y el descuento; la tarifa convenio —que es lo
+   * que costó trabajo teclear— se conserva tal cual. Y no se hace solo:
+   * cambiarle los números por debajo a alguien que está negociando es otra
+   * manera de provocar el error que se quiere evitar.
+   */
+  const actualizarTarifas = () => {
+    const puestas = new Map();
+    ov.querySelectorAll("tr[data-tipo]").forEach(tr => {
+      puestas.set(tr.dataset.tipo, {
+        conv: tr.querySelector(".conv").value,
+        sel:  tr.querySelector(".sel").checked
+      });
+    });
+    for (const f of filas){
+      const h = state.habitaciones.find(x => x.id === f.tipoId);
+      if (h) f.publica = h.publica;
+    }
+    ov.querySelector("#bloqueDeluxe").innerHTML = bloque("deluxe");
+    ov.querySelector("#bRecovery").innerHTML    = bloque("recovery");
+    /* Los manejadores viven en el contenedor, no en cada fila, así que
+       repintar las tablas no los desconecta. Sólo hay que devolver lo que
+       estaba tecleado y volver a poner cada renglón en su estado. */
+    ov.querySelectorAll("tr[data-tipo]").forEach(tr => {
+      const p = puestas.get(tr.dataset.tipo);
+      if (!p) return;
+      tr.querySelector(".conv").value  = p.conv;
+      tr.querySelector(".sel").checked = p.sel;
+      sincroniza(tr, false);
+    });
+    tarifasCambiadas = null;
+    avisarTarifas();
+    recalcular();
+  };
+  ov.addEventListener("click", e => {
+    if (e.target.closest("[data-actualizar-tarifas]")) actualizarTarifas();
+  });
+  avisarTarifas();   // por si ya había cambiado algo antes de abrir
 
   /* Aquí vivía el adivinador del folio: proponía un número contando lo que
      este equipo alcanzaba a ver, lo acomodaba contra el servidor, y avisaba si
@@ -8169,6 +8295,25 @@ function editarConvenio(id, clientePre, alCerrar){
       updatedAt: new Date().toISOString()
     });
     if (!existente){ v.createdAt = new Date().toISOString(); state.convenios.push(v); }
+
+    /* Lo que se GUARDA es la tarifa pública viva del catálogo, no la que se
+       estaba viendo en pantalla. Si alguien tuvo el editor abierto mientras el
+       administrador cambió un precio, vio un descuento y guardó otro. Guardar
+       así es legítimo —el precio pudo pactarse antes— pero tiene que quedar
+       constancia; nadie debería descubrirlo leyendo el PDF. */
+    const movidas = habs.filter(h => {
+      const vista = filas.find(f => f.tipoId === h.tipoId);
+      return vista && vista.publica !== null && h.publica !== null &&
+             Number(vista.publica) !== Number(h.publica);
+    });
+    if (movidas.length)
+      registrarAuto(cid, "La tarifa pública cambió mientras se armaba el convenio",
+        movidas.map(h => {
+          const vista = filas.find(f => f.tipoId === h.tipoId);
+          return `${h.nombre}: en pantalla decía ${money(vista.publica)} y se guardó ` +
+                 `con ${money(h.publica)}, que es la del catálogo.`;
+        }).join("\n") + "\n\nLa tarifa convenio es la que se tecleó; sólo cambió la pública.", "");
+
     guardar(); render();
     return true;
   }
