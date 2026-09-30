@@ -770,7 +770,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.28-71";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.09.30-72";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2403,7 +2403,8 @@ const NUBE_CFG    = "crm-hotel-nube";
 const NUBE_SESION = "crm-hotel-sesion";
 const SONDEO_MS   = 15000;
 
-let nube = { url:"", anon:"", sesion:null, estado:"local", ultimo:"", timer:null, pendiente:null };
+let nube = { url:"", anon:"", sesion:null, estado:"local", ultimo:"", timer:null,
+             pendiente:null, rechazados:[] };
 let sincronizado = new Map();     // id de fila -> JSON ya confirmado en la nube
 
 const nubeActiva = () => !!(nube.url && nube.anon && nube.sesion);
@@ -3009,45 +3010,128 @@ function duenioDe(fila){
   return null;
 }
 
+/**
+ * Manda un puñado de renglones, y si el servidor los rechaza, los parte.
+ *
+ * ESTO ES EL CORAZÓN DEL ASUNTO. PostgREST traduce el lote a un
+ * `insert ... on conflict do update` ÚNICO, así que un solo renglón rechazado
+ * aborta la instrucción entera: no sube ése, y no suben los demás.
+ *
+ * Y con las reglas de roles.sql eso pasa de verdad: a un ejecutivo se le
+ * rechaza un renglón que el servidor ya tiene A NOMBRE DE OTRO. Bastaba con
+ * que Carmen tuviera bajado un convenio de Eduardo —de antes de que se
+ * corrieran los papeles— para que desde ese día no le subiera NADA. Fue
+ * exactamente lo que pasó con CV-2026-011.
+ *
+ * Así que: se intenta el montón entero, que es lo normal y sigue siendo UN
+ * viaje. Si rebota, se parte en dos y se reintenta cada mitad, y así hasta el
+ * renglón solo. Lo bueno entra, lo malo queda aislado y con nombre.
+ *
+ * Un renglón malo entre cien son unos siete viajes de más, no cien.
+ */
+async function mandarLote(filas, parte, yaRebotado){
+  if (!filas.length) return;
+
+  // Con yaRebotado se salta el intento completo: quien llama YA vio rebotar
+  // este mismo montón y repetirlo tal cual sólo gastaría otro viaje. Un
+  // renglón solo siempre se intenta, porque solo nunca se ha intentado.
+  if (!yaRebotado || filas.length === 1){
+    try{
+      await api("/rest/v1/crm_datos?on_conflict=id", {
+        method:"POST",
+        headers:{ "Prefer":"resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify(filas)
+      });
+      for (const f of filas) parte.subidos.push(f.id);
+      return;
+    }catch(e){
+      /* Un renglón solo que rebota ya no se parte más: es el culpable. Se
+         apunta con su motivo y se sigue con los demás, que es justo lo que
+         antes no pasaba. */
+      if (filas.length === 1){
+        parte.rechazados.push({ id: filas[0].id, tipo: filas[0].tipo, motivo: e.message });
+        return;
+      }
+      /* Un error que no es del renglón —se cayó la red, caducó la sesión— no
+         se arregla partiendo: partir haría N peticiones para fallar N veces.
+         Se deja salir y la sincronización lo reporta como lo que es. */
+      if (!esRechazoDeFila(e)) throw e;
+    }
+  }
+
+  const mitad = Math.ceil(filas.length / 2);
+  await mandarLote(filas.slice(0, mitad), parte);
+  await mandarLote(filas.slice(mitad), parte);
+}
+
+/**
+ * ¿El servidor rechazó ESTE renglón, o se cayó todo?
+ *
+ * Partir un lote sólo sirve para lo primero. Si lo que falló fue la red o la
+ * sesión, partir multiplica el fracaso por el número de renglones.
+ */
+function esRechazoDeFila(e){
+  const m = String((e && e.message) || "");
+  return /row-level security|violates|check constraint|duplicate key|permission denied|42501|23514|23505|\b40[0-9]\b/i.test(m);
+}
+
+/**
+ * Sube lo que cambió y devuelve el parte de lo que entró y lo que no.
+ *
+ * Ya no es "todo o nada": ver mandarLote(). Lo que el servidor rechace se
+ * queda sin marcar como sincronizado, así que se vuelve a intentar en la
+ * siguiente vuelta —sin estorbarle a lo demás— y se le dice a la persona.
+ */
 async function subir(cambios, borrados){
+  const parte = { subidos: [], rechazados: [] };
+
   if (cambios.length){
-    const cuerpo = conDuenio => JSON.stringify(cambios.map(f => {
+    const arma = conDuenio => cambios.map(f => {
       const fila = { id:f.id, tipo:f.tipo, datos:f.datos, borrado:false,
         actualizado:new Date().toISOString(), actualizado_por: correoSesion() };
       if (conDuenio) fila.duenio = duenioDe(f);
       return fila;
-    }));
-    const mandar = c => api("/rest/v1/crm_datos?on_conflict=id", {
-      method:"POST",
-      headers:{ "Prefer":"resolution=merge-duplicates,return=minimal" },
-      body: cuerpo(c)
     });
 
-    try{
-      await mandar(!nube.sinDuenio);
-    }catch(e){
-      // La columna "duenio" sólo existe si se corrió roles.sql. Sin ella el
-      // servidor rechaza la subida entera, así que se vuelve a mandar sin esa
-      // columna y se recuerda por lo que dure la sesión: al día siguiente se
-      // intenta otra vez, y si para entonces ya corrieron roles.sql, se usa.
-      if (!nube.sinDuenio && /duenio/i.test(e.message)){
-        nube.sinDuenio = true;
-        await mandar(false);
-      } else throw e;
+    /* La columna "duenio" sólo existe si se corrió roles.sql. Eso se prueba
+       ANTES de ponerse a partir: sin la columna rebota todo, y partir un lote
+       que va a rebotar entero no averigua nada. */
+    if (!nube.sinDuenio){
+      try{
+        await api("/rest/v1/crm_datos?on_conflict=id", {
+          method:"POST",
+          headers:{ "Prefer":"resolution=merge-duplicates,return=minimal" },
+          body: JSON.stringify(arma(true))
+        });
+        for (const f of cambios) parte.subidos.push(f.id);
+      }catch(e){
+        // Sin la columna se recuerda por lo que dure la sesión: al día
+        // siguiente se intenta otra vez, y si ya corrieron roles.sql, se usa.
+        if (/duenio/i.test(e.message)){
+          // Fue la columna, no un renglón: se vuelve a intentar el montón
+          // entero sin ella, y sólo si ESO rebota se empieza a partir.
+          nube.sinDuenio = true;
+          await mandarLote(arma(false), parte);
+        } else {
+          if (!esRechazoDeFila(e)) throw e;
+          await mandarLote(arma(true), parte, true);   // ya rebotó: directo a partir
+        }
+      }
+    } else {
+      await mandarLote(arma(false), parte);
     }
   }
+
   // Un borrado se marca en vez de eliminar la fila: si no, los demás equipos
-  // nunca se enterarían de que desapareció.
+  // nunca se enterarían de que desapareció. Va por el mismo camino, porque un
+  // borrado también se puede rechazar por no ser de uno.
   if (borrados.length){
-    await api("/rest/v1/crm_datos?on_conflict=id", {
-      method:"POST",
-      headers:{ "Prefer":"resolution=merge-duplicates,return=minimal" },
-      body: JSON.stringify(borrados.map(id => ({
-        id, tipo:String(id).split(":")[0], datos:{}, borrado:true,
-        actualizado:new Date().toISOString(), actualizado_por: correoSesion()
-      })))
-    });
+    await mandarLote(borrados.map(id => ({
+      id, tipo:String(id).split(":")[0], datos:{}, borrado:true,
+      actualizado:new Date().toISOString(), actualizado_por: correoSesion()
+    })), parte);
   }
+  return parte;
 }
 
 /**
@@ -3160,6 +3244,24 @@ async function sincronizar(){
         nube.ultimo = !nube.ultimo || r.actualizado > nube.ultimo ? r.actualizado : nube.ultimo;
         const local = porId.get(r.id);
         const mismoQueSincronizado = local && sincronizado.get(r.id) === JSON.stringify(local.datos);
+
+        /* Si lo de aquí y lo del servidor son IDÉNTICOS no hay conflicto que
+           proteger: se apunta como sincronizado y se sigue.
+
+           Son dos renglones y destraban media aplicación. `sincronizado` es un
+           Map en memoria: al recargar queda vacío, y sin esto TODO lo que ya
+           existe aquí parecía una edición local sin subir. Consecuencias, las
+           dos malas: no entraba nada de lo que cambiaron los demás sobre esos
+           registros, y este equipo volvía a mandar su estado completo en cada
+           recarga —arrastrando en cada intento el renglón que el servidor le
+           rechaza—. Ahora, tras recargar, todo lo que nadie tocó queda marcado
+           en la primera vuelta. */
+        if (local && !mismoQueSincronizado &&
+            JSON.stringify(local.datos) === JSON.stringify(r.datos)){
+          sincronizado.set(r.id, JSON.stringify(local.datos));
+          continue;
+        }
+
         if (local && !mismoQueSincronizado) continue;   // hay edición local sin subir: no se pisa
         if (r.borrado) porId.delete(r.id);
         else porId.set(r.id, { id:r.id, tipo:r.tipo, datos:r.datos });
@@ -3210,12 +3312,25 @@ async function sincronizar(){
     const vivos = new Set(actuales.map(f => f.id));
     const borrados = [...sincronizado.keys()].filter(id =>
       !vivos.has(id) && deMiIncumbencia({ tipo: String(id).split(":")[0] }));
+    nube.rechazados = [];
     if (cambios.length || borrados.length){
-      await subir(cambios, borrados);
-      marcarSincronizado(actuales);
+      const parte = await subir(cambios, borrados);
+
+      /* Antes esto era marcarSincronizado(actuales): si el POST no lanzaba, se
+         daba TODO por subido. Con subida parcial eso mentiría, y un renglón
+         rechazado quedaría marcado como si hubiera entrado —o sea, no se
+         volvería a intentar nunca—. Se marca sólo lo que el servidor aceptó.
+         Lo rechazado se queda pendiente para la vuelta siguiente, sin
+         estorbarle a lo demás. */
+      const entraron = new Set(parte.subidos);
+      for (const f of actuales)
+        if (entraron.has(f.id)) sincronizado.set(f.id, JSON.stringify(f.datos));
+      for (const id of parte.subidos)
+        if (!actuales.some(f => f.id === id)) sincronizado.delete(id);   // era un borrado
+      nube.rechazados = parte.rechazados;
     }
 
-    nube.estado = "listo";
+    nube.estado = nube.rechazados.length ? "rechazado" : "listo";
     nube.sincronizadoEn = new Date().toISOString();
   }catch(e){
     nube.estado = "error";
@@ -3485,6 +3600,13 @@ function pintarNube(){
                       const u = usuarioActual();
                       return "Al día · " + (u ? `${u.nombre} · ${infoRol(u.rol).name}` : correoSesion());
                     })()],
+    /* Un renglón que el SERVIDOR rechaza no es falta de internet, y decirle
+       "Sin conexión" manda a la persona a revisar su módem mientras el
+       convenio se queda sin subir. Estado propio, y clic para ver cuál. */
+    rechazado:      ["Falta subir " + nube.rechazados.length, "var(--warn)",
+                     "El servidor no aceptó " + nube.rechazados.length +
+                     (nube.rechazados.length === 1 ? " registro" : " registros") +
+                     ".\nLo demás sí subió. Clic para ver cuáles."],
     error:          ["Sin conexión", "var(--bad)", nube.error || "No se pudo sincronizar"]
   };
   const [txt, color, ayuda] = mapa[nube.estado] || mapa.local;
@@ -3493,12 +3615,83 @@ function pintarNube(){
   // una computadora compartida, cambiar de persona tiene que estar a la mano
   // y no escondido en unos Ajustes que sólo ve el administrador.
   const quien = nube.sesion ? ((u && u.nombre.split(" ")[0]) || correoSesion().split("@")[0]) : "";
+  /* Con sesión el chip enseña el nombre, no el estado. Para lo rechazado eso
+     no alcanza: quedaría sólo el punto de color, y de eso justamente se trata
+     —que se vea—. Así que el nombre se acompaña de la cuenta. */
+  const etiqueta = nube.rechazados.length ? (quien ? quien + " · " + txt : txt) : (quien || txt);
   el.innerHTML = `<span class="punto-nube" style="background:${color}"></span>` +
-    esc(quien || txt);
+    esc(etiqueta);
   el.title = (quien ? txt + " · " : "") + ayuda + (nube.sesion ? "\nClic para cerrar sesión" : "");
   el.classList.toggle("conSesion", !!nube.sesion);
-  el.onclick = nube.sesion ? menuSesion : null;
+  /* Lo rechazado gana sobre el menú de sesión: es lo urgente, y es lo que la
+     persona está tratando de entender cuando le pica al chip. */
+  el.onclick = nube.rechazados.length ? menuRechazados : (nube.sesion ? menuSesion : null);
 }
+
+/**
+ * Qué se quedó sin subir, y por qué.
+ *
+ * Antes esto no existía: un renglón rechazado dejaba un console.warn y un chip
+ * que decía "Sin conexión". Nadie podía saber cuál era ni qué hacer.
+ *
+ * Se nombra por folio o por nombre, no por el id interno: "CV-2026-004, de
+ * Eduardo Lara" le dice algo a quien lo lee; "convenios:v9" no.
+ */
+function menuRechazados(){
+  const comoSeLlama = r => {
+    const [tipo, id] = String(r.id).split(":");
+    const lista = { clientes:state.clientes, convenios:state.convenios, contratos:state.contratos,
+                    eventos:state.eventos, actividades:state.actividades, huespedes:state.huespedes,
+                    prospectos:state.prospectos, campanas:state.campanas, odts:state.odts }[tipo];
+    const x = lista && lista.find(y => y.id === id);
+    if (!x) return { titulo: tipoLegible(tipo), sub: "" };
+    const titulo = x.folio || nombreCompleto(x) || x.nombre || x.titulo || tipoLegible(tipo);
+    const duenio = duenioDe({ tipo, datos:x }) || "";
+    return { titulo, sub: duenio ? "a nombre de " + duenio : "" };
+  };
+  const porQue = m =>
+    /row-level security|42501|permission denied/i.test(m)
+      ? "El servidor no te deja escribir este registro. Casi siempre es porque allá está a " +
+        "nombre de otra persona: quien lo tenga a su nombre sí puede guardarlo, o un " +
+        "administrador puede reasignarlo."
+      : /check constraint|23514/i.test(m) ? "El registro no cumple una regla del servidor."
+      : /duplicate key|23505/i.test(m)    ? "Ya existe otro registro con esa clave."
+      : m;
+
+  const ov = modal(`
+    <div class="modal" style="max-width:560px">
+      <div class="modal-head"><h2>Falta subir ${nube.rechazados.length}</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note"><b>Todo lo demás sí subió.</b> Esto es lo que el servidor no aceptó.
+          Se vuelve a intentar solo en cada sincronización, así que si alguien lo arregla
+          —o te lo reasignan— entra sin que tengas que hacer nada.</div>
+        ${nube.rechazados.map(r => {
+          const q = comoSeLlama(r);
+          return `<div class="note warn" style="margin-top:10px">
+            <b>${esc(q.titulo)}</b>${q.sub ? ` <span class="hint">· ${esc(q.sub)}</span>` : ""}
+            <div class="hint" style="margin-top:6px">${esc(porQue(r.motivo))}</div></div>`;
+        }).join("")}
+        <p class="hint" style="margin-top:14px">Nada se ha perdido: lo rechazado sigue
+          guardado en este equipo.</p>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cerrar</button>
+        <button class="btn primary" id="bReintentar">Volver a intentar</button></div>
+    </div>`);
+  ov.querySelector("#bReintentar").onclick = async () => {
+    ov.remove();
+    await sincronizar();
+  };
+}
+
+/** El nombre de un tipo de registro, para decírselo a una persona. */
+const tipoLegible = t => ({
+  clientes:"Un cliente", convenios:"Un convenio", contratos:"Un contrato",
+  eventos:"Un evento", actividades:"Una actividad", huespedes:"Un huésped",
+  prospectos:"Un prospecto", campanas:"Una campaña", odts:"Una orden de trabajo",
+  ajustes:"Los ajustes", usuarios:"La lista de usuarios", habitaciones:"El catálogo"
+}[t] || "Un registro");
 
 /** Lo que hay que hacer cuando este aparato no está hablando con el hotel. */
 function menuSinNube(){

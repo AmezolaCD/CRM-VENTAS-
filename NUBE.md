@@ -170,8 +170,8 @@ También se puede hacer a mano, repitiendo el paso 3 en cada equipo.
 
 ## Cómo se comporta ya conectado
 
-- Arriba, junto al nombre, aparece un semáforo: **En línea**, **Sincronizando…**
-  o **Sin conexión**.
+- Arriba, junto al nombre, aparece un semáforo: **En línea**, **Sincronizando…**,
+  **Falta subir N** o **Sin conexión**.
 - Se revisa si hay novedades **cada 15 segundos**, y lo que tú guardas sube al
   momento.
 - Mientras tengas **un formulario abierto**, no se baja nada: no queremos que se
@@ -183,6 +183,25 @@ También se puede hacer a mano, repitiendo el paso 3 en cada equipo.
   puede consultar la bitácora en Supabase (`crm_bitacora`) para ver qué había antes.
 - **Sin internet** la aplicación sigue abriendo y dejándote trabajar con lo
   último que bajó; cuando vuelve la señal, sube lo que hiciste.
+
+### Cuando el semáforo dice «Falta subir»
+
+No es falta de internet: es que **el servidor no aceptó uno o varios registros**
+y el resto sí subió. Casi siempre es un registro que allá está **a nombre de
+otra persona** —un convenio de otro ejecutivo que quedó bajado en tu equipo—.
+Las reglas de `roles.sql` no dejan que lo reescriba quien no es su dueño, y eso
+está bien.
+
+**Pícale al semáforo** y sale la lista: cada registro por su folio o su nombre,
+de quién es, y qué hacer. Nada se pierde: lo rechazado sigue guardado en tu
+equipo y se vuelve a intentar solo en cada sincronización, así que el día que te
+lo reasignen entra sin que hagas nada.
+
+> **Por qué importa.** Antes esto tumbaba la subida **entera**: un solo registro
+> ajeno bastaba para que ese equipo dejara de subir todo lo demás —y de recibir
+> los cambios de los demás— sin decir nada más que «Sin conexión». Fue lo que
+> pasó con el convenio CV-2026-011. Ahora lo bueno sube, lo rechazado se nombra,
+> y el semáforo dice la verdad.
 
 ### Entrar desde Core Quartz
 
