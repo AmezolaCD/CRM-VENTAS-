@@ -770,7 +770,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.09.30-75";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.01-76";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -989,6 +989,27 @@ const HABS_DEF = [
   { id:"h_psdt", codigo:"PSDT", nombre:"Presidencial",    grupo:"deluxe",   publica:14601 },
   { id:"h_care", codigo:"CARE", nombre:"Care",            grupo:"recovery", publica:null  }
 ];
+
+/* Los desayunos que puede llevar un convenio. Se escogen varios: hay empresas
+   que traen pacientes de cirugía —que comen bariátrico— junto con acompañantes
+   que desayunan americano.
+
+   Van aquí y no en el texto del bloque porque cambian de un convenio a otro,
+   y el texto del bloque es el mismo para todos. */
+const DESAYUNOS = [
+  { id:"americano",     name:"Americano" },
+  { id:"bariatrico",    name:"Bariátrico" },
+  { id:"larga_estancia", name:"Larga estancia" }
+];
+const infoDesayuno = id => DESAYUNOS.find(d => d.id === id) || { id, name: id };
+
+/** Cómo se leen en la carta: "Americano y Bariátrico", "A, B y C". */
+function listaDesayunos(ids){
+  const ns = (ids || []).map(id => infoDesayuno(id).name);
+  if (!ns.length) return "";
+  if (ns.length === 1) return ns[0];
+  return ns.slice(0, -1).join(", ") + " y " + ns[ns.length - 1];
+}
 
 /* Lo que incluye cada bloque va UNA vez debajo de su tabla, como en el machote
    —no por habitación, o se repetiría en cada renglón. */
@@ -2194,7 +2215,7 @@ function cuentasContrato(k){
 
 function saneaConv(c){
   const o = Object.assign({ id:"", folio:"", clienteId:"", fecha:"", vigenciaDesde:"", vigenciaHasta:"",
-    habitaciones:[], incluyeRecovery:false, notas:"", textos:null, grupos:null,
+    habitaciones:[], incluyeRecovery:false, desayunos:[], notas:"", textos:null, grupos:null,
     estado:"borrador", firmaHotel:null, firmaEmpresa:null, createdAt:"", updatedAt:"",
     tokenFirma:"", enviado:null, firmaManual:null, avisado:false, destinatario:null,
     folioRepetido:"", ejecutivo:"", externo:false }, c || {});
@@ -2209,6 +2230,10 @@ function saneaConv(c){
   o.firmaManual  = saneaManual(o.firmaManual);
   o.avisado      = !!o.avisado;
   o.folioRepetido = String(o.folioRepetido || "");
+  /* Varios a la vez, sin repetir y sin inventados: si mañana se quita uno del
+     catálogo, los convenios viejos dejan de enseñarlo en vez de sacar basura. */
+  o.desayunos = (Array.isArray(o.desayunos) ? o.desayunos : [])
+    .filter((x, i, a) => DESAYUNOS.some(d => d.id === x) && a.indexOf(x) === i);
   o.destinatario = o.destinatario && o.destinatario.empresa
     ? { empresa:o.destinatario.empresa || "", contacto:o.destinatario.contacto || "",
         ubicacion:o.destinatario.ubicacion || "", telefono:o.destinatario.telefono || "",
@@ -8048,6 +8073,15 @@ function editarConvenio(id, clientePre, alCerrar){
         <div id="bloqueDeluxe">${bloque("deluxe")}</div>
 
         <h3 class="sec">Bloque ${esc(infoGrupo("recovery").nombre)}</h3>
+        <h3 class="sec">Desayunos</h3>
+        <p class="hint" style="margin-top:0">Se puede escoger más de uno. Sale en la carta,
+          debajo de las tarifas.</p>
+        <div class="opciones" id="cDesayunos">
+          ${DESAYUNOS.map(d => pildora(
+            `<input type="checkbox" class="desay" value="${d.id}"${
+              v.desayunos.includes(d.id) ? " checked" : ""}>`, d.name)).join("")}
+        </div>
+
         <p><label><input type="checkbox" id="cRec" ${v.incluyeRecovery ? "checked" : ""}>
           Considerar también habitaciones ${esc(infoGrupo("recovery").nombre)} en este convenio</label></p>
         <div id="bRecovery" ${v.incluyeRecovery ? "" : 'style="display:none"'}>${bloque("recovery")}</div>
@@ -8289,6 +8323,7 @@ function editarConvenio(id, clientePre, alCerrar){
       fecha: ov.querySelector("#cFecha").value || hoyISO(),
       vigenciaDesde: desde, vigenciaHasta: hasta,
       incluyeRecovery: ov.querySelector("#cRec").checked,
+      desayunos: [...ov.querySelectorAll(".desay:checked")].map(x => x.value),
       habitaciones: habs,
       notas: ov.querySelector("#cNotas").value.trim(),
       grupos: saneaGrupos(state.ajustes.grupos),
@@ -9052,13 +9087,16 @@ async function depositarOdt(token, tipo, datos, firma, adjuntos){
 }
 
 /**
- * Una opción que se prende.
+ * Una opción que se prende: una píldora que se pinta al escogerla.
  *
  * La casilla de verdad va dentro, escondida por CSS: así el teclado y el
  * navegador siguen haciendo su trabajo y lo único que cambia es cómo se ve.
  * Ver la clase .opciones en la hoja de estilos.
+ *
+ * Nació para la hoja audiovisual de las ODTs y ahora la usan también los
+ * desayunos del convenio; por eso ya no se llama opcionOdt.
  */
-const opcionOdt = (dentro, texto) =>
+const pildora = (dentro, texto) =>
   `<label>${dentro}<span><i class="tic">✓</i>${esc(texto)}</span></label>`;
 
 /**
@@ -9172,13 +9210,13 @@ function camposOdt(tipo, jefes, motivo){
       </select></div>
     <div class="full"><label class="lbl">Sonido</label>
       <div class="opciones">
-        ${opcionOdt(`<input type="checkbox" id="odAudio">`, "Lleva audio")}
-        ${opcionOdt(`<input type="checkbox" id="odVoz">`, "Lleva voz en off")}
+        ${pildora(`<input type="checkbox" id="odAudio">`, "Lleva audio")}
+        ${pildora(`<input type="checkbox" id="odVoz">`, "Lleva voz en off")}
       </div></div>
     <div class="full"><label class="lbl">¿Qué clase de tomas?</label>
       <p class="hint" style="margin:0 0 6px">Puedes escoger varias.</p>
       <div class="opciones">
-        ${TOMAS_AV.map(x => opcionOdt(
+        ${TOMAS_AV.map(x => pildora(
           `<input type="checkbox" class="odToma" value="${x.id}">`, x.name)).join("")}
       </div></div>
     <div><label class="lbl">Lugar</label>
@@ -11001,6 +11039,29 @@ function cuerpoConvenio(v, c){
   const t = v.textos;
   const T = k => vars(t[k], v, c);
 
+  /**
+   * Lo que va debajo de la tabla de un bloque.
+   *
+   * Con desayunos escogidos en el convenio, la línea de desayuno sale de ahí.
+   * Y si el texto del bloque —el de Ajustes— también habla de desayuno, se le
+   * quita esa parte: el bloque Deluxe dice "Incluye desayuno americano" desde
+   * siempre, y un convenio con Bariátrico escogido habría impreso las dos
+   * cosas. Un documento que se contradice a sí mismo delante del cliente es
+   * peor que no tener la función.
+   *
+   * Sin desayunos escogidos no cambia nada: el texto del bloque sale igual que
+   * siempre.
+   */
+  const incluyeDelBloque = (g, gid, v) => {
+    const suyos = (gid === "deluxe" && v.desayunos && v.desayunos.length) ? v.desayunos : null;
+    const texto = String(g.incluye || "")
+      .split("\n")
+      .filter(l => !(suyos && /desayuno/i.test(l)))
+      .join("\n").trim();
+    return (texto ? `<div class="inc">${esc(texto)}</div>` : "") +
+      (suyos ? `<div class="inc">Desayuno incluido: ${esc(listaDesayunos(suyos))}</div>` : "");
+  };
+
   const tablaGrupo = gid => {
     const hs = v.habitaciones.filter(x => x.grupo === gid);
     if (!hs.length) return "";
@@ -11013,7 +11074,7 @@ function cuerpoConvenio(v, c){
         <td>${esc(x.nombre)}</td>
         <td class="num">${x.publica === null ? "N/A" : esc(moneyMN(x.publica))}</td>
         <td class="num"><b>${esc(moneyMN(x.convenio))}</b></td></tr>`).join("")}</tbody></table>
-      ${g.incluye ? `<div class="inc">${esc(g.incluye)}</div>` : ""}`;
+      ${incluyeDelBloque(g, gid, v)}`;
   };
 
   const bloqueFirma = (f, titulo, nombreDef, puestoDef, celDef) => `
