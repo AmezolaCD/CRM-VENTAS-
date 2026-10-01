@@ -770,7 +770,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.01-76";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.02-77";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3339,6 +3339,13 @@ async function sincronizar(){
   try{
     nube.estado = "sincronizando"; pintarNube();
 
+    /* Lo que este equipo puede escribir en el servidor. Se calcula aquí arriba
+       porque hace falta en las dos mitades: al bajar, para saber qué cambio
+       local vale la pena proteger, y al subir, para no mandar lo que el
+       servidor rebotaría. */
+    const puedeTodo = esAdmin();
+    const deMiIncumbencia = f => puedeTodo || !SOLO_ADMIN.includes(f.tipo);
+
     // Primero lo de los demás, luego lo propio: así una edición local reciente
     // gana sobre una copia remota vieja del mismo registro.
     const remotas = await bajar(nube.ultimo);
@@ -3372,7 +3379,19 @@ async function sincronizar(){
           continue;
         }
 
-        if (local && !mismoQueSincronizado) continue;   // hay edición local sin subir: no se pisa
+        /* Hay edición local sin subir: no se pisa. PERO sólo si este equipo de
+           verdad la puede subir.
+
+           El catálogo de habitaciones, los ajustes y la lista de usuarios los
+           escribe únicamente el administrador —`SOLO_ADMIN`—, y la subida de
+           aquí abajo ni los intenta. Un cambio local en ellos no es una
+           edición que proteger: es un rezago. Y protegerlo los CONGELABA para
+           siempre: `sincronizado` arranca vacío al recargar, así que bastaba
+           con que el administrador cambiara una tarifa una vez para que el
+           renglón se viera distinto, se saltara, nunca se aplicara y nunca se
+           marcara. En el equipo del ejecutivo la tarifa vieja se quedaba para
+           el resto de los tiempos —y lo mismo el alta de un compañero nuevo—. */
+        if (local && !mismoQueSincronizado && deMiIncumbencia(local)) continue;
         if (r.borrado) porId.delete(r.id);
         else porId.set(r.id, { id:r.id, tipo:r.tipo, datos:r.datos });
         aplicadas.push(r);
@@ -3418,8 +3437,6 @@ async function sincronizar(){
        para que desde ese momento no le subiera absolutamente nada más.
        La protección ya existía, pero sólo al enlazar el equipo por primera
        vez; hacía falta en cada vuelta. */
-    const puedeTodo = esAdmin();
-    const deMiIncumbencia = f => puedeTodo || !SOLO_ADMIN.includes(f.tipo);
     const cambios = actuales.filter(f =>
       deMiIncumbencia(f) && sincronizado.get(f.id) !== JSON.stringify(f.datos));
     const vivos = new Set(actuales.map(f => f.id));

@@ -198,6 +198,15 @@ También se puede hacer a mano, repitiendo el paso 3 en cada equipo.
 - **Nada se cambia solo.** Moverle los números a alguien que está negociando es otra manera de
   provocar el error que se quiere evitar. Se avisa y decide la persona.
 - **Al cerrar el formulario se sincroniza de inmediato**, sin esperar los 15 segundos.
+- **Las tarifas, los Ajustes y la lista del equipo bajan siempre, sin preguntar.** Esas tres
+  cosas las escribe nada más el administrador, así que en el equipo de un ejecutivo no hay nada
+  que proteger: lo que diga el servidor es lo bueno y entra tal cual.
+
+> **Si a alguien se le quedó una tarifa vieja**, con la versión de octubre ya no vuelve a pasar,
+> y se arregla solo: en cuanto esa persona recargue la página, el catálogo del servidor le entra
+> completo. Antes se podía quedar congelado en su equipo —el CRM confundía «lo que tengo aquí es
+> distinto» con «lo que tengo aquí lo capturé yo», y como el catálogo nunca lo sube un ejecutivo,
+> esa diferencia no se resolvía nunca—. Lo mismo le pasaba al alta de un compañero nuevo.
 
 > **Si guardas sin actualizar**, el convenio se guarda con la tarifa pública **del catálogo**, no
 > con la que veías. Es legítimo —el precio pudo pactarse antes— pero queda una línea en la
