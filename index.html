@@ -770,7 +770,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.02-77";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.02-78";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1321,6 +1321,9 @@ let depto = "";
 
 function ponDepto(d){
   depto = d || "";
+  /* El filtro por persona es de la otra área: si se queda puesto, al cambiar
+     de departamento la lista sale vacía y no hay manera de adivinar por qué. */
+  filtros.ejecutivo = "";
   try{
     if (depto) sessionStorage.setItem(DEPTO_SESION,
       JSON.stringify({ correo: correoSesion(), depto }));
@@ -1361,6 +1364,21 @@ const veMarketing = () => puedeVer("campanas");
    lado: ni la pestaña de convenios, ni la ficha del cliente, ni el tablero,
    ni los avisos, ni lo que se le cuenta a la IA. */
 const veHospedaje = () => puedeVer("convenios");
+/**
+ * ¿La pantalla se está viendo desde banquetes?
+ *
+ * La cartera es la misma para ventas y para banquetes, pero no la trabajan
+ * igual: la tarifa de un cliente, su etapa del convenio y quién lo atiende son
+ * de hospedaje, y a banquetes no le dicen nada. Así que en banquetes esas
+ * columnas enseñan OTRA cosa —su propia etapa y su propio ejecutivo—, y quién
+ * manda lo decide esto, en un solo lugar.
+ *
+ * El `!veHospedaje()` no es de adorno: marketing tampoco lleva hospedaje —y
+ * aunque nunca alcanza la cartera, con sólo `veBanquetes()` esto diría que
+ * sí—. Y quien abre el archivo sin nube alcanza todo: no hay departamentos
+ * que separar y todo se queda como siempre.
+ */
+const enBanquetes = () => veBanquetes() && !veHospedaje();
 /** Los departamentos que alcanza quien está viendo la pantalla. */
 const misDepartamentos = () =>
   DEPARTAMENTOS.filter(d => (DEPTOS_ROL[rolActual()] || []).includes(d.id));
@@ -1521,12 +1539,46 @@ const esAdmin     = () => rolActual() === "admin";
 const puedeVerTodo = () =>
   ["admin","direccion","gerente","gte_banquetes","gte_marketing"].includes(rolActual());
 
+/**
+ * ¿Este cliente es mío POR VENTAS? La regla de siempre, intacta.
+ *
+ * Se saca aparte porque hay quien la necesita sola: los eventos de banquetes
+ * cuelgan del cliente, y si usaran la regla ampliada de abajo, una ejecutiva
+ * vería los eventos de sus compañeras nada más porque el cliente todavía no
+ * tiene dueño en banquetes.
+ */
+function esMioPorVentas(c){
+  if (puedeVerTodo()) return true;
+  const yo = miNombre().trim().toLowerCase();
+  return !!yo && String((c || {}).ejecutivo || "").trim().toLowerCase() === yo;
+}
+
 /** ¿Este cliente es de quien está viendo la pantalla? */
 function esMio(c){
   if (puedeVerTodo()) return true;
   const yo = miNombre().trim().toLowerCase();
-  return !!yo && String(c.ejecutivo || "").trim().toLowerCase() === yo;
+  if (!yo) return false;
+  const suyo = k => String((c || {})[k] || "").trim().toLowerCase() === yo;
+  /* Lo de siempre va PRIMERO y no se toca: hasta hoy una ejecutiva de
+     banquetes veía los clientes que traían su nombre en el campo de ventas, y
+     quitárselo la dejaría sin cartera de un día para otro. Lo de abajo sólo
+     suma. */
+  if (suyo("ejecutivo")) return true;
+  return enBanquetes() ? alcanceBanquetes(c, suyo) : false;
 }
+
+/**
+ * Qué cartera alcanza quien trabaja en banquetes.
+ *
+ * Lo escogió Marco: lo suyo y lo que nadie de banquetes ha tomado, para que
+ * pueda levantar un cliente nuevo sin esperar a que se lo pasen. Lo que ya
+ * lleva una compañera no le sale; la gerencia de banquetes sigue viendo todo.
+ *
+ * Vive aquí sola para poder cambiar de opinión en un renglón: «toda la
+ * cartera» sería `return true` y «sólo los suyos», `suyo("ejecutivoBq")`.
+ */
+const alcanceBanquetes = (c, suyo) =>
+  suyo("ejecutivoBq") || !String((c || {}).ejecutivoBq || "").trim();
 
 /** Los nombres del equipo dado de alta: los únicos que deben poder elegirse. */
 const nombresEquipo = () => [...new Set(state.usuarios.map(u => String(u.nombre || "").trim())
@@ -1558,6 +1610,25 @@ const cuantoTiene = nombre => {
 
 /** Las opciones de los filtros por ejecutivo, iguales en tablero y actividades. */
 /**
+ * Quienes TRABAJAN un área: los de ese departamento, menos los mandos.
+ *
+ * La administración y la dirección alcanzan los tres departamentos, pero no
+ * llevan cartera ni trabajan leads. Sin esta resta, «Marco Ramírez» sale como
+ * ejecutivo de banquetes —y peor, puede quedarse apuntado como el que atendió
+ * a un cliente que nadie atendió—.
+ */
+function nombresQueTrabajan(area){
+  const mandos = nombresSinBitacora();
+  return nombresDelDepto(area).filter(n => !mandos.has(n.trim().toLowerCase()));
+}
+
+/** ¿Este nombre es de alguien que trabaja banquetes? */
+const esDeBanquetes = n => {
+  const x = String(n || "").trim().toLowerCase();
+  return !!x && nombresQueTrabajan("banquetes").some(y => y.toLowerCase() === x);
+};
+
+/**
  * La lista para filtrar por persona.
  *
  * Con `soloMiDepto` sólo salen los del departamento en el que se está: la
@@ -1571,9 +1642,7 @@ function opcionesEjecutivos(valor, todos, soloMiDepto){
     const yo = miNombre().trim();
     return cab + (yo ? op(yo) : "");
   }
-  const mandos = soloMiDepto ? nombresSinBitacora() : new Set();
-  const equipo = (soloMiDepto ? nombresDelDepto(miDepto()) : nombresEquipo())
-    .filter(n => !mandos.has(n.trim().toLowerCase()));
+  const equipo = soloMiDepto ? nombresQueTrabajan(miDepto()) : nombresEquipo();
   const sueltos = nombresSinDuenio();
   /* Si lo que está filtrado ya no sale en la lista, se le agrega de todos
      modos: sin eso el select se vería en "todos" mientras el filtro sigue
@@ -1596,9 +1665,7 @@ function selectEjecutivo(valor, nombreCampo, deArea){
      "suelto"—, porque perderlo callando sería peor que ofrecerlo de más. */
   /* Y sin la dirección ni la administración: alcanzan las tres áreas, pero no
      trabajan leads ni llevan cartera. Ofrecerlos es ofrecer un callejón. */
-  const mandos = deArea ? nombresSinBitacora() : new Set();
-  const equipo = (deArea ? nombresDelDepto(deArea) : nombresEquipo())
-    .filter(n => !mandos.has(n.trim().toLowerCase()));
+  const equipo = deArea ? nombresQueTrabajan(deArea) : nombresEquipo();
   const suelto = v && !equipo.some(n => n.toLowerCase() === vb);
   return `<select class="field" name="${nombreCampo || "ejecutivo"}">
       <option value=""${v ? "" : " selected"}>— Sin asignar —</option>
@@ -1845,6 +1912,30 @@ function saneaCliente(c){
   // lo traen, y está bien: no todos llegan por un anuncio.
   o.campanaId = String(o.campanaId || "");
   if (!ESTATUS.some(e => e.id === o.estatus)) o.estatus = "contactado";
+  /* La etapa y el ejecutivo DE BANQUETES.
+   *
+   * No van en los valores por omisión de arriba, y es a propósito. Ese
+   * `Object.assign` corre sobre TODOS los clientes en cada arranque: un campo
+   * nuevo ahí les cambiaría la forma a todos a la vez, la sincronización los
+   * tomaría por edición local sin subir —se saltaría la bajada de la cartera
+   * entera— y después mandaría la copia de este equipo encima de la de los
+   * demás. Desde la máquina de banquetes, que se baja la cartera completa,
+   * eso revierte el trabajo de ventas sin que nadie se entere.
+   *
+   * Así que nacen cuando banquetes los escribe y se borran al quedar vacíos:
+   * un cliente que banquetes no ha tocado es byte por byte el de siempre.
+   *
+   * Y aquí vacío es un valor legítimo, al revés que en `estatus`: quiere decir
+   * que nadie de banquetes se ha puesto en contacto con él. */
+  if (o.estatusBq !== undefined){
+    o.estatusBq = String(o.estatusBq || "").trim();
+    if (!ESTATUS.some(e => e.id === o.estatusBq)) o.estatusBq = "";
+    if (!o.estatusBq) delete o.estatusBq;
+  }
+  if (o.ejecutivoBq !== undefined){
+    o.ejecutivoBq = String(o.ejecutivoBq || "").trim();
+    if (!o.ejecutivoBq) delete o.ejecutivoBq;
+  }
   return o;
 }
 
@@ -2161,6 +2252,31 @@ function fechaEvento(e){
 
 const ejecutivoDeEv = e => String(e.ejecutivo || "").trim() ||
   String((cliente(e.clienteId) || {}).ejecutivo || "").trim();
+
+/**
+ * Banquetes acaba de trabajarle algo a este cliente: queda a su nombre.
+ *
+ * Es lo que hace verdad la columna vacía sin que nadie la llene a mano: si
+ * ninguna ejecutiva de banquetes le ha hecho un documento, nadie se ha puesto
+ * en contacto con él, y la columna lo dice. Sólo la PRIMERA vez: a quien ya lo
+ * tomó no se lo quita la siguiente que le cotice algo.
+ *
+ * El nombre sale del DOCUMENTO, no de quien está sentado: la administración y
+ * la dirección alcanzan banquetes pero no llevan cartera —por eso ni salen en
+ * el desplegable del área—, y apuntarlas aquí marcaría como tratado a un
+ * cliente que nadie trató.
+ */
+function tocaBanquetes(e){
+  const c = cliente((e || {}).clienteId);
+  if (!c) return;
+  const quien = String(e.ejecutivo || "").trim();
+  let toco = false;
+  if (quien && esDeBanquetes(quien) && !String(c.ejecutivoBq || "").trim()){
+    c.ejecutivoBq = quien; toco = true;
+  }
+  if (!String(c.estatusBq || "").trim()){ c.estatusBq = "contactado"; toco = true; }
+  if (toco) c.updatedAt = new Date().toISOString();
+}
 
 function saneaContrato(k){
   const o = Object.assign({ id:"", folio:"", clienteId:"", ejecutivo:"", tipo:"cotizacion",
@@ -4705,13 +4821,35 @@ const actsVisiblesDe = id => {
 const ultimaAct   = id => actsVisiblesDe(id)[0] || null;
 const nombreCli   = id => (cliente(id) || {}).empresa || "(cliente eliminado)";
 
+/* ----- Lo que una columna dice en cada departamento -----------------------
+   El cliente lleva dos etapas y dos ejecutivos: los de ventas y los de
+   banquetes. Cuál par se lee lo decide el departamento en el que se está, y se
+   decide AQUÍ, en un solo lugar: si cada pantalla lo preguntara por su cuenta,
+   la que se olvidara enseñaría —o peor, escribiría— los de la otra área.
+   -------------------------------------------------------------------------- */
+const campoEstatus   = () => enBanquetes() ? "estatusBq"   : "estatus";
+const campoEjecutivo = () => enBanquetes() ? "ejecutivoBq" : "ejecutivo";
+const estatusDeCli   = c => String((c || {})[campoEstatus()]   || "");
+const ejecutivoDeCli = c => String((c || {})[campoEjecutivo()] || "").trim();
+/** La etapa, o nada. `est()` no sirve aquí: para lo vacío inventa
+    «Contactado», y en banquetes vacío quiere decir que nadie lo ha tratado. */
+const estatusSiHay = id => ESTATUS.find(e => e.id === id) || null;
+/** La columna de más que lleva el tablero de banquetes: los que nadie tomó. */
+const SIN_TRATAR = { id:"", name:"Sin tratar", color:"var(--panel-2)", ink:"var(--muted)" };
+const columnasEstatus = () => enBanquetes() ? [SIN_TRATAR, ...ESTATUS] : ESTATUS;
+/** Lo que banquetes le ha vendido a un cliente: sus eventos ya confirmados. */
+const vendidoBq = evs => (evs || []).filter(e => e.estado === "confirmado")
+  .reduce((a, e) => a + cuentasEvento(e).total, 0);
+
 function clientesVisibles(){
   const q = filtros.q.trim().toLowerCase();
   return state.clientes.filter(c => {
     if (!esMio(c)) return false;
-    if (filtros.ejecutivo && c.ejecutivo !== filtros.ejecutivo) return false;
+    /* Por el ejecutivo que se está VIENDO: en banquetes se busca y se filtra
+       por lo que dice la pantalla, no por el dueño de ventas que no sale. */
+    if (filtros.ejecutivo && ejecutivoDeCli(c) !== filtros.ejecutivo) return false;
     if (!q) return true;
-    return [c.empresa,c.contacto,c.telefono,c.email,c.ubicacion,c.ejecutivo,c.notas]
+    return [c.empresa,c.contacto,c.telefono,c.email,c.ubicacion,ejecutivoDeCli(c),c.notas]
       .join(" ").toLowerCase().includes(q);
   });
 }
@@ -4786,13 +4924,22 @@ function render(){
 }
 
 function renderEjecutivos(){
-  document.getElementById("fEje").innerHTML = opcionesEjecutivos(filtros.ejecutivo, "Todos");
+  /* En banquetes, sólo gente de banquetes: la columna que se está viendo es
+     la suya, y ofrecer a los de ventas sería ofrecer un filtro que siempre
+     sale vacío. En ventas la lista se queda como estaba. */
+  document.getElementById("fEje").innerHTML =
+    opcionesEjecutivos(filtros.ejecutivo, "Todos", enBanquetes());
 }
 
 function renderKpis(){
   const cs = clientesVisibles();
-  const abiertos = cs.filter(c => !est(c.estatus).won && !est(c.estatus).lost);
-  const ganados  = cs.filter(c => est(c.estatus).won);
+  /* La etapa del departamento en el que se está. En banquetes puede no haber
+     ninguna —nadie lo ha tratado—, y entonces el cliente cuenta en «Clientes»
+     pero no en «En proceso», que es lo honesto. En ventas siempre hay etapa,
+     así que los números son los mismos de siempre. */
+  const etapa    = c => estatusSiHay(estatusDeCli(c));
+  const abiertos = cs.filter(c => { const e = etapa(c); return e && !e.won && !e.lost; });
+  const ganados  = cs.filter(c => (etapa(c) || {}).won);
   const ids = new Set(cs.map(c => c.id));
   // Los dos últimos recuadros son los del papel que se lleva cada quien: a
   // ventas le importan los convenios; a banquetes, sus eventos.
@@ -4823,8 +4970,11 @@ function renderTablero(){
   const board = document.getElementById("board");
   board.innerHTML = "";
 
-  for (const e of ESTATUS){
-    const mios = cs.filter(c => c.estatus === e.id).sort((a,b) => a.empresa.localeCompare(b.empresa, "es"));
+  /* En banquetes hay una columna de más, al principio: los clientes que
+     nadie de banquetes ha tomado. Sin ella no tendrían dónde salir —su etapa
+     está vacía a propósito— y el tablero escondería media cartera. */
+  for (const e of columnasEstatus()){
+    const mios = cs.filter(c => estatusDeCli(c) === e.id).sort((a,b) => a.empresa.localeCompare(b.empresa, "es"));
     const col = document.createElement("section");
     col.className = "col";
     col.dataset.estatus = e.id;
@@ -4863,14 +5013,20 @@ function tarjeta(c, e){
                                 : docs.some(e => ["firmado","confirmado"].includes(e.estado));
   const espera  = veHospedaje() ? docs.some(v => v.estado === "firmado_ejecutiva")
                                 : docs.some(e => e.estado === "enviada");
-  const i = ESTATUS.findIndex(x => x.id === c.estatus);
+  /* Con la etapa vacía —nadie de banquetes lo ha tratado— sale -1, y entonces
+     «‹» queda deshabilitada y «›» lleva a la primera: una sola picada mueve a
+     Contactado al que nadie había tomado. Sale solo, sin un caso aparte. */
+  const i = ESTATUS.findIndex(x => x.id === estatusDeCli(c));
+  const bq = enBanquetes();
+  const vendido = bq ? vendidoBq(docs) : 0;
 
   el.innerHTML = `
     <div class="card-title">${esc(c.empresa || "(sin empresa)")}</div>
     <div class="card-sub">${esc([c.contacto, c.ubicacion].filter(Boolean).join(" · ") || "—")}</div>
     <div class="card-row">
-      ${c.tarifa ? `<span class="pill oro">${esc(money(c.tarifa))}</span>` : ""}
-      ${c.ejecutivo ? `<span class="pill">${esc(c.ejecutivo)}</span>` : ""}
+      ${bq ? (vendido ? `<span class="pill oro" title="Eventos confirmados">${esc(money(vendido))}</span>` : "")
+           : (c.tarifa ? `<span class="pill oro">${esc(money(c.tarifa))}</span>` : "")}
+      ${ejecutivoDeCli(c) ? `<span class="pill">${esc(ejecutivoDeCli(c))}</span>` : ""}
       ${n ? `<span class="pill" title="Actividades registradas">${n} act.</span>` : ""}
       ${firmado ? `<span class="pill good">${veHospedaje() ? "Convenio firmado" : "Evento contratado"}</span>`
                 : espera ? `<span class="pill warn">Espera firma</span>` : ""}
@@ -4904,8 +5060,13 @@ function tarjeta(c, e){
 
 function moverCliente(id, estatus){
   const c = cliente(id);
-  if (!c || c.estatus === estatus) return;
-  c.estatus = estatus;
+  /* Se mueve la etapa del departamento en el que se está. Arrastrar una
+     tarjeta en banquetes NO le mueve el embudo a ventas, que era justo la
+     queja: una boda confirmada le cerraba el convenio a quien ni se enteró. */
+  const k = campoEstatus();
+  if (!c || String(c[k] || "") === estatus) return;
+  c[k] = estatus;
+  if (!c[k]) delete c[k];          // «Sin tratar» es la ausencia del campo
   c.updatedAt = new Date().toISOString();
   guardar(); render();
 }
@@ -4919,26 +5080,37 @@ function renderClientes(){
     cont.querySelector("#bVacio").onclick = () => abrirCliente(null);
     return;
   }
+  /* Las mismas tres columnas dicen otra cosa en banquetes: su etapa, lo que
+     le ha vendido y quién de los suyos lo lleva. La tarifa y el convenio son
+     de hospedaje y aquí no dicen nada. */
+  const bq = enBanquetes();
   cont.innerHTML = `<table class="data">
     <thead><tr>
       <th>Empresa</th><th>Contacto</th><th>Teléfono</th><th>Correo</th><th>Ubicación</th>
-      <th>Estatus</th><th class="num">Tarifa</th><th>Ejecutivo</th>
+      <th${bq ? ` title="La etapa con banquetes. La de ventas va aparte."` : ""}>Estatus</th>${
+        bq ? `<th class="num" title="Sus eventos ya confirmados">Vendido</th>`
+           : `<th class="num">Tarifa</th>`}<th${
+        bq ? ` title="Quién de banquetes lo lleva. Vacío: nadie lo ha tratado."` : ""}>Ejecutivo</th>
       <th class="num">Act.</th><th class="num">${veHospedaje() ? "Conv." : "Eventos"}</th><th></th>
     </tr></thead>
     <tbody>${cs.map(c => {
-      const e = est(c.estatus);
+      const ec = estatusSiHay(estatusDeCli(c));
+      const evs = veHospedaje() ? null
+        : state.eventos.filter(x => x.clienteId === c.id && eventoEsMio(x));
+      const vend = bq ? vendidoBq(evs) : 0;
       return `<tr class="row-link" data-id="${c.id}">
         <td><b>${esc(c.empresa)}</b></td>
         <td>${esc(c.contacto || "—")}</td>
         <td class="nowrap">${esc(c.telefono || "—")}</td>
         <td>${esc(c.email || "—")}</td>
         <td>${esc(c.ubicacion || "—")}</td>
-        <td><span class="estado-chip" style="background:${e.color};color:${e.ink}">${esc(e.name)}</span></td>
-        <td class="num">${c.tarifa ? esc(money(c.tarifa)) : "—"}</td>
-        <td>${esc(c.ejecutivo || "—")}</td>
+        <td>${ec ? `<span class="estado-chip" style="background:${ec.color};color:${ec.ink}">${esc(ec.name)}</span>`
+                 : `<span class="hint">—</span>`}</td>
+        ${bq ? `<td class="num">${vend ? esc(money(vend)) : "—"}</td>`
+             : `<td class="num">${c.tarifa ? esc(money(c.tarifa)) : "—"}</td>`}
+        <td>${esc(ejecutivoDeCli(c) || "—")}</td>
         <td class="num">${actsVisiblesDe(c.id).length}</td>
-        <td class="num">${veHospedaje() ? conveniosDe(c.id).length
-          : state.eventos.filter(e => e.clienteId === c.id && eventoEsMio(e)).length}</td>
+        <td class="num">${veHospedaje() ? conveniosDe(c.id).length : evs.length}</td>
         <td class="nowrap"><button class="btn sm wa" data-wa="${c.id}" ${c.telefono ? "" : "disabled"} title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button></td>
       </tr>`;
     }).join("")}</tbody></table>`;
@@ -7328,10 +7500,20 @@ function abrirCliente(id, estatusInicial, pane){
   const existente = id ? cliente(id) : null;
   // Un cliente nuevo nace de quien lo está capturando: si naciera sin dueño,
   // el propio ejecutivo dejaría de verlo en cuanto cerrara la ventana.
-  const c = existente || saneaCliente({ estatus: estatusInicial || "contactado",
-                                        ejecutivo: miNombre() });
+  /* Nacido en banquetes, es de banquetes: suyo es ese par, y el de ventas se
+     queda en blanco porque ventas no lo ha trabajado. Sin dueño de ventas el
+     renglón sube sin `duenio` —nadie lo rebota— y en pantalla no le sale a
+     ningún ejecutivo de hospedaje, que es lo correcto: no es suyo. */
+  const c = existente || (enBanquetes()
+    ? saneaCliente({ estatus:"contactado", ejecutivo:"",
+                     estatusBq: estatusInicial || "contactado", ejecutivoBq: miNombre() })
+    : saneaCliente({ estatus: estatusInicial || "contactado", ejecutivo: miNombre() }));
 
-  const campos = CAMPOS_CLIENTE.map(f => {
+  /* En banquetes no se le piden los datos de hospedaje: ni la tarifa, ni la
+     etapa del convenio, ni el ejecutivo de ventas. Abajo van los suyos. */
+  const campos = CAMPOS_CLIENTE
+    .filter(f => !(enBanquetes() && ["tarifa","ejecutivo","estatus"].includes(f.key)))
+    .map(f => {
     const val = f.key === "tarifa" ? (Number(c.tarifa) ? c.tarifa : "") : (c[f.key] ?? "");
     const ancho = (f.key === "notas" || f.key === "ubicacion") ? " full" : "";
     let ctl;
@@ -7357,6 +7539,20 @@ function abrirCliente(id, estatusInicial, pane){
     return `<div class="${ancho.trim()}"><label class="lbl">${esc(f.label)}</label>${ctl}</div>`;
   }).join("");
 
+  /* El par de banquetes, fuera de CAMPOS_CLIENTE a propósito: esa lista es la
+     del CSV —la plantilla, el mapeo de la importación y las columnas de la
+     exportación salen de ella—, y esto es de pantalla, no de archivo. */
+  const camposBq = enBanquetes() ? `
+    <div><label class="lbl">Estatus de banquetes</label>
+      <select class="field" name="estatusBq">
+        <option value=""${c.estatusBq ? "" : " selected"}>— Sin tratar —</option>
+        ${ESTATUS.map(e => `<option value="${e.id}"${e.id === c.estatusBq ? " selected" : ""}>${esc(e.name)}</option>`).join("")}
+      </select>
+      <div class="hint">La etapa con banquetes. La de ventas va aparte y no se toca desde aquí.</div></div>
+    <div><label class="lbl">Ejecutivo de banquetes</label>
+      ${selectEjecutivo(c.ejecutivoBq || "", "ejecutivoBq", "banquetes")}
+      <div class="hint">Vacío quiere decir que nadie de banquetes lo ha tratado.</div></div>` : "";
+
   const ov = modal(`
     <div class="modal wide">
       <div class="modal-head">
@@ -7371,7 +7567,7 @@ function abrirCliente(id, estatusInicial, pane){
           ${veHospedaje() ? `<button data-pane="convs">Convenios
             <span class="hint">(${conveniosDe(c.id).length})</span></button>` : ""}
         </div>` : ""}
-        <div class="pane" id="p-datos" data-on><form id="fCliente"><div class="grid">${campos}</div></form></div>
+        <div class="pane" id="p-datos" data-on><form id="fCliente"><div class="grid">${campos}${camposBq}</div></form></div>
         <div class="pane" id="p-acts"></div>
         <div class="pane" id="p-convs"></div>
       </div>
@@ -7499,14 +7695,28 @@ function abrirCliente(id, estatusInicial, pane){
     const fd = new FormData(form);
     const obj = Object.assign({}, c);
     for (const f of CAMPOS_CLIENTE){
+      /* Un campo que esta pantalla no dibujó no se toca. Sin esto, esconder
+         uno le pondría "" encima a lo que ya estaba guardado: lo borraría en
+         silencio, y el renglón se iría así a la nube. */
+      if (!form.elements[f.key]) continue;
       let v = (fd.get(f.key) ?? "").toString().trim();
       if (f.key === "tarifa") v = parseMoney(v);
       if (f.key === "lada" && v === "otra") v = (fd.get("ladaOtra") ?? "").toString();
       obj[f.key] = v;
     }
+    if (enBanquetes()){
+      obj.estatusBq   = (fd.get("estatusBq")   ?? "").toString().trim();
+      obj.ejecutivoBq = (fd.get("ejecutivoBq") ?? "").toString().trim();
+    }
     if (!obj.empresa){ alert("El nombre de la empresa es obligatorio."); form.querySelector('[name="empresa"]').focus(); return; }
     obj.updatedAt = new Date().toISOString();
-    if (existente) Object.assign(c, saneaCliente(obj));
+    if (existente){
+      const limpio = saneaCliente(obj);
+      /* `Object.assign` suma, no quita: el par de banquetes que el saneador
+         borró por quedar vacío se quedaría con el valor viejo pegado. */
+      for (const k of ["estatusBq","ejecutivoBq"]) if (!(k in limpio)) delete c[k];
+      Object.assign(c, limpio);
+    }
     else { obj.id = nuevoId("c"); obj.createdAt = new Date().toISOString(); state.clientes.push(saneaCliente(obj)); }
     guardar(); render(); ov.remove();
   }
@@ -12559,6 +12769,7 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
           firmaManual: manual, destinatario: dest, createdAt:new Date().toISOString()
         });
         state.eventos.push(ev);
+        tocaBanquetes(ev);
         registrarAuto(cid, `${nombre} ${ev.folio} registrada desde un documento externo`,
           `Se subió el archivo "${f.name}".`, quien);
       } else {
@@ -12760,7 +12971,7 @@ function folioEvento(tipo, anio, excluirId){
 
 const eventoEsMio = e => puedeVerTodo() ||
   (!!miNombre().trim() && ejecutivoDeEv(e).toLowerCase() === miNombre().trim().toLowerCase()) ||
-  esMio(cliente(e.clienteId) || {});
+  esMioPorVentas(cliente(e.clienteId) || {});
 
 /** Los eventos que le tocan a quien está viendo, del tipo que se le pida. */
 const eventosVisibles = tipo => state.eventos
@@ -13020,7 +13231,9 @@ function editarEvento(id, tipoPre, alCerrar){
           <div><label class="lbl">Vigencia hasta</label>
             <input class="field" type="date" id="evVig" value="${esc(e.vigencia)}"></div>
           <div class="full"><label class="lbl">Ejecutivo de banquetes</label>
-            ${selectEjecutivo(e.ejecutivo || (cliente(e.clienteId)||{}).ejecutivo || miNombre(), "evEje")}</div>
+            ${selectEjecutivo(e.ejecutivo || (esDeBanquetes(miNombre()) ? miNombre() : ""),
+                              "evEje", "banquetes")}
+            <div class="hint">Sólo salen los de banquetes.</div></div>
           <div><label class="lbl">IVA (%)</label>
             <input class="field" id="evIva" inputmode="decimal" value="${esc(String(e.iva))}"></div>
           <div><label class="lbl">Cargo por servicio (%)</label>
@@ -13218,6 +13431,7 @@ function editarEvento(id, tipoPre, alCerrar){
       updatedAt: new Date().toISOString()
     });
     if (!existente){ e.createdAt = new Date().toISOString(); state.eventos.push(e); }
+    tocaBanquetes(e);
     guardar(); render();
     return true;
   }
@@ -13657,8 +13871,15 @@ async function firmarEvento(e, quien, d){
     e.estado = "confirmado";
     registrarAuto(e.clienteId, `${doc} ${e.folio} aceptada por el cliente`,
       `Firmó ${d.nombre}.`, ejecutivoDeEv(e));
-    // Un evento confirmado es un cliente ganado.
-    if (c && !est(c.estatus).won){ c.estatus = "ganado"; c.updatedAt = fecha; }
+    /* Un evento confirmado es un cliente ganado PARA BANQUETES. Antes esto
+       escribía el estatus de ventas: una boda confirmada le cerraba el embudo
+       de hospedaje a una ejecutiva que ni se había enterado. Va derecho al
+       campo de banquetes, no por `campoEstatus()`: da igual desde qué
+       departamento se mire, lo que se ganó fue un evento. */
+    tocaBanquetes(e);
+    if (c && !(estatusSiHay(c.estatusBq) || {}).won){
+      c.estatusBq = "ganado"; c.updatedAt = fecha;
+    }
   }
   e.updatedAt = new Date().toISOString();
   guardar(); render();
@@ -14193,9 +14414,12 @@ function contextoIA(){
 ""] : []),
 `CLIENTES (${cs.length}):`,
 ...lim(cs.map(c =>
-  `- ${c.empresa} · contacto ${c.contacto || "—"} · ${est(c.estatus).name}` +
-  ` · ejecutivo ${c.ejecutivo || "sin asignar"}` +
-  (c.tarifa ? ` · tarifa ${moneyMN(c.tarifa)}` : "") +
+  /* La etapa y el ejecutivo del departamento desde el que se pregunta: a
+     banquetes no le sirve que la IA le conteste con el embudo de hospedaje. */
+  `- ${c.empresa} · contacto ${c.contacto || "—"} · ${
+     (estatusSiHay(estatusDeCli(c)) || {}).name || "sin tratar"}` +
+  ` · ejecutivo ${ejecutivoDeCli(c) || "sin asignar"}` +
+  (hosp && c.tarifa ? ` · tarifa ${moneyMN(c.tarifa)}` : "") +
   (c.ubicacion ? ` · ${c.ubicacion}` : "") +
   ` · última actividad ${ultima[c.id] ? String(ultima[c.id]).slice(0,10) : "nunca"}` +
   (c.notas ? ` · notas: ${corta(c.notas, 160)}` : "")), 120),

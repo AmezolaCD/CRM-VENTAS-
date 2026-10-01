@@ -239,6 +239,12 @@ using (
        then tipo = 'prospectos' and lower(coalesce(duenio,'')) = lower(public.crm_nombre())
        else tipo in ('ajustes','habitaciones','usuarios')
             or public.crm_rol() in ('admin','direccion','gerente','gte_banquetes')
+            -- Banquetes escribe SU columna en la ficha del cliente: su etapa y
+            -- su ejecutivo de banquetes. La cartera le baja entera —ver la
+            -- regla de lectura de arriba—, así que también tiene que poder
+            -- devolverla: el renglón trae el `duenio` de ventas, y sin esto el
+            -- servidor se lo rebota y su etapa no sale nunca de su equipo.
+            or (tipo = 'clientes' and public.crm_rol() = 'banquetes')
             or duenio is null
             or lower(duenio) = lower(public.crm_nombre())
   end

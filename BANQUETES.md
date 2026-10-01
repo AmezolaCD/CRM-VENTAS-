@@ -57,6 +57,25 @@ quitarle la pestaña—:
 Borrar un cliente sigue arrastrando todo lo que cuelga de él, convenios incluidos. Por eso el
 aviso de borrado los cuenta uno por uno aunque quien borra no los alcance a ver.
 
+### Y la cartera dice lo de banquetes
+
+Las columnas **Estatus**, **Tarifa** y **Ejecutivo** de la lista de clientes son de hospedaje.
+En banquetes esas tres dicen lo suyo: su propio **estatus**, lo **vendido** —la suma de sus
+eventos confirmados— y el **ejecutivo de banquetes**. Guiones en las tres quieren decir que
+nadie de banquetes se ha puesto en contacto con ese cliente todavía.
+
+El ejecutivo **se llena solo**: en cuanto alguien de banquetes le guarda una cotización o un
+contrato, el cliente queda a su nombre, y no se lo quita la siguiente que le cotice. La
+administración y la dirección no se apuntan solas, porque alcanzan el área pero no llevan
+cartera.
+
+El tablero de banquetes abre con una columna de más, **Sin tratar**. Arrastrar de ahí mueve el
+embudo de banquetes y **no toca el de ventas**; lo mismo una boda confirmada, que ahora gana al
+cliente para banquetes y deja el convenio de hospedaje donde estaba.
+
+En **Nueva cotización**, la lista de *Ejecutivo de banquetes* ofrece sólo a los del área. Una
+cotización vieja con un nombre de otra área lo conserva, marcado *· de otra área*.
+
 ### Para darlos de alta
 
 Son los dos pasos de siempre (ver `ROLES.md`): primero la cuenta en **Supabase →

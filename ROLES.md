@@ -56,6 +56,17 @@ Son dos negocios distintos y cada uno ve el suyo:
   cliente y sin él no se puede ni abrir—, no porque el trabajo de un área sea asunto de la
   otra.
 
+  **Y la cartera se comparte, pero no las columnas.** El cliente lleva dos etapas y dos
+  ejecutivos: los de ventas y los de banquetes. En el apartado de banquetes la lista enseña
+  los suyos —y «Vendido», sus eventos confirmados, donde ventas tiene la tarifa—; vacío
+  quiere decir que nadie de banquetes se ha puesto en contacto con ese cliente. Lo que cada
+  área escribe no toca lo de la otra: una boda confirmada ya no le cierra el convenio a una
+  ejecutiva de hospedaje que ni se había enterado.
+
+  En banquetes, además, cada ejecutiva ve lo suyo **y lo que nadie de banquetes ha tomado**,
+  para que pueda levantar un cliente sin esperar a que se lo pasen. Nadie pierde nada: lo que
+  veía por el campo de ventas lo sigue viendo igual.
+
   La administración y la dirección alcanzan los tres departamentos, así que lo que ELLAS ven
   depende del departamento en el que hayan entrado, no de su papel: al cambiarse de
   departamento cambia la bitácora que leen. En el **filtro por persona no aparecen**, porque no
@@ -313,9 +324,15 @@ Escribir se deja más suelto que leer a propósito. Un renglón que el servidor 
 renglón que ese equipo nunca va a mandar, y una regla de más al escribir le tumbaría la subida
 entera por una fila que ni siquiera tiene.
 
-> Si ya corriste `roles.sql` antes —antes del formulario, o antes de que existiera
-> banquetes—, **vuelve a correrlo**: el archivo se reemplaza entero cada vez y es lo que trae
-> las reglas nuevas.
+> Si ya corriste `roles.sql` antes —antes del formulario, antes de que existiera banquetes, o
+> antes de que banquetes tuviera sus propias columnas—, **vuelve a correrlo**: el archivo se
+> reemplaza entero cada vez y es lo que trae las reglas nuevas.
+>
+> **La de octubre hace falta de verdad.** Banquetes escribe su etapa y su ejecutivo en la
+> ficha de un cliente cuyo dueño es de ventas; sin la regla nueva el servidor le rebota ese
+> renglón. No se pierde nada —queda en el semáforo como *«Falta subir»* y se reintenta—, pero
+> la columna de banquetes no sale de esa computadora, y la gerencia ve una cosa distinta de
+> la que ve la ejecutiva.
 
 ### Un registro sin su cliente no es un registro borrado
 

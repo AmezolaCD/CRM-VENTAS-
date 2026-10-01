@@ -198,6 +198,9 @@ También se puede hacer a mano, repitiendo el paso 3 en cada equipo.
 - **Nada se cambia solo.** Moverle los números a alguien que está negociando es otra manera de
   provocar el error que se quiere evitar. Se avisa y decide la persona.
 - **Al cerrar el formulario se sincroniza de inmediato**, sin esperar los 15 segundos.
+- **La ficha de un cliente viaja entera.** Si ventas y banquetes lo editan en los mismos
+  segundos, gana el último que llegue —para todo el renglón—. En la práctica no estorba: cada
+  área escribe sus propias columnas y la subida sale en menos de un segundo.
 - **Las tarifas, los Ajustes y la lista del equipo bajan siempre, sin preguntar.** Esas tres
   cosas las escribe nada más el administrador, así que en el equipo de un ejecutivo no hay nada
   que proteger: lo que diga el servidor es lo bueno y entra tal cual.

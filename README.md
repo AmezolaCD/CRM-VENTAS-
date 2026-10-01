@@ -79,6 +79,26 @@ venta, estatus y notas. Se ven de dos formas:
 El embudo tiene seis estatus: Contactado → Propuesta → Negociación → **Cotización enviada**
 → Ganado / Perdido. Los dos últimos pasos los mueve el convenio solo (ver abajo).
 
+**La misma cartera, dos lecturas.** Ventas y banquetes comparten los clientes, pero no la
+información que les sirve de ellos. Las columnas **Estatus**, **Tarifa** y **Ejecutivo** son de
+hospedaje; en el apartado de banquetes esas tres dicen lo suyo:
+
+| En ventas | En banquetes |
+|---|---|
+| Estatus del convenio | **Estatus de banquetes**, su propio embudo |
+| Tarifa negociada | **Vendido**: la suma de sus eventos confirmados |
+| Ejecutivo de ventas | **Ejecutivo de banquetes** |
+
+Un cliente que **nadie de banquetes ha tratado** sale con guiones en las tres: ésa es la
+respuesta a «¿ya le habló alguien?». La columna de ejecutivo **se llena sola** en cuanto
+alguien de banquetes le guarda una cotización o un contrato, y no se la quita la siguiente
+persona que le cotice. El tablero de banquetes abre con una columna de más, **Sin tratar**,
+para los que todavía no tiene nadie; arrastrar ahí una tarjeta mueve el embudo de banquetes y
+**no toca el de ventas**.
+
+Cada quien edita lo suyo: la ficha, abierta desde banquetes, no pide tarifa ni estatus ni
+ejecutivo de ventas, y guardarla no se los borra.
+
 Hay un **acceso directo a WhatsApp** en la tarjeta, en la tabla y en la ficha, que abre el
 chat con el número registrado y un saludo ya redactado. A los números de 10 dígitos les
 antepone la lada del país (configurable, México por omisión).
@@ -386,6 +406,11 @@ banquetes**, que alcanza lo de todo su equipo, y **ejecutivo de banquetes**, que
 suyo. Quién es quién, y los datos legales que hay que capturar antes del primer contrato, en
 **[BANQUETES.md](BANQUETES.md)**.
 
+En **Nueva cotización** la lista de *Ejecutivo de banquetes* ofrece **sólo a los de banquetes**:
+la gerencia y las ejecutivas, sin la dirección ni la administración, que alcanzan el área pero
+no llevan eventos. Una cotización vieja que traiga un nombre de otra área **no lo pierde**: se
+conserva marcado *· de otra área*, porque perderlo callando sería peor.
+
 ### Formulario de prospección
 
 Pestaña **Formulario**. Para levantar contactos en una expo, una feria o un evento del hotel,
@@ -592,6 +617,12 @@ detalle está en **[ROLES.md](ROLES.md)**.
 Lo que amarra a una persona con su cartera es el **nombre**, no el correo: se compara contra
 el campo *Ejecutivo* de cada cliente. Escribirlos distinto es el error más fácil de cometer y
 el más difícil de ver.
+
+En banquetes la regla es otra, y es **más abierta a propósito**: cada ejecutiva ve los clientes
+que trae a su nombre **en la columna de banquetes**, más los que **nadie de banquetes ha
+tomado** —para que pueda levantar uno sin esperar a que se lo pasen—. Los que ya lleva una
+compañera no le salen; la gerencia de banquetes los sigue viendo todos. Y nadie pierde nada:
+los clientes que una ejecutiva veía por el campo de ventas los sigue viendo igual.
 
 Los permisos van en dos niveles y conviene no confundirlos: lo configurado en Ajustes acomoda
 **lo que cada quien ve en pantalla**, pero los datos siguen bajando completos a cada equipo.
