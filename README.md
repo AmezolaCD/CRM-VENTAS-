@@ -324,6 +324,14 @@ arrancaría pegada al borde del papel. Ahí se apaga desde el diálogo de impres
 Un convenio guarda **su propia copia** de los textos y de las tarifas al crearse, así que
 cambiar el catálogo o los textos **no altera los convenios ya emitidos**.
 
+### Escoger el cliente
+
+En el convenio, el contrato, la cotización de banquetes, al subir un documento firmado y al
+registrar una actividad suelta, arriba de la lista de clientes hay un **campo de búsqueda**.
+Al teclear, la lista se acorta a lo que coincida en **empresa o contacto** —sin que estorben
+mayúsculas ni acentos: *avila* encuentra *Textiles Ávila*—, y si queda uno solo **se escoge
+solo**. Borrar la búsqueda devuelve la lista completa.
+
 ### Contratos
 
 Pestaña **Contratos**. Cotiza una **estancia concreta**: estas fechas, estas habitaciones y, si

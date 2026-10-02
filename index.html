@@ -770,7 +770,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.03-79";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.03-80";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1673,6 +1673,90 @@ function selectEjecutivo(valor, nombreCampo, deArea){
       ${suelto ? `<option value="${esc(v)}" selected>${esc(v)}${
           deArea ? " · de otra área" : " · sin dar de alta"}</option>` : ""}
     </select>`;
+}
+
+/* ----- Escoger un cliente -----------------------------------------------
+   El mismo desplegable con la cartera entera estaba copiado en cinco
+   editores. Ahora es uno solo, y además trae con qué buscar: con unas decenas
+   de clientes abrir la lista y leerla a ojo ya es incómodo, y con cientos es
+   un estorbo diario.
+
+   Lo importante de cómo está hecho: el `<select>` SE QUEDA, con su mismo id y
+   su mismo valor —el id del cliente—. El buscador nada más acorta la lista.
+   Así los cinco lugares que lo leen al guardar, el aviso en rojo de «falta el
+   cliente» y el auto‑llenado del ejecutivo —que escucha su `change`— siguen
+   funcionando sin tocarles una línea.
+   -------------------------------------------------------------------------- */
+
+/** Una opción del desplegable. `sufijo` es lo que va después del nombre. */
+const opcionCliente = (c, sel, sufijo) =>
+  `<option value="${esc(c.id)}"${c.id === sel ? " selected" : ""}>${esc(c.empresa)}${
+    sufijo && c[sufijo] ? " · " + esc(c[sufijo]) : ""}</option>`;
+
+/** La cartera completa, por nombre. NO `clientesVisibles()`: ésa aplica el
+    buscador del encabezado y el filtro por persona, y dentro de un formulario
+    la lista se encogería sola sin que nadie entienda por qué. */
+const clientesParaEscoger = () =>
+  [...state.clientes].sort((a, b) => a.empresa.localeCompare(b.empresa, "es"));
+
+/**
+ * El campo de búsqueda más el desplegable de siempre.
+ *
+ * `opc.vacio` pone la opción «— Selecciona un cliente —» (así es en los
+ * documentos; en el diálogo de actividad no, porque ahí siempre hay uno).
+ * `opc.sufijo` es qué se enseña después del nombre: el contacto o el
+ * ejecutivo, según de qué sirva en esa pantalla.
+ */
+function buscadorCliente(valorId, idCampo, opc){
+  const o = Object.assign({ vacio:true, sufijo:"contacto", estilo:"" }, opc || {});
+  const lista = clientesParaEscoger();
+  return `<input class="field busca-cli" data-para="${idCampo}" type="search"
+        placeholder="Escriba para buscar entre ${lista.length} clientes…"
+        autocomplete="off" style="margin-bottom:6px">
+    <select class="field" id="${idCampo}"${o.estilo ? ` style="${o.estilo}"` : ""}
+        data-vacio="${o.vacio ? 1 : 0}" data-sufijo="${esc(o.sufijo)}">
+      ${o.vacio ? `<option value="">— Selecciona un cliente —</option>` : ""}
+      ${lista.map(c => opcionCliente(c, valorId, o.sufijo)).join("")}
+    </select>
+    <div class="hint" data-cuenta="${idCampo}"></div>`;
+}
+
+/**
+ * Le amarra el buscador a su desplegable. Se llama desde `modal()`, una sola
+ * vez, así que cualquier formulario que traiga el componente lo recibe sin
+ * repetir nada —y el que se agregue mañana, también—.
+ *
+ * La lista se vuelve a armar en vez de esconder opciones con CSS: esconder un
+ * `<option>` no funciona igual en todos los navegadores, y aquí se trabaja
+ * también desde el celular.
+ */
+function armarBuscadoresCliente(ov){
+  ov.querySelectorAll(".busca-cli").forEach(campo => {
+    const sel = ov.querySelector("#" + campo.dataset.para);
+    if (!sel) return;
+    const conVacio = sel.dataset.vacio === "1";
+    const sufijo = sel.dataset.sufijo || "";
+    const cuenta = ov.querySelector(`[data-cuenta="${campo.dataset.para}"]`);
+    campo.addEventListener("input", () => {
+      const q = mismoNombre(campo.value);
+      const todos = clientesParaEscoger();
+      const hallados = !q ? todos : todos.filter(c =>
+        mismoNombre(c.empresa).includes(q) || mismoNombre(c.contacto).includes(q));
+      /* Se conserva lo que ya estaba escogido si sigue en la lista; y si queda
+         uno solo, se escoge solo, que es a lo que va el que está buscando. */
+      const antes = sel.value;
+      const sigue = hallados.some(c => c.id === antes) ? antes
+                  : (hallados.length === 1 ? hallados[0].id : "");
+      sel.innerHTML = (conVacio ? `<option value="">— Selecciona un cliente —</option>` : "") +
+        hallados.map(c => opcionCliente(c, sigue, sufijo)).join("");
+      sel.value = sigue;
+      if (sel.value !== antes) sel.dispatchEvent(new Event("change"));
+      if (cuenta) cuenta.textContent = !q ? ""
+        : hallados.length === 1 ? "Uno solo: ya quedó escogido."
+        : hallados.length ? `${hallados.length} clientes coinciden.`
+        : "Ninguno coincide. Borre la búsqueda para ver todos.";
+    });
+  });
 }
 
 /**
@@ -7524,6 +7608,7 @@ function modal(html){
     if (e.target === ov || e.target.closest("[data-close]")) ov.remove();
   });
   document.body.appendChild(ov);
+  armarBuscadoresCliente(ov);
   /* Al cerrarse el ÚLTIMO formulario se sincroniza de una vez, en lugar de
      esperar hasta quince segundos más. Mientras hubo algo abierto el sondeo
      sólo miró —ver mirarSinTocar—, así que aquí es donde de verdad entra lo
@@ -8001,8 +8086,8 @@ function nuevaActividadSuelta(){
       <div class="modal-head"><h2>¿Con qué cliente?</h2><button class="btn" data-close>✕</button></div>
       <div class="modal-body">
         <label class="lbl">Cliente</label>
-        <select class="field" id="selCli" style="width:100%">${lista.map(c =>
-          `<option value="${esc(c.id)}">${esc(c.empresa)}${c.ejecutivo ? " · " + esc(c.ejecutivo) : ""}</option>`).join("")}</select>
+        ${buscadorCliente(lista[0] && lista[0].id, "selCli",
+                          { vacio:false, sufijo:"ejecutivo", estilo:"width:100%" })}
         <p class="hint" style="margin:10px 0 0">La actividad queda también en la ficha de ese cliente.</p>
       </div>
       <div class="modal-foot"><div class="spacer"></div>
@@ -8011,6 +8096,10 @@ function nuevaActividadSuelta(){
     </div>`);
   ov.querySelector("#bSigue").onclick = () => {
     const id = ov.querySelector("#selCli").value;
+    /* Con una búsqueda que no encuentra a nadie la lista queda vacía, y sin
+       esto la actividad nacería sin cliente: colgada de nada y fuera de toda
+       ficha. */
+    if (!id){ alert("Escoja un cliente de la lista. Si no sale, borre la búsqueda."); return; }
     ov.remove();
     modalActividad(id, null);
   };
@@ -8316,11 +8405,7 @@ function editarConvenio(id, clientePre, alCerrar){
       <div class="modal-body">
         <div class="grid">
           <div class="full"><label class="lbl">Cliente</label>
-            <select class="field" id="cCli">
-              <option value="">— Selecciona un cliente —</option>
-              ${[...state.clientes].sort((a,b)=>a.empresa.localeCompare(b.empresa,"es")).map(c =>
-                `<option value="${c.id}"${c.id===v.clienteId?" selected":""}>${esc(c.empresa)}${c.contacto?" · "+esc(c.contacto):""}</option>`).join("")}
-            </select></div>
+            ${buscadorCliente(v.clienteId, "cCli")}</div>
           <div class="full"><label class="lbl">Ejecutivo de ventas</label>
             ${selectEjecutivo(v.ejecutivo || (cliente(v.clienteId) || {}).ejecutivo || miNombre(), "cEje")}
             <div class="hint">Quien firma la carta por el hotel y a quien se le avisa cuando el
@@ -11705,12 +11790,7 @@ function editarContrato(id, clientePre, alCerrar){
         <div id="ctErr"></div>
         <div class="grid">
           <div class="full"><label class="lbl">Cliente</label>
-            <select class="field" id="ctCli">
-              <option value="">— Selecciona un cliente —</option>
-              ${[...state.clientes].sort((a,b)=>a.empresa.localeCompare(b.empresa,"es")).map(x =>
-                `<option value="${x.id}"${x.id===k.clienteId?" selected":""}>${esc(x.empresa)}${
-                  x.contacto?" · "+esc(x.contacto):""}</option>`).join("")}
-            </select></div>
+            ${buscadorCliente(k.clienteId, "ctCli")}</div>
           <div class="full"><label class="lbl">Ejecutivo de ventas</label>
             ${selectEjecutivo(k.ejecutivo || (cliente(k.clienteId)||{}).ejecutivo || miNombre(), "ctEje")}</div>
           <div><label class="lbl">Tipo de documento</label>
@@ -12623,12 +12703,7 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
           <div><label class="lbl">Folio <span class="hint">(el que traiga el papel)</span></label>
             <input class="field" id="exFolio" placeholder="CV-2025-014"></div>
           <div class="full"><label class="lbl">Cliente</label>
-            <select class="field" id="exCli">
-              <option value="">— Selecciona un cliente —</option>
-              ${[...state.clientes].sort((a,b)=>a.empresa.localeCompare(b.empresa,"es")).map(x =>
-                `<option value="${x.id}"${x.id === clientePre ? " selected" : ""}>${esc(x.empresa)}${
-                  x.contacto ? " · " + esc(x.contacto) : ""}</option>`).join("")}
-            </select></div>
+            ${buscadorCliente(clientePre, "exCli")}</div>
           <div class="full"><label class="lbl">Ejecutivo de ventas</label>
             ${selectEjecutivo(miNombre(), "exEje")}</div>
           <div><label class="lbl">Fecha del documento</label>
@@ -13262,12 +13337,7 @@ function editarEvento(id, tipoPre, alCerrar){
         <div id="evErr"></div>
         <div class="grid">
           <div class="full"><label class="lbl">Cliente</label>
-            <select class="field" id="evCli">
-              <option value="">— Selecciona un cliente —</option>
-              ${[...state.clientes].sort((a,b)=>a.empresa.localeCompare(b.empresa,"es")).map(x =>
-                `<option value="${x.id}"${x.id===e.clienteId?" selected":""}>${esc(x.empresa)}${
-                  x.contacto?" · "+esc(x.contacto):""}</option>`).join("")}
-            </select></div>
+            ${buscadorCliente(e.clienteId, "evCli")}</div>
           <div><label class="lbl">Atención a <span class="hint">(a quién va dirigida)</span></label>
             <input class="field" id="evAtn" value="${esc(e.atencion)}" placeholder="Claudia Cruz"></div>
           <div><label class="lbl">Referencia del evento</label>
