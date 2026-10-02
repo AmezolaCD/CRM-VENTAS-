@@ -322,7 +322,10 @@ arrancaría pegada al borde del papel. Ahí se apaga desde el diálogo de impres
   `{{CONTACTO}}`, `{{VIGENCIA}}` y `{{ANIO}}` que se sustituyen al generar cada carta.
 
 Un convenio guarda **su propia copia** de los textos y de las tarifas al crearse, así que
-cambiar el catálogo o los textos **no altera los convenios ya emitidos**.
+cambiar el catálogo o los textos **no altera los convenios ya emitidos**. Al reabrir un borrador,
+las tarifas que ya se habían negociado se reconocen por identificador **y por clave** (STKN,
+GDDB…): así, si alguna vez se borra un tipo de habitación y se vuelve a dar de alta, el trabajo
+de la negociación no se pierde.
 
 ### Escoger el cliente
 
@@ -753,9 +756,6 @@ por cliente y viven en Supabase.
   Spa** de agosto de 2026. Revisa en Ajustes que sigan vigentes.
 - **Suite King aparece con la misma tarifa pública que las Standard (5,300).** Viene así del
   catálogo que nos pasaron; conviene confirmarlo antes de emitir convenios con ese tipo.
-- **Permisos por persona.** Con la nube, hoy todos pueden todo. Si se quiere que sólo la
-  gerencia edite tarifas o cierre convenios, se hace con una tabla de roles y ajustando las
-  políticas de `nube.sql`.
 - **Aviso instantáneo** en lugar del sondeo de 15 segundos: Supabase lo permite (Realtime).
 - **Avisar por correo al ejecutivo** cuando el cliente firma. Hoy el aviso sale dentro del
   CRM. Para que además llegue un correo hace falta un servicio de envío (Resend, SendGrid o

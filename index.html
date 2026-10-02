@@ -770,7 +770,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.03-80";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.03-81";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2525,6 +2525,16 @@ function nochesDe(g){
   const d = Math.round((new Date(g.salida + "T00:00:00") - new Date(g.llegada + "T00:00:00")) / 864e5);
   return isNaN(d) || d < 0 ? "" : d;
 }
+
+/**
+ * La clave de una habitación, para compararla.
+ *
+ * La clave —STKN, GDDB, CARE— es lo que de verdad identifica a un tipo de
+ * habitación en el hotel. El identificador interno no: si el catálogo se
+ * recaptura desde Ajustes, los tipos nacen con identificadores nuevos y lo
+ * que apunte al viejo se queda colgando.
+ */
+const claveHab = c => String(c || "").trim().toUpperCase();
 
 function saneaHab(h){
   const o = Object.assign({ id:"", codigo:"", nombre:"", grupo:"deluxe", publica:null }, h || {});
@@ -7394,7 +7404,12 @@ function renderAjustes(){
 
   p.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
     const id = b.dataset.del;
-    const usos = state.convenios.filter(v => v.habitaciones.some(x => x.tipoId === id)).length;
+    /* También por clave: si este tipo ya se recapturó alguna vez, los
+       convenios de antes lo traen con otro identificador y el aviso decía
+       cero. Justo el aviso que debía detener el borrado. */
+    const cod = claveHab((state.habitaciones.find(x => x.id === id) || {}).codigo);
+    const usos = state.convenios.filter(v => v.habitaciones.some(x =>
+      x.tipoId === id || (cod && claveHab(x.codigo) === cod))).length;
     if (usos && !confirm(`Este tipo aparece en ${usos} convenio(s). Los convenios ya guardados conservan su copia. ¿Eliminarlo del catálogo?`)) return;
     recogerAjustes();
     state.habitaciones = state.habitaciones.filter(x => x.id !== id);
@@ -8369,11 +8384,25 @@ function editarConvenio(id, clientePre, alCerrar){
     textos: Object.assign({}, state.ajustes.textos)
   });
 
-  // En borrador la tarifa pública se refresca desde el catálogo; el precio convenio se conserva.
-  const previos = new Map(v.habitaciones.map(h => [h.tipoId, h.convenio]));
+  /* En borrador la tarifa pública se refresca desde el catálogo; el precio
+     convenio se conserva.
+     Y se reconoce por identificador O POR CLAVE. Si el catálogo se recapturó
+     —borrar los tipos y volverlos a dar de alta—, los identificadores son
+     otros, y buscando sólo por identificador el convenio se reabría con TODAS
+     las tarifas negociadas en blanco: quien le diera Guardar perdía el trabajo
+     de la negociación, sin un solo aviso. */
+  const previos = new Map();
+  for (const h of v.habitaciones){
+    if (h.tipoId) previos.set("id:" + h.tipoId, h.convenio);
+    if (claveHab(h.codigo)) previos.set("cod:" + claveHab(h.codigo), h.convenio);
+  }
+  const yaNegociada = h =>
+    previos.has("id:" + h.id)                 ? previos.get("id:" + h.id)
+  : previos.has("cod:" + claveHab(h.codigo))  ? previos.get("cod:" + claveHab(h.codigo))
+  : "";
   const filas = state.habitaciones.map(h => ({
     tipoId:h.id, codigo:h.codigo, nombre:h.nombre, grupo:h.grupo, publica:h.publica,
-    convenio: previos.has(h.id) ? previos.get(h.id) : ""
+    convenio: yaNegociada(h)
   }));
 
   const bloque = gid => {
@@ -11425,7 +11454,18 @@ function cuerpoConvenio(v, c){
       (suyos ? `<div class="inc">Desayuno incluido: ${esc(listaDesayunos(suyos))}</div>` : "");
   };
 
-  const tablaGrupo = gid => {
+  /* La tabla y su «incluye» se piden por separado porque en Recovery no van
+     juntos: Marco los quiere DESPUÉS de las dos columnas de servicios. En
+     Deluxe sí se piden pegados, como siempre. Los dos llevan la misma
+     condición —que el convenio traiga habitaciones de ese bloque—, y por eso
+     `incluyeDeGrupo` la repite: sin ella, las palomitas de Recovery saldrían
+     en convenios que ni siquiera tienen tabla de Recovery. */
+  const incluyeDeGrupo = gid => {
+    if (!v.habitaciones.some(x => x.grupo === gid)) return "";
+    return incluyeDelBloque(infoGrupo(gid, v), gid, v);
+  };
+
+  const tablaGrupo = (gid, conIncluye) => {
     const hs = v.habitaciones.filter(x => x.grupo === gid);
     if (!hs.length) return "";
     const g = infoGrupo(gid, v);
@@ -11437,7 +11477,7 @@ function cuerpoConvenio(v, c){
         <td>${esc(x.nombre)}</td>
         <td class="num">${x.publica === null ? "N/A" : esc(moneyMN(x.publica))}</td>
         <td class="num"><b>${esc(moneyMN(x.convenio))}</b></td></tr>`).join("")}</tbody></table>
-      ${incluyeDelBloque(g, gid, v)}`;
+      ${conIncluye ? incluyeDelBloque(g, gid, v) : ""}`;
   };
 
   const bloqueFirma = (f, titulo, nombreDef, puestoDef, celDef) => `
@@ -11474,14 +11514,19 @@ function cuerpoConvenio(v, c){
 
       <p style="white-space:pre-wrap">${esc(T("saludo"))}</p>
 
-      ${tablaGrupo("deluxe")}
-      ${v.incluyeRecovery ? tablaGrupo("recovery") : ""}
+      ${tablaGrupo("deluxe", true)}
+      ${v.incluyeRecovery ? tablaGrupo("recovery", false) : ""}
 
       ${v.incluyeRecovery && (t.recoveryCol1 || t.recoveryCol2) ? `
         <div class="doc-cols" style="margin-top:14px">
           <div><h3>${esc(t.recoveryCol1Titulo)}</h3><div class="pol">${esc(T("recoveryCol1"))}</div></div>
           <div><h3>${esc(t.recoveryCol2Titulo)}</h3><div class="pol">${esc(T("recoveryCol2"))}</div></div>
         </div>` : ""}
+
+      <!-- Los beneficios de Recovery van aquí, después de los servicios, no
+           pegados a su tabla. Lo pidió Marco: lo que se ofrece se lee mejor
+           al final de todo lo de Recovery que en medio. -->
+      ${v.incluyeRecovery ? incluyeDeGrupo("recovery") : ""}
 
       <h2>Especificaciones de tarifas</h2>
       <div class="pol">${esc(T("especificaciones"))}</div>
