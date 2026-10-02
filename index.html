@@ -770,7 +770,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.02-78";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.03-79";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1895,7 +1895,18 @@ function catalogo(guardadas){
   const viejo = guardadas.length === 2 &&
     guardadas.some(h => h.nombre === "Sencilla y Doble") &&
     guardadas.some(h => h.nombre === "Care");
-  return (viejo ? HABS_DEF : guardadas).map(saneaHab);
+  const lista = (viejo ? HABS_DEF : guardadas).map(saneaHab);
+  /* Se acomodan por el orden que dejó Ajustes, y aquí —al leer— no al bajar.
+     La sincronización actualiza el CONTENIDO de un renglón que este equipo ya
+     tiene, pero nunca lo mueve de lugar: el mapa que usa conserva la posición
+     de cada clave. Ordenando aquí da igual en qué posición lo haya dejado,
+     porque todo pasa por `sanear` antes de pintarse.
+     Una habitación sin orden —de antes de octubre— se va al final sin
+     estorbar, conservando la posición que traía entre las suyas. */
+  const pos = h => Number.isFinite(h.orden) ? h.orden : Infinity;
+  return lista.map((h, i) => [h, i])
+    .sort((a, b) => pos(a[0]) - pos(b[0]) || a[1] - b[1])
+    .map(par => par[0]);
 }
 
 function saneaCliente(c){
@@ -2437,6 +2448,15 @@ function saneaHab(h){
   o.codigo = String(o.codigo || "").toUpperCase().trim();
   if (!GRUPOS.some(g => g.id === o.grupo)) o.grupo = "deluxe";
   o.publica = (o.publica === null || o.publica === "" || o.publica === undefined) ? null : (Number(o.publica) || 0);
+  /* El lugar que ocupa en la lista. Hasta ahora el orden era nada más el
+     índice del arreglo: no iba en el renglón, así que no subía al servidor y
+     cada equipo veía el suyo. Ahora es un dato y viaja como los demás.
+     No lleva valor por omisión —nace cuando Ajustes lo escribe— para no
+     cambiarle la forma a todos los renglones de golpe. */
+  if (o.orden !== undefined){
+    o.orden = Number(o.orden);
+    if (!Number.isFinite(o.orden)) delete o.orden;
+  }
   return o;
 }
 
@@ -3186,7 +3206,12 @@ function olvidarHuerfanos(){
 
 async function bajar(desde){
   const filtro = desde ? `&actualizado=gt.${encodeURIComponent(desde)}` : "";
-  const filas = await api(`/rest/v1/crm_datos?select=id,tipo,datos,actualizado,borrado${filtro}`);
+  /* `order=id`: sin esto el servidor devuelve las filas como se le acomode
+     —y una fila editada cambia de lugar—, así que un equipo recién enlazado
+     recibía el catálogo en un orden distinto del de todos los demás. Quien
+     manda el orden del catálogo es el campo `orden` de cada habitación; esto
+     nada más quita una fuente de desorden gratuita. */
+  const filas = await api(`/rest/v1/crm_datos?select=id,tipo,datos,actualizado,borrado${filtro}&order=id.asc`);
   return filas || [];
 }
 
@@ -6795,7 +6820,10 @@ function renderAjustes(){
         GRUPOS.map(g => `<option value="${g.id}"${x.grupo===g.id?" selected":""}>${esc(infoGrupo(g.id).nombre)}</option>`).join("")}</select></td>
       <td><input class="field" data-k="publica" inputmode="decimal" placeholder="N/A"
             value="${x.publica === null ? "" : esc(x.publica)}" style="width:120px;text-align:right"></td>
-      <td><button class="btn sm danger" data-del="${x.id}">Eliminar</button></td></tr>`;
+      <td class="nowrap">
+        <button class="btn sm" data-sube="${x.id}" title="Subir un lugar" aria-label="Subir un lugar">↑</button>
+        <button class="btn sm" data-baja="${x.id}" title="Bajar un lugar" aria-label="Bajar un lugar">↓</button>
+        <button class="btn sm danger" data-del="${x.id}">Eliminar</button></td></tr>`;
 
   const areaTexto = (k, label, alto, ayuda) => `
     <div class="full"><label class="lbl">${esc(label)}</label>
@@ -6949,7 +6977,7 @@ function renderAjustes(){
         Recovery Care del convenio original. Un convenio ya firmado conserva la tarifa que tenía al firmarse.</div>
       <table class="data"><thead><tr>
         <th style="width:100px">Clave</th><th>Tipo de habitación</th><th style="width:150px">Bloque</th>
-        <th style="width:140px">Tarifa pública</th><th style="width:100px"></th>
+        <th style="width:140px">Tarifa pública</th><th style="width:190px"></th>
       </tr></thead><tbody id="tHab">${state.habitaciones.map(filaHab).join("")}</tbody></table>
       <p><button class="btn" id="bAddHab">+ Agregar tipo de habitación</button></p>
 
@@ -7173,9 +7201,13 @@ function renderAjustes(){
       jefe:  tr.querySelector('[data-jk="jefe"]').value
     })));
 
-    p.querySelectorAll("#tHab tr[data-id]").forEach(tr => {
+    p.querySelectorAll("#tHab tr[data-id]").forEach((tr, i) => {
       const x = state.habitaciones.find(y => y.id === tr.dataset.id);
       if (!x) return;
+      /* El lugar que ocupa, tal como quedó en pantalla. Es lo que hace que el
+         orden viaje: sin esto, mover un renglón no cambiaba ningún dato y por
+         lo tanto no había nada que subir. */
+      x.orden = i;
       x.codigo  = tr.querySelector('[data-k="codigo"]').value.trim().toUpperCase();
       x.nombre  = tr.querySelector('[data-k="nombre"]').value.trim() || "Sin nombre";
       x.grupo   = tr.querySelector('[data-k="grupo"]').value;
@@ -7257,6 +7289,25 @@ function renderAjustes(){
     state.habitaciones.push(saneaHab({ nombre:"Nuevo tipo", grupo:"deluxe", publica:null }));
     guardar(); renderAjustes();
   };
+  /* Mover un renglón de lugar.
+   *
+   * Primero se recoge lo que haya tecleado en la pantalla y luego se mueve:
+   * Ajustes no se guarda solo, y repintarlo sin recoger antes le borraría a
+   * quien esté capturando lo que lleva escrito. Es el mismo orden que ya usan
+   * «Agregar» y «Eliminar». */
+  const moverHab = (id, paso) => {
+    recogerAjustes();
+    const i = state.habitaciones.findIndex(x => x.id === id);
+    const j = i + paso;
+    if (i < 0 || j < 0 || j >= state.habitaciones.length) return;
+    const h = state.habitaciones;
+    [h[i], h[j]] = [h[j], h[i]];
+    h.forEach((x, k) => { x.orden = k; });
+    guardar(); renderAjustes();
+  };
+  p.querySelectorAll("[data-sube]").forEach(b => b.onclick = () => moverHab(b.dataset.sube, -1));
+  p.querySelectorAll("[data-baja]").forEach(b => b.onclick = () => moverHab(b.dataset.baja,  1));
+
   p.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
     const id = b.dataset.del;
     const usos = state.convenios.filter(v => v.habitaciones.some(x => x.tipoId === id)).length;

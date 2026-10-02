@@ -198,6 +198,10 @@ También se puede hacer a mano, repitiendo el paso 3 en cada equipo.
 - **Nada se cambia solo.** Moverle los números a alguien que está negociando es otra manera de
   provocar el error que se quiere evitar. Se avisa y decide la persona.
 - **Al cerrar el formulario se sincroniza de inmediato**, sin esperar los 15 segundos.
+- **El orden del catálogo de habitaciones también viaja.** Desde octubre el lugar de cada tipo
+  se guarda dentro del renglón; antes era nada más la posición dentro de cada computadora, así
+  que el nombre y la tarifa llegaban a todos pero el orden no salía nunca del equipo del
+  administrador.
 - **La ficha de un cliente viaja entera.** Si ventas y banquetes lo editan en los mismos
   segundos, gana el último que llegue —para todo el renglón—. En la práctica no estorba: cada
   área escribe sus propias columnas y la subida sale en menos de un segundo.

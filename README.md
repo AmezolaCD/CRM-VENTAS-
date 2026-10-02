@@ -312,7 +312,10 @@ arrancaría pegada al borde del papel. Ahí se apaga desde el diálogo de impres
 - **Marca de agua**: monograma Q, el mismo logotipo, o ninguna. Se imprime al fondo de la
   primera hoja, como papel membretado.
 - **Catálogo de habitaciones**: clave, tipo, bloque (Deluxe o Recovery) y tarifa pública
-  —vacía = N/A—. **Es el único lugar donde se edita la tarifa pública.**
+  —vacía = N/A—. **Es el único lugar donde se edita la tarifa pública.** Cada renglón lleva dos
+  flechitas **↑ ↓** para moverlo de lugar: ese orden es el que sale en la tabla de tarifas del
+  convenio, y **viaja a todos los equipos** como cualquier otro cambio. Mover un renglón guarda
+  en seguida, igual que agregar o eliminar, y no borra lo que se lleve tecleado en los demás.
 - **Bloques de la carta**: el nombre que encabeza cada tabla y el texto de lo que incluye ese
   bloque, que se imprime **una sola vez** debajo de la tabla, como en el machote.
 - **Textos de la carta**: todos editables, con marcadores `{{HOTEL}}`, `{{EMPRESA}}`,
