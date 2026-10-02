@@ -99,6 +99,12 @@ pedir**. Ésa es la que se les manda a los siete jefes de área de la tabla del 
 Es **una sola liga fija** para todos, como la del lobby. Se pega en un correo, se manda por
 WhatsApp, o se deja en el escritorio de quien la use seguido.
 
+**El botón se encarga de que la liga sirva.** Antes de copiarla le pregunta al servidor si la
+clave que la abre ya está publicada; si todavía no, sincroniza y lo vuelve a intentar él solo.
+Sólo se niega —y dice por qué— si de verdad no se puede: sin conexión, o porque el
+administrador todavía no ha entrado nunca al CRM a crear esa clave. Eso último se arregla con
+que entre una sola vez.
+
 **Mándela completa.** La liga lleva dentro la dirección del servidor del hotel, porque el
 teléfono del jefe de área nunca ha abierto el CRM y no sabría a dónde mandar nada. Es larga por
 eso. Si un mensajero la corta a la mitad, el formulario abre pero dice *«esta liga llegó

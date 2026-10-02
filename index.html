@@ -770,7 +770,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.03-81";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.04-82";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -9208,8 +9208,15 @@ function editarCampana(id, alCerrar){
     if (pub) pub.onclick = async () => {
       pub.disabled = true; pub.textContent = "Publicando…";
       try{ await sincronizar(); }catch(e){}
+      await clavePublicada(tokenAlta());
       pintaLiga();
     };
+
+    /* Si salió el cartel, se le pregunta al servidor y se vuelve a pintar:
+       recién recargada la página no se sabe nada, y el cartel aparecería con
+       la clave perfectamente publicada. Si resulta que sí está, el segundo
+       pintado ya no entra aquí —la respuesta queda guardada—. */
+    if (sinClave) clavePublicada(tokenAlta()).then(hay => { if (hay) pintaLiga(); });
 
     const copiar = (boton, texto, area) => {
       const b = q(boton);
@@ -9418,12 +9425,47 @@ function tokenOdt(){
   return h.tokenOdt || "";
 }
 
-/** ¿La clave ya está en el servidor? Si no, la liga no abriría. */
-const claveOdtPublicada = () => {
-  if (!nubeActiva()) return true;
-  const t = tokenOdt();
-  return !!t && String(sincronizado.get("ajustes:global") || "").includes(t);
-};
+/* ----- ¿Una clave pública ya llegó al servidor? -------------------------
+   Las ligas que se reparten —la de las ODTs y la de registro de campañas—
+   se abren con una clave que vive en el renglón de ajustes. Si ese renglón
+   no está en el servidor, la liga rebota, así que antes de repartirla hay
+   que estar seguro.
+
+   Lo que había preguntaba por `sincronizado`, un mapa EN MEMORIA que se
+   vacía en cada recarga; y a quien no es administrador podía no llenársele
+   nunca, porque los ajustes no los sube —son SOLO_ADMIN—. O sea que el
+   botón podía negarse para siempre con la clave perfectamente publicada, y
+   justo a quien usa esa liga: marketing.
+
+   Ahora se le pregunta al servidor, que es el único que lo sabe de verdad.
+   Una clave publicada no se despublica sola, así que basta una vez por
+   sesión.
+   ------------------------------------------------------------------------ */
+const clavesEnElServidor = new Set();
+
+async function clavePublicada(token){
+  const t = String(token || "").trim();
+  if (!t) return false;
+  if (!nubeActiva()) return true;      // sin nube no hay liga pública que valga
+  if (clavesEnElServidor.has(t)) return true;
+  try{
+    const filas = await api("/rest/v1/crm_datos?id=eq." +
+      encodeURIComponent("ajustes:global") + "&select=id,datos");
+    /* Se busca el renglón por su id en vez de dar por hecho que viene solo:
+       el filtro lo pone el servidor, y confiar en la posición es confiar en
+       que nadie cambie nunca la consulta. */
+    const fila = (filas || []).find(f => f.id === "ajustes:global");
+    const hay = !!fila && JSON.stringify(fila.datos || {}).includes(t);
+    if (hay) clavesEnElServidor.add(t);
+    return hay;
+  }catch(e){ return false; }
+}
+
+/** Lo que ya se sabe sin preguntar, para pintar sin esperar al servidor. */
+const claveYaConfirmada = t =>
+  !!t && (clavesEnElServidor.has(t) ||
+          String(sincronizado.get("ajustes:global") || "").includes(t));
+
 
 const ligaDeOdt = () => {
   const t = tokenOdt();
@@ -9878,11 +9920,7 @@ function tokenAlta(){
  * Se pregunta contra lo último que el servidor aceptó, que es justo lo que
  * tiene. Sin nube no hay liga pública que valga y la pregunta no aplica.
  */
-const claveAltaPublicada = () => {
-  if (!nubeActiva()) return true;
-  const t = tokenAlta();
-  return !!t && String(sincronizado.get("ajustes:global") || "").includes(t);
-};
+const claveAltaPublicada = () => !nubeActiva() || claveYaConfirmada(tokenAlta());
 
 /** La dirección de esta misma aplicación, sin lo que traiga pegado. */
 const ligaDeAltaBase = () => {
@@ -15266,17 +15304,27 @@ function tiraOdts(){
  * por WhatsApp a recepción, ama de llaves, alimentos y bebidas, ventas,
  * banquetes y mantenimiento.
  */
-function copiarLigaOdt(){
+async function copiarLigaOdt(){
   const t = tokenOdt();
   if (!t){
     alert("Todavía no hay clave para esta liga.\n\n" +
           "La crea el administrador: pídele que entre a Ajustes una vez y la publique.");
     return;
   }
-  if (!claveOdtPublicada()){
-    alert("La clave todavía no ha subido al servidor, así que la liga no abriría.\n\n" +
-          "Sincroniza y vuelve a intentarlo.");
-    return;
+  /* Antes aquí decía «sincroniza y vuelve a intentarlo»: mandar a hacer a mano
+     algo que el botón puede hacer solo. Ahora lo hace —y sólo si después de
+     eso la clave sigue sin estar, se dice, y se dice POR QUÉ—. */
+  if (!(await clavePublicada(t))){
+    try{ await sincronizar(); }catch(e){}
+    if (!(await clavePublicada(t))){
+      alert(nube.estado === "error" || !navigator.onLine
+        ? "No se pudo confirmar la clave con el servidor: revisa la conexión y vuelve a " +
+          "intentarlo.\n\nLa liga no se copió para que no repartas una que no abre."
+        : "La clave de esta liga todavía no está en el servidor, así que la liga no " +
+          "abriría.\n\nLa publica el administrador: pídele que entre al CRM una vez. " +
+          "Es una sola vez, y a partir de ahí la liga sirve para siempre.");
+      return;
+    }
   }
   const liga = ligaDeOdt();
   const ok = () => alert("Liga copiada.\n\nMándasela a los jefes de área: con ella levantan " +
