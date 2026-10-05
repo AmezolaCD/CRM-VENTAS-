@@ -774,7 +774,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.05-87";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.06-88";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3618,6 +3618,34 @@ async function sincronizar(){
            solo delante de la persona que acaba de hacerlo—. */
         if (tumbas.has(r.id) && !r.borrado) continue;
 
+        /* UNA LÁPIDA NO ES UN CONFLICTO: ES UNA INSTRUCCIÓN.
+           Y por eso se atiende ANTES de las protecciones de abajo.
+
+           Abajo hay una regla que dice «si aquí hay una edición sin subir, no
+           la pises». Para una lápida esa regla era mortal, porque la edición
+           sin subir que creía estar protegiendo no existía: `sincronizado` es
+           un Map en memoria y arranca VACÍO en cada recarga, así que TODO lo
+           que ya estaba aquí parece recién editado. Resultado, las dos mitades
+           de lo que reportó Marco:
+
+             · la lápida se saltaba SIEMPRE —no a veces: siempre, en cada
+               vuelta y en cada equipo—, así que el borrado no llegaba a nadie;
+
+             · y el renglón, al verse como edición sin subir, se volvía a
+               MANDAR con borrado:false. Eso resucitaba al cliente en el
+               servidor y se lo devolvía hasta a quien lo había borrado. «Al
+               tiempo vuelve a aparecer».
+
+           Si de verdad hubiera una edición local sin subir sobre algo que otro
+           borró, gana el borrado. Es lo deliberado de los dos, y nada se
+           pierde: el renglón sigue en el servidor marcado como borrado, y la
+           bitácora guarda lo que decía. */
+        if (r.borrado){
+          porId.delete(r.id);
+          aplicadas.push(r);
+          continue;
+        }
+
         const local = porId.get(r.id);
         const mismoQueSincronizado = local && sincronizado.get(r.id) === JSON.stringify(local.datos);
 
@@ -3651,8 +3679,7 @@ async function sincronizar(){
            marcara. En el equipo del ejecutivo la tarifa vieja se quedaba para
            el resto de los tiempos —y lo mismo el alta de un compañero nuevo—. */
         if (local && !mismoQueSincronizado && deMiIncumbencia(local)) continue;
-        if (r.borrado) porId.delete(r.id);
-        else porId.set(r.id, { id:r.id, tipo:r.tipo, datos:r.datos });
+        porId.set(r.id, { id:r.id, tipo:r.tipo, datos:r.datos });
         aplicadas.push(r);
       }
       if (aplicadas.length){

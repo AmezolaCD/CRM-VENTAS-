@@ -455,6 +455,28 @@ Por eso ahora:
 - **Y hay un botón para descargarlo**, por si el portapapeles también recorta: el archivo en
   disco no lo puede cortar nada. Se abre con el Bloc de notas, Ctrl+A, Ctrl+C.
 
+## Un borrado le llega a todos, y no vuelve
+
+Un borrado no viaja como «bórralo»: viaja como una **lápida**, un renglón que se queda en el
+servidor marcado `borrado`. Si la fila desapareciera sin más, los demás equipos no tendrían cómo
+enterarse.
+
+Al bajarla, el CRM la trataba como un conflicto más —*«si aquí hay una edición sin subir, no la
+pises»*— y eso la mataba, porque esa supuesta edición sin subir casi nunca existía: la lista de
+lo ya sincronizado vive en memoria y **arranca vacía en cada recarga**, así que todo lo que ya
+estaba parecía recién editado. Pasaban las dos cosas a la vez:
+
+- la lápida **se saltaba siempre**, así que el borrado no le llegaba a nadie;
+- y el renglón, al verse como edición pendiente, **se volvía a subir sin la marca de borrado** —
+  lo que resucitaba al cliente en el servidor y se lo devolvía hasta a quien lo había borrado.
+
+Ahora una lápida se atiende **antes** que cualquier protección de conflicto: no es un conflicto,
+es una instrucción. Si de verdad hubiera una edición local sin subir sobre algo que otro borró,
+**gana el borrado** — es lo deliberado de los dos, y nada se pierde: el renglón sigue en el
+servidor marcado como borrado y la bitácora guarda lo que decía.
+
+Lo comprueba `pruebas/navegador/borrar-se-propaga.mjs` con dos equipos de verdad.
+
 ## Los .sql se pegan COMPLETOS, y ahora el archivo se defiende
 
 Cada archivo `.sql` va entero en **una sola transacción**. Si el pegado se corta a la mitad
