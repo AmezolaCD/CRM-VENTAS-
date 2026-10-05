@@ -19,6 +19,18 @@
 --    la aplicación en el navegador. No se parte en columnas a propósito:
 --    cuando se agregue un campo nuevo no habrá que migrar la base.
 -- ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
+   TODO ESTE ARCHIVO VA EN UNA SOLA TRANSACCIÓN.
+
+   Si el pegado se corta a la mitad —pasa, y ya pasó en este proyecto— la base
+   de datos se queda EXACTAMENTE como estaba, en vez de a medio camino. Antes,
+   un archivo cortado podía dejar tirada una regla y no volver a crearla: el
+   sistema quedaba peor que si no se hubiera corrido nada, y sin avisar.
+
+   Si al correrlo no aparece «COMMIT» al final, no se aplicó nada: vuelva a
+   copiar el archivo COMPLETO y a correrlo.
+   --------------------------------------------------------------------------- */
+begin;
 create table if not exists public.crm_datos (
   id              text primary key,             -- "clientes:c1", "ajustes:global"
   tipo            text not null,                -- clientes | actividades | convenios | huespedes | habitaciones | ajustes
@@ -112,3 +124,5 @@ create trigger crm_datos_apunta
 alter table public.crm_bitacora enable row level security;
 drop policy if exists "equipo lee bitacora" on public.crm_bitacora;
 create policy "equipo lee bitacora" on public.crm_bitacora for select to authenticated using (true);
+
+commit;

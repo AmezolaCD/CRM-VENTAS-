@@ -28,6 +28,18 @@
 --    nombre del cliente, sus tarifas y dos firmas; no tiene por qué poder
 --    abrirlo cualquiera que adivine la dirección.
 -- ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
+   TODO ESTE ARCHIVO VA EN UNA SOLA TRANSACCIÓN.
+
+   Si el pegado se corta a la mitad —pasa, y ya pasó en este proyecto— la base
+   de datos se queda EXACTAMENTE como estaba, en vez de a medio camino. Antes,
+   un archivo cortado podía dejar tirada una regla y no volver a crearla: el
+   sistema quedaba peor que si no se hubiera corrido nada, y sin avisar.
+
+   Si al correrlo no aparece «COMMIT» al final, no se aplicó nada: vuelva a
+   copiar el archivo COMPLETO y a correrlo.
+   --------------------------------------------------------------------------- */
+begin;
 insert into storage.buckets (id, name, public, file_size_limit)
 values ('escaneados', 'escaneados', false, 20971520)   -- 20 MB por archivo
 on conflict (id) do update
@@ -131,3 +143,5 @@ using (
 --    El depósito y los archivos se quedan; para tirarlos también, desde el
 --    panel de Storage de Supabase, a mano y con cuidado.
 -- ---------------------------------------------------------------------------
+
+commit;

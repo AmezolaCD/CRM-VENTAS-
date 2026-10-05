@@ -158,9 +158,13 @@
   .field:focus{outline:2px solid var(--accent); outline-offset:-1px}
   .field[readonly]{background:var(--col); color:var(--muted)}
   #q{min-width:200px}
-  button.btn{background:var(--panel-2); border:1px solid var(--line); border-radius:6px;
-    color:var(--text); padding:7px 12px; cursor:pointer; white-space:nowrap}
-  button.btn:hover{background:var(--col)}
+  /* También `a.btn`: el aviso de la pantalla de firma ofrece avisarle al hotel
+     por WhatsApp, y eso es un enlace, no un botón. Sin esto salía como un
+     enlace azul subrayado en medio de un recuadro de error. */
+  button.btn, a.btn{background:var(--panel-2); border:1px solid var(--line); border-radius:6px;
+    color:var(--text); padding:7px 12px; cursor:pointer; white-space:nowrap;
+    text-decoration:none; display:inline-block}
+  button.btn:hover, a.btn:hover{background:var(--col)}
   button.btn.primary{background:var(--accent); border-color:var(--accent); color:var(--ink-solido)}
   button.btn.primary:hover{filter:brightness(1.08)}
   button.btn.ok{background:var(--ok); border-color:var(--ok); color:var(--ink-solido)}
@@ -770,7 +774,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.04-82";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.05-83";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3043,15 +3047,33 @@ async function probarNube(url, anon){
       "Sin internet, o la dirección está mal escrita.");
   }
 
-  // El buzón donde los clientes dejan su firma
+  /* El buzón donde los clientes dejan su firma.
+
+     Esto preguntaba asomándose a la tabla con un SELECT, y MENTÍA: el buzón no
+     tiene regla de lectura para nadie de fuera a propósito, así que una tabla
+     con las reglas tiradas contesta «200, lista vacía» igual que una sana. El
+     panel decía «los clientes pueden firmar desde su enlace» justo cuando NO
+     podían — y un cliente de verdad se topó con eso, con un error de base de
+     datos en la pantalla, después de haber firmado con el dedo.
+
+     Ahora se le pregunta al servidor si la regla existe. */
   try{
-    const r = await fetch(url + "/rest/v1/crm_firmas?select=id&limit=1", { headers:{ apikey:anon } });
-    if (r.status === 404 || r.status === 406)
-      anota(true, "El enlace de firma no está habilitado",
-        "Es opcional. Para que los clientes puedan firmar en su pantalla, corre " +
-        "<code>firmas.sql</code> en el SQL Editor de Supabase.");
+    const r = await fetch(url + "/rest/v1/rpc/crm_buzon_ok", {
+      method:"POST", headers:{ apikey:anon, "Content-Type":"application/json",
+        Authorization: "Bearer " + ((nube.sesion && nube.sesion.access_token) || anon) },
+      body: "{}"
+    });
+    if (r.status === 404)
+      anota(false, "LOS CLIENTES NO PUEDEN FIRMAR",
+        "Falta correr <code>firmas.sql</code> en el SQL Editor de Supabase. " +
+        "Pégalo <b>completo</b>: si se corta a la mitad no se aplica nada.");
+    else if ((await r.text()).trim() === "true")
+      anota(true, "El buzón de firmas está montado",
+        "Los clientes pueden firmar desde su enlace.");
     else
-      anota(true, "El buzón de firmas existe", "Los clientes pueden firmar desde su enlace.");
+      anota(false, "LOS CLIENTES NO PUEDEN FIRMAR",
+        "El buzón existe pero le falta la regla que deja al cliente depositar su firma. " +
+        "Vuelve a correr <code>firmas.sql</code> <b>completo</b> en el SQL Editor de Supabase.");
   }catch(e){ /* si falla la red ya se dijo arriba */ }
 
   // La tabla
@@ -15132,8 +15154,30 @@ function dibujarParaFirmar(caja, v, datos, pedir){
         antes de cerrarlo y use <i>Descargar en PDF</i>.</div>`;
       window.scrollTo(0, 0);
     }catch(ex){
-      err.innerHTML = `<div class="errbox">No se pudo registrar la firma.<br>${esc(ex.message)}
-        <br><br>Intente de nuevo, o avísele a su ejecutivo.</div>`;
+      /* Lo que ve aquí es un CLIENTE del hotel, no un técnico. Antes se le
+         enseñaba el error crudo del servidor —«new row violates row-level
+         security policy for table crm_firmas»— y se quedaba sin firmar y sin
+         entender. La lectura ya traducía este caso; el depósito no.
+
+         Y lo más importante: su firma no se tira. Se le ofrece mandarla al
+         hotel por WhatsApp para que la registren a mano, en vez de pedirle
+         que la vuelva a trazar. */
+      const m = String(ex.message || "");
+      const deRegla = /401|403|permission|policy|42501|row-level/i.test(m);
+      const tel = String((datos.w || "")).replace(/\D/g, "");
+      const aviso = deRegla
+        ? `<b>El hotel tiene que habilitar las firmas en su servidor.</b><br>
+           No es nada que usted haya hecho mal, y su firma no se perdió.`
+        : `<b>No se pudo registrar la firma en este momento.</b><br>
+           Puede ser la conexión.`;
+      err.innerHTML = `<div class="errbox">${aviso}<br><br>
+        ${tel ? `<a class="btn" style="display:inline-block" target="_blank" rel="noopener"
+             href="https://wa.me/${esc(tel)}?text=${encodeURIComponent(
+               "Hola, soy " + nombre + ". Firmé " + comoSeLlama + " desde el enlace que me " +
+               "mandaron y el sistema no la aceptó. ¿Me ayudan a registrarla?")}">
+             Avisarle al hotel por WhatsApp</a><br><br>` : ""}
+        <span class="hint">Si prefiere, inténtelo otra vez en un momento.
+        ${deRegla ? "Dato para el hotel: falta correr <code>firmas.sql</code>." : esc(m)}</span></div>`;
       b.disabled = false; b.textContent = antes;
     }
   };
@@ -15891,8 +15935,13 @@ function cerrarOdt(o, firma){
  */
 const ligaFirma = (doc, tipo) =>
   location.origin + location.pathname + "#firmar=" +
+  /* `w` es el teléfono del hotel. Va dentro para que, si algo sale mal al
+     firmar, el cliente pueda avisar sin tener que buscar el número. Las ligas
+     que ya andan circulando no lo traen, y no pasa nada: el botón no sale. */
   b64url(JSON.stringify({ v: doc.id, d: DOCS_FIRMABLES[tipo] ? tipo : "convenios",
-                          t: doc.tokenFirma, u: nube.url, k: nube.anon }));
+                          t: doc.tokenFirma, u: nube.url, k: nube.anon,
+                          w: String(state.ajustes.hotel.telReservaciones ||
+                                    state.ajustes.hotel.telefono || "").replace(/\D/g, "") }));
 
 /** Cómo se llama ese documento en el buzón de firmas. */
 const idEnBuzon = (doc, tipo) => infoDoc(tipo).prefijo + doc.id;

@@ -437,6 +437,35 @@ quedó bien.
 **Sin correrlo el CRM funciona igual**: los escaneados se siguen guardando como
 hasta ahora, con su aviso de que ya casi no cabe.
 
+## Los .sql se pegan COMPLETOS, y ahora el archivo se defiende
+
+Cada archivo `.sql` va entero en **una sola transacción**. Si el pegado se corta a la mitad
+—pasa, y ya pasó aquí— la base de datos se queda **exactamente como estaba**, en vez de a medio
+camino. Antes no era así, y tuvo consecuencias: un archivo cortado dejó tirada la regla que
+permite a un cliente depositar su firma y nunca la volvió a crear. El resultado fue que un
+cliente leyó su convenio, lo firmó con el dedo, y al mandarlo le salió un error de base de datos
+en la pantalla.
+
+**Cómo saber que se aplicó:** al final de la ejecución tiene que aparecer **COMMIT**. Si no
+aparece, no se aplicó nada: copie el archivo completo (Ctrl+A dentro del archivo, sin dejar
+texto seleccionado) y vuelva a correrlo.
+
+### Si los clientes no pueden firmar
+
+En **Ajustes → Nube y equipo → Probar conexión**, el renglón del **buzón de firmas** ahora dice
+la verdad. Antes se asomaba a la tabla con una consulta de lectura, y eso mentía: el buzón no
+tiene lectura para nadie de fuera a propósito, así que una tabla con las reglas tiradas contesta
+igual que una sana. Decía *«los clientes pueden firmar desde su enlace»* justo cuando no podían.
+
+Si dice **LOS CLIENTES NO PUEDEN FIRMAR**, vuelva a correr `firmas.sql` completo. Para
+confirmarlo a mano, en el SQL Editor:
+
+```sql
+select polname from pg_policy where polrelid = 'public.crm_firmas'::regclass;
+```
+
+Tiene que aparecer `cliente deja su firma`.
+
 ## Si un .sql dice que no encuentra `crm_datos`
 
 Esa tabla la crea **`nube.sql`**, y es la primera de todas. Que falte quiere decir una de

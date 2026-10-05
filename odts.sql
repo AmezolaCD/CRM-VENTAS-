@@ -48,6 +48,18 @@
 --    renglón marcado como atendido. No es el lugar donde viven los archivos,
 --    es el camión que los trae.
 -- ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
+   TODO ESTE ARCHIVO VA EN UNA SOLA TRANSACCIÓN.
+
+   Si el pegado se corta a la mitad —pasa, y ya pasó en este proyecto— la base
+   de datos se queda EXACTAMENTE como estaba, en vez de a medio camino. Antes,
+   un archivo cortado podía dejar tirada una regla y no volver a crearla: el
+   sistema quedaba peor que si no se hubiera corrido nada, y sin avisar.
+
+   Si al correrlo no aparece «COMMIT» al final, no se aplicó nada: vuelva a
+   copiar el archivo COMPLETO y a correrlo.
+   --------------------------------------------------------------------------- */
+begin;
 create table if not exists public.crm_odts (
   id        bigserial primary key,
   token     text not null,
@@ -336,3 +348,5 @@ grant execute on function public.crm_odts_limpia() to authenticated;
 --    La función crm_del_equipo() NO se tira aquí: la comparten firmas.sql,
 --    archivos.sql, folios.sql, prospectos.sql, meta.sql y whatsapp.sql.
 -- ---------------------------------------------------------------------------
+
+commit;

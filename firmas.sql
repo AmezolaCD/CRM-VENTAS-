@@ -26,6 +26,18 @@
 --    se firmó, sea un convenio —'v123'— o un contrato —'contratos:k123'—.
 --    Renombrarla obligaría a mover las firmas que estuvieran esperando, y no
 --    vale la pena por un nombre.
+/* ---------------------------------------------------------------------------
+   TODO ESTE ARCHIVO VA EN UNA SOLA TRANSACCIÓN.
+
+   Si el pegado se corta a la mitad —pasa, y ya pasó en este proyecto— la base
+   de datos se queda EXACTAMENTE como estaba, en vez de a medio camino. Antes,
+   un archivo cortado podía dejar tirada una regla y no volver a crearla: el
+   sistema quedaba peor que si no se hubiera corrido nada, y sin avisar.
+
+   Si al correrlo no aparece «COMMIT» al final, no se aplicó nada: vuelva a
+   copiar el archivo COMPLETO y a correrlo.
+   --------------------------------------------------------------------------- */
+begin;
 create table if not exists public.crm_firmas (
   id          bigserial primary key,
   convenio_id text not null,
@@ -188,14 +200,49 @@ create policy "equipo marca firmas" on public.crm_firmas for update to authentic
   using (public.crm_del_equipo()) with check (public.crm_del_equipo());
 
 -- ---------------------------------------------------------------------------
--- 5. Para deshacer
+-- 5. ¿El buzón está montado de verdad?
+--
+--    Ajustes lo preguntaba asomándose a la tabla con un SELECT, y eso MIENTE:
+--    el buzón no tiene regla de lectura para nadie de fuera a propósito, así
+--    que una tabla con las reglas tiradas contesta «200, lista vacía» igual
+--    que una sana. El panel decía «los clientes pueden firmar desde su enlace»
+--    justo cuando NO podían. Un cliente real se topó con eso.
+--
+--    Aquí se contesta la pregunta de verdad: ¿existe la regla que deja al
+--    cliente depositar? Va como security definer porque el catálogo de reglas
+--    no lo lee cualquiera, y no revela nada: es un sí o un no.
+-- ---------------------------------------------------------------------------
+create or replace function public.crm_buzon_ok()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from pg_policy
+     where polrelid = 'public.crm_firmas'::regclass
+       and polname  = 'cliente deja su firma');
+$$;
+--    También lo puede preguntar el visitante anónimo: la pantalla de «Probar
+--    conexión» se usa ANTES de entrar, y si no pudiera preguntar contestaría
+--    que no hay buzón cuando sí lo hay. No revela nada —es un sí o un no sobre
+--    la configuración, que cualquiera averigua intentando firmar—.
+revoke all on function public.crm_buzon_ok() from public;
+grant execute on function public.crm_buzon_ok() to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 6. Para deshacer
 --
 --      drop policy if exists "cliente lee su convenio" on public.crm_datos;
 --      drop table if exists public.crm_firmas;
 --      drop function if exists public.crm_token_ok(text, text);
 --      drop function if exists public.crm_token_pedido();
 --      drop function if exists public.crm_del_equipo();
+--      drop function if exists public.crm_buzon_ok();
 --
 --    Los convenios ya firmados se quedan como están: la firma vive dentro del
 --    convenio, no en el buzón.
 -- ---------------------------------------------------------------------------
+
+commit;

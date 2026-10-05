@@ -43,6 +43,18 @@
 -- ---------------------------------------------------------------------------
 -- 0. Lo que tiene que estar antes
 -- ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
+   TODO ESTE ARCHIVO VA EN UNA SOLA TRANSACCIÓN.
+
+   Si el pegado se corta a la mitad —pasa, y ya pasó en este proyecto— la base
+   de datos se queda EXACTAMENTE como estaba, en vez de a medio camino. Antes,
+   un archivo cortado podía dejar tirada una regla y no volver a crearla: el
+   sistema quedaba peor que si no se hubiera corrido nada, y sin avisar.
+
+   Si al correrlo no aparece «COMMIT» al final, no se aplicó nada: vuelva a
+   copiar el archivo COMPLETO y a correrlo.
+   --------------------------------------------------------------------------- */
+begin;
 do $revision$
 begin
   if to_regclass('public.crm_datos') is null then
@@ -168,3 +180,5 @@ grant execute on function public.crm_ingresos_campana(date, date) to authenticat
 --    y lo dice. No se pierde un solo dato: esta función no guarda nada, sólo
 --    suma lo que ya está en la cartera.
 -- ---------------------------------------------------------------------------
+
+commit;

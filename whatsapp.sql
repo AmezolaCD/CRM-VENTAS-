@@ -46,6 +46,18 @@
 --    aparezca uno nuevo. El CRM lee lo que entiende y lo demás se queda
 --    guardado por si algún día sirve.
 -- ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
+   TODO ESTE ARCHIVO VA EN UNA SOLA TRANSACCIÓN.
+
+   Si el pegado se corta a la mitad —pasa, y ya pasó en este proyecto— la base
+   de datos se queda EXACTAMENTE como estaba, en vez de a medio camino. Antes,
+   un archivo cortado podía dejar tirada una regla y no volver a crearla: el
+   sistema quedaba peor que si no se hubiera corrido nada, y sin avisar.
+
+   Si al correrlo no aparece «COMMIT» al final, no se aplicó nada: vuelva a
+   copiar el archivo COMPLETO y a correrlo.
+   --------------------------------------------------------------------------- */
+begin;
 create table if not exists public.crm_wa (
   id         bigserial primary key,
   mensaje_id text not null,                      -- el de Meta: wamid.XXXX
@@ -223,3 +235,5 @@ grant execute on function public.crm_wa_limpia() to authenticated;
 --    Y acuérdate de quitar el webhook en el Hub de 360dialog, o el proveedor
 --    seguirá tocando una puerta que ya no abre nadie.
 -- ---------------------------------------------------------------------------
+
+commit;

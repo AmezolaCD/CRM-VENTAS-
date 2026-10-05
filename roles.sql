@@ -30,6 +30,18 @@
 --    que existir. La crea nube.sql. Si falta, más vale decirlo con todas sus
 --    letras que soltar un error de base de datos a media corrida.
 -- ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
+   TODO ESTE ARCHIVO VA EN UNA SOLA TRANSACCIÓN.
+
+   Si el pegado se corta a la mitad —pasa, y ya pasó en este proyecto— la base
+   de datos se queda EXACTAMENTE como estaba, en vez de a medio camino. Antes,
+   un archivo cortado podía dejar tirada una regla y no volver a crearla: el
+   sistema quedaba peor que si no se hubiera corrido nada, y sin avisar.
+
+   Si al correrlo no aparece «COMMIT» al final, no se aplicó nada: vuelva a
+   copiar el archivo COMPLETO y a correrlo.
+   --------------------------------------------------------------------------- */
+begin;
 do $revision$
 begin
   if to_regclass('public.crm_datos') is null then
@@ -295,3 +307,5 @@ using (public.crm_rol() in ('admin','gerente'));
 --    con ella y sin ella— y borrarla tiraría el dueño de cada registro, que es
 --    trabajo de volver a subir todo.
 -- ---------------------------------------------------------------------------
+
+commit;

@@ -31,6 +31,18 @@
 -- ---------------------------------------------------------------------------
 -- 1. La tabla
 -- ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
+   TODO ESTE ARCHIVO VA EN UNA SOLA TRANSACCIÓN.
+
+   Si el pegado se corta a la mitad —pasa, y ya pasó en este proyecto— la base
+   de datos se queda EXACTAMENTE como estaba, en vez de a medio camino. Antes,
+   un archivo cortado podía dejar tirada una regla y no volver a crearla: el
+   sistema quedaba peor que si no se hubiera corrido nada, y sin avisar.
+
+   Si al correrlo no aparece «COMMIT» al final, no se aplicó nada: vuelva a
+   copiar el archivo COMPLETO y a correrlo.
+   --------------------------------------------------------------------------- */
+begin;
 create table if not exists public.crm_folios (
   tipo        text        not null,          -- 'convenios', 'contratos', 'eventos'…
   anio        int         not null,
@@ -223,3 +235,5 @@ $relleno$;
 --    El CRM vuelve solo a contar con lo que tiene bajado; no hay que tocarle
 --    nada. Los convenios ya creados se quedan con su folio.
 -- ---------------------------------------------------------------------------
+
+commit;
