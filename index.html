@@ -774,7 +774,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.05-86";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.05-87";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -16066,6 +16066,31 @@ const avisoSinBuzon = () => `
    Y al final se vuelve a preguntar, ahí mismo. Sin eso, el que lo corre se
    queda sin saber si sirvió.
    ========================================================================== */
+/**
+ * El mismo SQL, sin un solo comentario.
+ *
+ * El archivo son 260 renglones de los que 170 son explicaciones. Eso importa
+ * porque el pegado SE LE HA CORTADO DOS VECES, las dos a los 100 renglones
+ * exactos —el de las ODTs y éste—, y lo que queda del lado de allá es un
+ * archivo a medias que el editor acepta sin chistar. Sin comentarios son menos
+ * de 90 renglones: cabe entero aunque algo lo vuelva a cortar ahí.
+ *
+ * Se quitan sólo renglones que son comentario COMPLETO —y el bloque de
+ * encabezado—, nunca parte de uno. Si al terminar no se reconoce lo que quedó,
+ * se manda el archivo tal cual: más vale largo que mutilado.
+ */
+function sqlSinComentarios(texto){
+  const sinBloques = String(texto).replace(/^[ \t]*\/\*[\s\S]*?\*\/[ \t]*$/gm, "");
+  const lineas = sinBloques.split("\n")
+    .filter(l => l.trim() && !l.trim().startsWith("--"));
+  const corto = lineas.join("\n") + "\n";
+  const sano = /^begin;/.test(corto) &&
+               /commit;/.test(corto) &&
+               corto.includes("cliente deja su firma") &&
+               corto.trim().endsWith("as resultado;");
+  return sano ? corto : String(texto);
+}
+
 async function panelArreglarFirmas(){
   const ov = modal(`
     <div class="modal">
@@ -16074,19 +16099,28 @@ async function panelArreglarFirmas(){
       <div class="modal-body">
         <div class="note"><b>Esto se hace una vez.</b> Le falta al servidor la regla que deja
           al cliente depositar su firma. Son tres pasos y no se pierde nada de lo que ya hay.</div>
+        <div class="note warn"><b>Copia con el botón de abajo, no desde el archivo.</b>
+          El pegado ya se cortó dos veces a los <b>100 renglones exactos</b>, y el editor de
+          Supabase contestó <i>«Success»</i> las dos. El botón trae el SQL del servidor del
+          CRM, sin comentarios, para que quepa entero.</div>
         <ol style="padding-left:20px;line-height:1.9">
           <li><b>Copia el archivo</b> con el botón de aquí abajo. Viene completo; no hay que
             abrir nada ni seleccionar nada.</li>
           <li>En <b>supabase.com</b>, con el proyecto del hotel abierto:
             <b>SQL Editor</b> → <b>New query</b> → pegar → <b>Run</b>.
-            <div class="hint">Al final tiene que aparecer <b>COMMIT</b>. Si no aparece, no se
-              aplicó nada: vuelve a pegarlo y a correrlo. Todo va en una sola transacción, así
-              que un pegado a medias deja la base <b>exactamente como estaba</b>.</div></li>
+            <div class="hint"><b>Abajo tiene que salir un renglón que diga «LISTO».</b>
+              Si dice <i>«Success. No rows returned»</i>, el pegado se cortó y
+              <b>no se aplicó nada</b>: vuelve a copiar con el botón de aquí abajo y pégalo
+              otra vez. Todo va en una sola transacción, así que un pegado a medias deja la
+              base <b>exactamente como estaba</b> — no la deja peor.</div></li>
           <li>Vuelve aquí y pica <b>Ya lo corrí</b>.</li>
         </ol>
         <p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <button class="btn primary" id="afCopiar">Copiar el archivo</button>
+          <button class="btn primary" id="afCopiar">Copiar el SQL</button>
+          <button class="btn" id="afBajar">O descargar el archivo</button>
           <button class="btn ok" id="afVerificar">Ya lo corrí · Verificar</button></p>
+        <p class="hint" style="margin:4px 0 0">Si descargas el archivo, ábrelo con el Bloc de
+          notas, <b>Ctrl+A</b>, <b>Ctrl+C</b> y pégalo. Así tampoco se corta.</p>
         <div id="afDicho"></div>
       </div>
       <div class="modal-foot"><div class="spacer"></div>
@@ -16104,9 +16138,10 @@ async function panelArreglarFirmas(){
          está corriendo. */
       const r = await fetch("firmas.sql", { cache:"no-store" });
       if (!r.ok) throw new Error("el servidor contestó " + r.status);
-      const sql = await r.text();
-      if (!/^\s*--/.test(sql) || !/commit;/i.test(sql))
+      const completo = await r.text();
+      if (!/commit;/i.test(completo) || !completo.includes("cliente deja su firma"))
         throw new Error("lo que llegó no parece el archivo");
+      const sql = sqlSinComentarios(completo);
       try{ await navigator.clipboard.writeText(sql); }
       catch(err){
         dicho.innerHTML = `<div class="note warn">Este navegador no deja copiar solo.
@@ -16118,11 +16153,30 @@ async function panelArreglarFirmas(){
         return;
       }
       dicho.innerHTML = `<div class="note"><b>Copiado completo</b> —
-        ${sql.split("\n").length} renglones—. Ahora pégalo en el SQL Editor de Supabase
-        y dale <b>Run</b>.</div>`;
+        ${sql.trim().split("\n").length} renglones, sin comentarios para que no se corte—.
+        Pégalo en el SQL Editor y dale <b>Run</b>.
+        <br><br>El último renglón de lo que pegues tiene que ser éste:
+        <br><code style="font-size:11px">${esc(sql.trim().split("\n").pop())}</code></div>`;
     }catch(err){
       dicho.innerHTML = `<div class="errbox">No se pudo traer el archivo: ${esc(err.message)}
         <br><br>Está en el repositorio con el nombre <code>firmas.sql</code>.</div>`;
+    }finally{ b.disabled = false; b.textContent = antes; }
+  };
+
+  /* La segunda vía, por si el portapapeles también se corta: el archivo en
+     disco no lo puede recortar nada. */
+  ov.querySelector("#afBajar").onclick = async e => {
+    const b = e.currentTarget, antes = b.textContent;
+    b.disabled = true; b.textContent = "Bajándolo…";
+    try{
+      const r = await fetch("firmas.sql", { cache:"no-store" });
+      if (!r.ok) throw new Error("el servidor contestó " + r.status);
+      descargarBlob(new Blob([await r.text()], { type:"text/plain;charset=utf-8" }),
+                    "firmas.sql");
+      dicho.innerHTML = `<div class="note">Se bajó <b>firmas.sql</b>. Ábrelo con el Bloc de
+        notas, <b>Ctrl+A</b>, <b>Ctrl+C</b>, y pégalo en el SQL Editor.</div>`;
+    }catch(err){
+      dicho.innerHTML = `<div class="errbox">No se pudo bajar: ${esc(err.message)}</div>`;
     }finally{ b.disabled = false; b.textContent = antes; }
   };
 
@@ -16142,8 +16196,11 @@ async function panelArreglarFirmas(){
          Cierra esta ventana y vuelve a abrir <i>Enviar al cliente</i>; el enlace de firma ya
          está ahí. No hace falta recargar nada.</div>`
       : `<div class="errbox"><b>Todavía no.</b> El servidor sigue diciendo que le falta el
-         buzón. Revisa que al correrlo haya aparecido <b>COMMIT</b> y que sea el proyecto del
-         hotel. Si ya salió COMMIT y aun así dice esto, avísame: hay otra vía y la montamos.</div>`;
+         buzón. Lo más probable es que el pegado se haya cortado: en el panel de resultados de
+         Supabase tenía que salir un renglón con <b>LISTO</b>, no <i>«Success. No rows
+         returned»</i>. Vuelve a copiar con el botón de arriba y a pegarlo.
+         <br><br>Si de verdad salió el renglón de LISTO y aun así dice esto, avísame: hay otra
+         vía —una función en el servidor, sin reglas de por medio— y la montamos.</div>`;
   };
 }
 

@@ -29,6 +29,16 @@ PSQL="$BIN/psql -h $SOCK -p 5433 -U postgres -v ON_ERROR_STOP=1 -q"
 cp "$RAIZ"/*.sql "$RAIZ"/pruebas/sql/*.sql "$TRABAJO"/
 # El pegado a medias: el archivo cortado justo donde tira la regla del buzón.
 head -75 "$RAIZ/firmas.sql" > "$TRABAJO/firmas_cortado.sql"
+
+# El CRM no pega el archivo tal cual: le quita los comentarios para que quepa
+# por debajo de los 100 renglones, que es donde a Marco se le ha cortado el
+# pegado DOS veces. Eso lo hace sqlSinComentarios() dentro del index.html, y
+# una transformación de SQL no se da por buena a ojo: si FIRMAS_COMPACTO apunta
+# a lo que de verdad produce esa función, se corre ESO en vez del archivo.
+if [ -n "$FIRMAS_COMPACTO" ] && [ -f "$FIRMAS_COMPACTO" ]; then
+  echo "Usando el SQL compactado que copia el CRM ($(wc -l < "$FIRMAS_COMPACTO") renglones)."
+  cp "$FIRMAS_COMPACTO" "$TRABAJO/firmas.sql"
+fi
 chmod a+r "$TRABAJO"/*.sql
 
 su pg -c "$PSQL -c 'drop schema if exists public cascade; create schema public; drop schema if exists storage cascade;'" >/dev/null

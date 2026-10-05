@@ -437,6 +437,24 @@ quedó bien.
 **Sin correrlo el CRM funciona igual**: los escaneados se siguen guardando como
 hasta ahora, con su aviso de que ya casi no cabe.
 
+## El pegado se corta a los 100 renglones
+
+Pasó **dos veces**, con dos archivos distintos, y las dos a los **100 renglones exactos**: el de
+las ODTs y el de las firmas. No es descuido de quien pega: algo en el camino —la vista previa
+desde la que se copia— recorta a 100 renglones, y el editor de Supabase acepta el pedazo sin
+chistar y contesta **«Success. No rows returned»**, que parece un éxito.
+
+Por eso ahora:
+
+- **Cada `.sql` termina con un renglón que lo dice.** Al correrlo tiene que aparecer abajo un
+  resultado que diga **LISTO**, con el nombre del archivo. Si dice *«Success. No rows
+  returned»*, **se cortó y no se aplicó nada** — vuelva a pegarlo.
+- **El botón «Copiar el SQL» del CRM manda el mismo SQL sin comentarios**: 90 renglones en vez
+  de 260, para que quepa entero aunque algo lo vuelva a cortar ahí. Es el mismo SQL, probado
+  contra PostgreSQL igual que el archivo largo.
+- **Y hay un botón para descargarlo**, por si el portapapeles también recorta: el archivo en
+  disco no lo puede cortar nada. Se abre con el Bloc de notas, Ctrl+A, Ctrl+C.
+
 ## Los .sql se pegan COMPLETOS, y ahora el archivo se defiende
 
 Cada archivo `.sql` va entero en **una sola transacción**. Si el pegado se corta a la mitad

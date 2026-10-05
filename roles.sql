@@ -309,3 +309,15 @@ using (public.crm_rol() in ('admin','gerente'));
 -- ---------------------------------------------------------------------------
 
 commit;
+
+-- ---------------------------------------------------------------------------
+--  LA PRUEBA DE QUE LLEGÓ COMPLETO
+--
+--  Si al correrlo el panel de resultados dice «Success. No rows returned», el
+--  pegado SE CORTÓ y no se aplicó nada: esta línea nunca llegó. Tiene que
+--  aparecer un renglón con el mensaje de abajo.
+--
+--  Esto no es paranoia: ya pasó dos veces en este proyecto, las dos cortado a
+--  los 100 renglones exactos, y las dos veces el editor contestó «Success».
+-- ---------------------------------------------------------------------------
+select 'LISTO · roles.sql aplicado: cada quien ve lo suyo' as resultado;

@@ -15,6 +15,15 @@ un cliente puede firmar desde su enlace: que lee su documento con su clave, que 
 firma, que con una clave que no es la suya no entra, que con el documento borrado tampoco, y
 que un `firmas.sql` pegado a medias no deja el buzón peor de como estaba.
 
+El CRM no pega el archivo tal cual: le quita los comentarios para que quepa por debajo de los
+100 renglones. Esa transformación **también se corre contra PostgreSQL**, porque un SQL
+transformado no se da por bueno leyéndolo:
+
+```sh
+node pruebas/navegador/… ó sacar el texto de sqlSinComentarios() a un archivo
+FIRMAS_COMPACTO=/ruta/firmas-compacto.sql sh pruebas/sql/correr.sh
+```
+
 Las reglas de fila (RLS) **no se prueban con un servidor de mentiras**. Un servidor inventado
 acepta lo que uno le programe que acepte; el error que vio un cliente de verdad —*new row
 violates row-level security policy*— sólo lo contesta PostgreSQL.

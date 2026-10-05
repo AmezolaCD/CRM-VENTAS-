@@ -207,10 +207,38 @@ await bloque('6 · el panel trae el archivo ENTERO', async () => {
     for (let i = 0; i < 60 && copiado === null; i++) await new Promise(r => setTimeout(r, 100));
     return { copiado, dicho: (document.querySelector('#afDicho') || {}).innerText || '' };
   });
-  // No basta con que se copiara «algo»: tiene que ser el archivo, completo.
+  /* No basta con que se copiara «algo». Lo que se copia es el MISMO SQL sin
+     comentarios, y tiene que (a) caber de sobra por debajo de los 100
+     renglones —ahí se cortó dos veces— y (b) traer entero lo que importa. */
   const real = fs.readFileSync(SQL, 'utf8');
-  afirma('se copió el archivo tal cual, sin cortarlo', r.copiado === real);
-  afirma('y se le dice cuántos renglones son', /renglones/.test(r.dicho));
+  const copiado = String(r.copiado || '');
+  const renglones = copiado.trim().split('\n').length;
+  console.log('     ' + renglones + ' renglones (el archivo tiene ' +
+              real.trim().split('\n').length + ')');
+  afirma('cabe muy por debajo de los 100 renglones', renglones > 0 && renglones < 95);
+  afirma('empieza la transacción', /^begin;/.test(copiado));
+  afirma('trae la regla que falta', copiado.includes('cliente deja su firma'));
+  afirma('trae la pregunta que usa Verificar', copiado.includes('crm_buzon_ok'));
+  afirma('cierra la transacción', /\ncommit;/.test(copiado));
+  afirma('y termina con la prueba de que llegó completo',
+    copiado.trim().endsWith("as resultado;"));
+  afirma('no se coló un solo renglón de comentario',
+    !copiado.split('\n').some(l => l.trim().startsWith('--')));
+  afirma('se le enseña cuál tiene que ser el último renglón',
+    /renglones/.test(r.dicho) && r.dicho.includes('as resultado;'));
+
+  // La segunda vía: el archivo en disco, que no lo puede recortar nada.
+  const bajado = await p.evaluate(async () => {
+    let nombre = null, texto = null;
+    const antes = window.descargarBlob;
+    window.descargarBlob = async (blob, n) => { nombre = n; texto = await blob.text(); };
+    document.querySelector('#afBajar').click();
+    for (let i = 0; i < 60 && texto === null; i++) await new Promise(r => setTimeout(r, 100));
+    window.descargarBlob = antes;
+    return { nombre, texto };
+  });
+  afirma('también se puede bajar el archivo', bajado.nombre === 'firmas.sql');
+  afirma('y lo que se baja es el archivo entero', bajado.texto === real);
 });
 
 await bloque('7 · «Ya lo corrí» contesta la verdad, en el momento', async () => {
