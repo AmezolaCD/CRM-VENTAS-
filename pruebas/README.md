@@ -37,6 +37,7 @@ node pruebas/navegador/enlace-que-no-sirve.mjs        # lo que ve el ejecutivo
 node pruebas/navegador/borrar-se-propaga.mjs         # un borrado llega a todos
 node pruebas/navegador/copiar-es-enviar.mjs          # copiar el enlace es mandarlo
 node pruebas/navegador/folios-repetidos.mjs          # dos documentos con el mismo folio
+node pruebas/navegador/copiar-el-sql.mjs             # el .sql llega entero
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el

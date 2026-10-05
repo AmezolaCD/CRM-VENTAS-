@@ -437,6 +437,28 @@ quedó bien.
 **Sin correrlo el CRM funciona igual**: los escaneados se siguen guardando como
 hasta ahora, con su aviso de que ya casi no cabe.
 
+## El CRM le trae el .sql, para que no haya dónde cortarse
+
+En *Ajustes → Nube y equipo → Probar conexión*, cada renglón que diga que falta algo trae su
+botón —**Arreglar esto** para las firmas, **Montarlo ahora** para el contador de folios—. Abre un
+panel con tres pasos y dos maneras de llevarse el SQL:
+
+- **Copiar el SQL**: el CRM pide el archivo a su propio servidor y lo deja en el portapapeles,
+  sin comentarios. **No pasa por ninguna vista previa, así que el largo deja de importar.**
+- **Descargar el archivo**: se abre con el Bloc de notas, Ctrl+A, Ctrl+C. Un archivo en disco
+  no lo recorta nada.
+
+Y al final, **Ya lo corrí · Verificar**, que le pregunta al servidor y contesta en el momento.
+
+### Y una cosa que hace el editor de Supabase
+
+Cuando detecta que se crea una tabla nueva, **le agrega al final** un
+`ALTER TABLE … ENABLE ROW LEVEL SECURITY`. Si lo que recibió venía cortado, ese renglón cae
+dentro del cuerpo de una función, parte el `$$` y revienta con *«unterminated dollar-quoted
+string»* — o con un error raro sobre una línea que es el interior de una función. **Las dos cosas
+significan lo mismo: el pegado llegó incompleto.** Con el pegado entero, ese renglón cae al final
+y es inofensivo.
+
 ## El pegado se corta a los 100 renglones
 
 Pasó **dos veces**, con dos archivos distintos, y las dos a los **100 renglones exactos**: el de

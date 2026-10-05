@@ -195,76 +195,9 @@ await bloque('5 · un «no» NO se queda guardado', async () => {
   afirma('y el aviso desaparece', !/todav[ií]a NO funciona/i.test(despues.texto));
 });
 
-await bloque('6 · el panel trae el archivo ENTERO', async () => {
-  buzon = 'falta';
-  const r = await p.evaluate(async () => {
-    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
-    let copiado = null;
-    navigator.clipboard.writeText = t => { copiado = t; return Promise.resolve(); };
-    panelArreglarFirmas();
-    await new Promise(r => setTimeout(r, 150));
-    document.querySelector('#afCopiar').click();
-    for (let i = 0; i < 60 && copiado === null; i++) await new Promise(r => setTimeout(r, 100));
-    return { copiado, dicho: (document.querySelector('#afDicho') || {}).innerText || '' };
-  });
-  /* No basta con que se copiara «algo». Lo que se copia es el MISMO SQL sin
-     comentarios, y tiene que (a) caber de sobra por debajo de los 100
-     renglones —ahí se cortó dos veces— y (b) traer entero lo que importa. */
-  const real = fs.readFileSync(SQL, 'utf8');
-  const copiado = String(r.copiado || '');
-  const renglones = copiado.trim().split('\n').length;
-  console.log('     ' + renglones + ' renglones (el archivo tiene ' +
-              real.trim().split('\n').length + ')');
-  afirma('cabe muy por debajo de los 100 renglones', renglones > 0 && renglones < 95);
-  afirma('empieza la transacción', /^begin;/.test(copiado));
-  afirma('trae la regla que falta', copiado.includes('cliente deja su firma'));
-  afirma('trae la pregunta que usa Verificar', copiado.includes('crm_buzon_ok'));
-  afirma('cierra la transacción', /\ncommit;/.test(copiado));
-  afirma('y termina con la prueba de que llegó completo',
-    copiado.trim().endsWith("as resultado;"));
-  afirma('no se coló un solo renglón de comentario',
-    !copiado.split('\n').some(l => l.trim().startsWith('--')));
-  afirma('se le enseña cuál tiene que ser el último renglón',
-    /renglones/.test(r.dicho) && r.dicho.includes('as resultado;'));
-
-  // La segunda vía: el archivo en disco, que no lo puede recortar nada.
-  const bajado = await p.evaluate(async () => {
-    let nombre = null, texto = null;
-    const antes = window.descargarBlob;
-    window.descargarBlob = async (blob, n) => { nombre = n; texto = await blob.text(); };
-    document.querySelector('#afBajar').click();
-    for (let i = 0; i < 60 && texto === null; i++) await new Promise(r => setTimeout(r, 100));
-    window.descargarBlob = antes;
-    return { nombre, texto };
-  });
-  afirma('también se puede bajar el archivo', bajado.nombre === 'firmas.sql');
-  afirma('y lo que se baja es el archivo entero', bajado.texto === real);
-});
-
-await bloque('7 · «Ya lo corrí» contesta la verdad, en el momento', async () => {
-  buzon = 'falta';
-  const malo = await p.evaluate(async () => {
-    document.querySelector('#afVerificar').click();
-    for (let i = 0; i < 60; i++){
-      const t = document.querySelector('#afDicho').innerText;
-      if (/Todav[ií]a no|ya funciona/i.test(t)) return t;
-      await new Promise(r => setTimeout(r, 100));
-    }
-    return '(no contestó)';
-  });
-  afirma('si sigue sin estar, lo dice', /Todav[ií]a no/i.test(malo));
-  buzon = 'ok';
-  const bueno = await p.evaluate(async () => {
-    document.querySelector('#afVerificar').click();
-    for (let i = 0; i < 60; i++){
-      const t = document.querySelector('#afDicho').innerText;
-      if (/ya funciona/i.test(t)) return t;
-      await new Promise(r => setTimeout(r, 100));
-    }
-    return '(no contestó)';
-  });
-  afirma('y en cuanto se arregla, lo dice ahí mismo', /ya funciona/i.test(bueno));
-});
+/* Lo que el panel copia y lo que contesta «Ya lo corrí» se comprueba aparte, en
+   copiar-el-sql.mjs, que lo hace para los DOS archivos que tienen botón. Aquí
+   basta con que el aviso de verdad abra el panel, que es el bloque 3. */
 
 await br.close(); srv.close();
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTodo en verde.\n');
