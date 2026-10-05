@@ -774,7 +774,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.06-89";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.06-90";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2320,6 +2320,14 @@ function saneaEvento(e){
         ubicacion:o.destinatario.ubicacion || "", telefono:o.destinatario.telefono || "",
         email:o.destinatario.email || "" }
     : null;
+  /* `folioRepetido` no nace en todos los renglones a propósito: un campo nuevo
+     en cada documento haría que TODOS se vean editados y se vuelvan a subir
+     enteros en la primera sincronización. Sólo existe mientras el folio esté
+     de verdad repetido. */
+  if ("folioRepetido" in o){
+    o.folioRepetido = String(o.folioRepetido || "");
+    if (!o.folioRepetido) delete o.folioRepetido;
+  }
   return o;
 }
 
@@ -2410,6 +2418,14 @@ function saneaContrato(k){
         ubicacion:o.destinatario.ubicacion || "", telefono:o.destinatario.telefono || "",
         email:o.destinatario.email || "" }
     : null;
+  /* `folioRepetido` no nace en todos los renglones a propósito: un campo nuevo
+     en cada documento haría que TODOS se vean editados y se vuelvan a subir
+     enteros en la primera sincronización. Sólo existe mientras el folio esté
+     de verdad repetido. */
+  if ("folioRepetido" in o){
+    o.folioRepetido = String(o.folioRepetido || "");
+    if (!o.folioRepetido) delete o.folioRepetido;
+  }
   return o;
 }
 
@@ -5330,16 +5346,7 @@ function renderConvenios(){
   // A un ejecutivo la columna le diría siempre lo mismo: sólo se pone a quien ve a varios.
   const conEje = puedeVerTodo();
   const repetidos = vs.filter(v => v.folioRepetido);
-  const cab = `${repetidos.length ? `<div class="note warn">
-      <b>Hay ${repetidos.length} convenio(s) con el folio repetido.</b>
-      Dos equipos tomaron el mismo número al mismo tiempo y estos ya estaban
-      firmados o enviados, así que no se les cambió solo: el folio va impreso en
-      un PDF que ya anda con el cliente.
-      <br>${repetidos.map(v => esc(v.folio + " · " + nombreCli(v.clienteId))).join("<br>")}
-      <p style="margin:12px 0 0"><button class="btn danger" id="bRenumTodos">Darles un folio
-        nuevo a ${repetidos.length === 1 ? "éste" : "los " + repetidos.length}</button>
-        <span class="hint">El del hotel, del contador. Habrá que reenviarles el PDF.</span></p>
-      </div>` : ""}
+  const cab = avisoFoliosRepetidos(SERIES_FOLIO.convenios, repetidos) + `
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
       <b style="font-size:15px">Convenios</b><span class="hint">${vs.length} en total</span>
       <span style="flex:1"></span>
@@ -5389,56 +5396,7 @@ function renderConvenios(){
    * Se renumeran TODOS menos el más viejo de cada folio: el primero se queda
    * con el número, que es el que ya anda circulando desde hace más tiempo.
    */
-  const bRT = cont.querySelector("#bRenumTodos");
-  if (bRT) bRT.onclick = async () => {
-    const porFolio = new Map();
-    for (const v of repetidos){
-      const f = String(v.folio || "").toUpperCase();
-      if (!porFolio.has(f)) porFolio.set(f, []);
-      porFolio.get(f).push(v);
-    }
-    /* De cada folio repetido se respeta al más viejo: su número lleva más
-       tiempo circulando y es el que menos cuesta dejar quieto. */
-    const aCambiar = [];
-    for (const grupo of porFolio.values()){
-      grupo.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
-      const mismoFolio = vs.filter(x =>
-        String(x.folio || "").toUpperCase() === String(grupo[0].folio || "").toUpperCase());
-      // Si el más viejo del grupo NO es el más viejo con ese folio, también cambia.
-      mismoFolio.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
-      for (const v of grupo) if (v.id !== mismoFolio[0].id) aCambiar.push(v);
-    }
-    if (!aCambiar.length){
-      alert("No hay ninguno que cambiar: cada folio repetido ya tiene su dueño más antiguo.");
-      return;
-    }
-    if (!confirm(`Se le va a dar un folio nuevo a ${aCambiar.length} convenio(s).\n\n` +
-        aCambiar.map(v => `${v.folio} · ${nombreCli(v.clienteId)}`).join("\n") +
-        "\n\nEl más antiguo de cada folio conserva su número.\n\n" +
-        "OJO: el PDF que ya tiene cada cliente dice el folio anterior. " +
-        "Habrá que volver a mandárselos.\n\n¿Continuar?")) return;
-
-    bRT.disabled = true; bRT.textContent = "Pidiendo números…";
-    const hechos = [], fallidos = [];
-    for (const v of aCambiar){
-      const viejo = v.folio;
-      const nuevo = await apartarFolio("convenios", "CV", anioConvenio(v));
-      if (!nuevo){ fallidos.push(viejo); continue; }
-      v.folio = nuevo;
-      v.folioRepetido = "";
-      v.updatedAt = new Date().toISOString();
-      registrarAuto(v.clienteId, `El convenio ${viejo} se renumeró como ${nuevo}`,
-        `Otro convenio del hotel ya tenía el folio ${viejo}. Éste ya estaba firmado o ` +
-        `enviado, así que se renumeró a mano.\nHay que volver a mandarle el PDF al ` +
-        `cliente: el que tiene dice ${viejo}.`, miNombre());
-      hechos.push(`${viejo} → ${nuevo}`);
-    }
-    guardar(); render();
-    alert((hechos.length ? "Listo:\n" + hechos.join("\n") : "No se cambió ninguno.") +
-      (fallidos.length ? `\n\nNo se pudo con ${fallidos.length}: el contador no contestó. ` +
-        "Vuelve a intentarlo, o revisa en Ajustes si está montado." : "") +
-      (hechos.length ? "\n\nAcuérdate de reenviarles el PDF." : ""));
-  };
+  engancharRenumTodos(cont, SERIES_FOLIO.convenios, vs, repetidos);
 
   cont.querySelector("#bNuevoConv").onclick = () => editarConvenio(null);
   cont.querySelector("#bSubirExtConv").onclick = () => subirDocumentoExterno("convenio");
@@ -8396,37 +8354,148 @@ function duenioDelFolio(folio, excluirId){
  * correo de un cliente, y cambiárselo por detrás sería peor que el problema.
  * Esos se marcan para que alguien decida.
  */
-function resolverFoliosRepetidos(){
-  const porFolio = new Map();
-  for (const v of state.convenios){
-    const f = String(v.folio || "").trim().toUpperCase();
-    if (!f) continue;
-    if (!porFolio.has(f)) porFolio.set(f, []);
-    porFolio.get(f).push(v);
-  }
+/* ==========================================================================
+   DOS DOCUMENTOS CON EL MISMO FOLIO
 
+   Esto existía sólo para los convenios, y por eso lo de los contratos estuvo
+   ahí sin que nadie lo viera hasta que Marco lo encontró a ojo: CT-2026-002 y
+   CT-2026-004 repetidos, sin aviso, sin manera de arreglarlos desde el CRM.
+
+   Las dos series se tratan igual. Lo que cambia entre ellas —cómo se llaman,
+   su prefijo, de dónde sale su año— va aquí y una sola vez.
+   ========================================================================== */
+const SERIES_FOLIO = {
+  convenios: {
+    uno:"convenio", unos:"convenios", articulo:"el",
+    tipo:"convenios", prefijo:"CV",
+    lista: () => state.convenios,
+    anio:  v => anioConvenio(v),
+    libre: v => folioLibre(anioConvenio(v), v.id)
+  },
+  contratos: {
+    uno:"documento", unos:"documentos", articulo:"el",
+    tipo:"contratos", prefijo:"CT",
+    lista: () => state.contratos,
+    anio:  k => anioContrato(k),
+    libre: k => folioContrato(anioContrato(k), k.id)
+  }
+};
+
+/* Un documento ya firmado o ya enviado NO se renumera solo: su folio va
+   impreso en un PDF que anda en el correo de un cliente. Ésos se marcan para
+   que alguien decida. */
+const folioIntocable = d => d.estado !== "borrador" || d.enviado || d.firmaHotel;
+
+/**
+ * Dos ejecutivos capturando a la vez, cada uno en su equipo, pueden tomar el
+ * mismo folio: cada quien cuenta con lo que tiene bajado en ese momento y
+ * ninguno ve todavía el documento del otro. Se detecta al sincronizar, que es
+ * segundos después.
+ *
+ * Se renumera el que se creó después, y sólo si sigue en borrador.
+ */
+function resolverFoliosRepetidos(){
   let cambio = false;
-  for (const [folio, grupo] of porFolio){
-    if (grupo.length < 2) continue;
-    // El primero en crearse se queda con el folio.
-    grupo.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
-    for (const v of grupo.slice(1)){
-      const intocable = v.estado !== "borrador" || v.enviado || v.firmaHotel;
-      if (intocable){ v.folioRepetido = folio; continue; }
-      const nuevo = folioLibre(anioConvenio(v), v.id);
-      registrarAuto(v.clienteId, `El convenio ${v.folio} se renumeró como ${nuevo}`,
-        `Otro equipo había tomado el folio ${v.folio} al mismo tiempo. Como este seguía en ` +
-        "borrador, se le dio el siguiente libre.", "");
-      v.folio = nuevo;
-      v.folioRepetido = "";
-      v.updatedAt = new Date().toISOString();
-      cambio = true;
+  for (const serie of Object.values(SERIES_FOLIO)){
+    const porFolio = new Map();
+    for (const d of serie.lista()){
+      const f = String(d.folio || "").trim().toUpperCase();
+      if (!f) continue;
+      if (!porFolio.has(f)) porFolio.set(f, []);
+      porFolio.get(f).push(d);
+    }
+    for (const [folio, grupo] of porFolio){
+      if (grupo.length < 2) continue;
+      // El primero en crearse se queda con el folio.
+      grupo.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+      for (const d of grupo.slice(1)){
+        if (folioIntocable(d)){ d.folioRepetido = folio; continue; }
+        const nuevo = serie.libre(d);
+        registrarAuto(d.clienteId, `${serie.uno} ${d.folio} se renumeró como ${nuevo}`,
+          `Otro equipo había tomado el folio ${d.folio} al mismo tiempo. Como éste seguía ` +
+          "en borrador, se le dio el siguiente libre.", "");
+        d.folio = nuevo;
+        delete d.folioRepetido;
+        d.updatedAt = new Date().toISOString();
+        cambio = true;
+      }
     }
   }
   if (cambio) guardar();
   return cambio;
 }
 
+/** El aviso de arriba de la lista, cuando quedaron folios repetidos. */
+function avisoFoliosRepetidos(serie, repetidos){
+  if (!repetidos.length) return "";
+  return `<div class="note warn" id="avisoFolios">
+    <b>Hay ${repetidos.length} ${repetidos.length === 1 ? serie.uno : serie.unos}
+      con el folio repetido.</b>
+    Dos equipos tomaron el mismo número al mismo tiempo y estos ya estaban
+    firmados o enviados, así que no se les cambió solo: el folio va impreso en
+    un PDF que ya anda con el cliente.
+    <br>${repetidos.map(d => esc(d.folio + " · " + nombreCli(d.clienteId))).join("<br>")}
+    <p style="margin:12px 0 0"><button class="btn danger" id="bRenumTodos">Darles un folio
+      nuevo a ${repetidos.length === 1 ? "éste" : "los " + repetidos.length}</button>
+      <span class="hint">El del hotel, del contador. Habrá que reenviarles el PDF.</span></p>
+    </div>`;
+}
+
+/** El botón del aviso: pide números nuevos al contador del hotel. */
+function engancharRenumTodos(cont, serie, visibles, repetidos){
+  const bRT = cont.querySelector("#bRenumTodos");
+  if (!bRT) return;
+  bRT.onclick = async () => {
+    const porFolio = new Map();
+    for (const d of repetidos){
+      const f = String(d.folio || "").toUpperCase();
+      if (!porFolio.has(f)) porFolio.set(f, []);
+      porFolio.get(f).push(d);
+    }
+    /* De cada folio repetido se respeta al más viejo: su número lleva más
+       tiempo circulando y es el que menos cuesta dejar quieto. */
+    const aCambiar = [];
+    for (const grupo of porFolio.values()){
+      grupo.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+      const mismoFolio = visibles.filter(x =>
+        String(x.folio || "").toUpperCase() === String(grupo[0].folio || "").toUpperCase());
+      // Si el más viejo del grupo NO es el más viejo con ese folio, también cambia.
+      mismoFolio.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+      for (const d of grupo) if (d.id !== mismoFolio[0].id) aCambiar.push(d);
+    }
+    if (!aCambiar.length){
+      alert("No hay ninguno que cambiar: cada folio repetido ya tiene su dueño más antiguo.");
+      return;
+    }
+    if (!confirm(`Se le va a dar un folio nuevo a ${aCambiar.length} ${
+        aCambiar.length === 1 ? serie.uno : serie.unos}.\n\n` +
+        aCambiar.map(d => `${d.folio} · ${nombreCli(d.clienteId)}`).join("\n") +
+        "\n\nEl más antiguo de cada folio conserva su número.\n\n" +
+        "OJO: el PDF que ya tiene cada cliente dice el folio anterior. " +
+        "Habrá que volver a mandárselos.\n\n¿Continuar?")) return;
+
+    bRT.disabled = true; bRT.textContent = "Pidiendo números…";
+    const hechos = [], fallidos = [];
+    for (const d of aCambiar){
+      const viejo = d.folio;
+      const nuevo = await apartarFolio(serie.tipo, serie.prefijo, serie.anio(d));
+      if (!nuevo){ fallidos.push(viejo); continue; }
+      d.folio = nuevo;
+      delete d.folioRepetido;
+      d.updatedAt = new Date().toISOString();
+      registrarAuto(d.clienteId, `${serie.uno} ${viejo} se renumeró como ${nuevo}`,
+        `Otro ${serie.uno} del hotel ya tenía el folio ${viejo}. Éste ya estaba firmado o ` +
+        `enviado, así que se renumeró a mano.\nHay que volver a mandarle el PDF al ` +
+        `cliente: el que tiene dice ${viejo}.`, miNombre());
+      hechos.push(`${viejo} → ${nuevo}`);
+    }
+    guardar(); render();
+    alert((hechos.length ? "Listo:\n" + hechos.join("\n") : "No se cambió ninguno.") +
+      (fallidos.length ? `\n\nNo se pudo con ${fallidos.length}: el contador no contestó. ` +
+        "Vuelve a intentarlo, o revisa en Ajustes si está montado." : "") +
+      (hechos.length ? "\n\nAcuérdate de reenviarles el PDF." : ""));
+  };
+}
 
 function editarConvenio(id, clientePre, alCerrar){
   const existente = id ? state.convenios.find(v => v.id === id) : null;
@@ -11834,8 +11903,10 @@ function renderContratos(){
   const ks = state.contratos.filter(contratoEsMio)
     .sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const conEje = puedeVerTodo();
+  const repetidos = ks.filter(k => k.folioRepetido);
 
-  const cab = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+  const cab = avisoFoliosRepetidos(SERIES_FOLIO.contratos, repetidos) +
+    `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
       <b style="font-size:15px">Contratos y cotizaciones</b>
       <span class="hint">${ks.length} en total</span>
       <span style="flex:1"></span>
@@ -11857,7 +11928,10 @@ function renderContratos(){
         const ec = ESTADOS_CT[k.estado], cu = cuentasContrato(k);
         return `<tr class="row-link" data-id="${k.id}">
           <td><b>${esc(k.folio || "—")}</b>${k.externo
-            ? ` <span class="pill" title="Se subió escaneado; no se armó aquí">externo</span>` : ""}</td>
+            ? ` <span class="pill" title="Se subió escaneado; no se armó aquí">externo</span>` : ""}${
+            k.folioRepetido
+            ? ` <span class="pill" style="background:var(--bad-soft);color:var(--bad)"
+                 title="Otro documento del hotel tiene este mismo folio">repetido</span>` : ""}</td>
           <td>${esc(nombreCli(k.clienteId))}${k.titulo
             ? `<div class="hint">${esc(k.titulo)}</div>` : ""}</td>
           ${conEje ? `<td class="nowrap">${esc(ejecutivoDeCt(k) || "—")}</td>` : ""}
@@ -11878,6 +11952,7 @@ function renderContratos(){
       editarContrato(tr.dataset.id);
     }));
   }
+  engancharRenumTodos(cont, SERIES_FOLIO.contratos, ks, repetidos);
   cont.querySelector("#bNuevoCt").onclick = () => editarContrato(null);
   cont.querySelector("#bSubirExtCt").onclick = () => subirDocumentoExterno("cotizacion");
 }

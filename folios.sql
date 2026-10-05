@@ -207,9 +207,17 @@ begin
     return;
   end if;
 
+  -- El `tipo` que se guarda NO es siempre el de la fila: es la SERIE que pide
+  -- la aplicación. Los eventos de banquetes llevan dos series en la misma
+  -- colección —EV para la cotización y CB para el contrato—, y la aplicación
+  -- le pide al contador 'eventos_ev' y 'eventos_cb', no 'eventos'. Guardarlos
+  -- como 'eventos' dejaba esas dos series SIN RELLENAR: al montar el contador
+  -- arrancaban en 001 y repetían folios que ya existían, que es justo lo que
+  -- este bloque está para evitar. Y de paso se pisaban entre ellas, porque un
+  -- EV-2026-003 y un CB-2026-003 caían en el mismo (tipo, anio, numero).
   execute $sql$
     insert into public.crm_folios (tipo, anio, numero, folio, quien)
-    select d.tipo,
+    select case when d.tipo = 'eventos' then 'eventos_' || lower(m[1]) else d.tipo end,
            (m[2])::int                             as anio,
            (m[3])::int                             as numero,
            upper(d.datos ->> 'folio')              as folio,

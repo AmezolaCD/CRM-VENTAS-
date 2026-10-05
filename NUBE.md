@@ -455,6 +455,28 @@ Por eso ahora:
 - **Y hay un botón para descargarlo**, por si el portapapeles también recorta: el archivo en
   disco no lo puede cortar nada. Se abre con el Bloc de notas, Ctrl+A, Ctrl+C.
 
+## Si se repite un folio
+
+El número lo reparte el **contador del servidor** (`folios.sql`), que entrega `max + 1` sobre su
+propia tabla. Por eso, al montarlo, el archivo la **rellena con los folios que ya existen en la
+cartera**: sin ese relleno arrancaría en 001 y repetiría el año entero.
+
+Si el contador **no** está montado, cada equipo cuenta con lo que tiene bajado, y dos que no ven
+lo mismo toman el mismo número. Se revisa en *Ajustes → Nube y equipo → Probar conexión*, y se
+arregla corriendo `folios.sql` completo —al final tiene que salir el renglón de **LISTO**—.
+
+Cuando aun así se cuela uno repetido, **la lista lo enseña**: arriba sale un aviso con cuáles
+son y un botón **«Darles un folio nuevo»**, que le pide números al contador. El más antiguo de
+cada folio conserva el suyo —su número lleva más tiempo circulando— y al otro se le da uno
+nuevo, con nota en la bitácora del cliente. Hay que reenviarle el PDF: el que tiene dice el
+folio anterior. Esto vale para **convenios y para contratos**; antes existía sólo en convenios,
+y por eso en contratos los repetidos estuvieron ahí sin que nadie los viera.
+
+Los eventos de banquetes llevan **dos series en la misma colección** —EV para la cotización y CB
+para el contrato—, y el relleno del contador las guardaba a las dos como `eventos`. Resultado:
+esas dos series arrancaban en 001 aunque ya hubiera folios, y se pisaban entre ellas. Ya quedó
+corregido en `folios.sql`; para aplicarlo hay que volver a correrlo.
+
 ## Un borrado le llega a todos, y no vuelve
 
 Un borrado no viaja como «bórralo»: viaja como una **lápida**, un renglón que se queda en el

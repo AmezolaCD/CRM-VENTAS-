@@ -51,6 +51,12 @@ for f in nube firmas roles odts folios marketing prospectos archivos meta whatsa
 done
 
 echo ""
+echo "El contador de folios:"
+su pg -c "$BIN/psql -h $SOCK -p 5433 -U postgres -q -f $TRABAJO/contador-de-folios.sql" 2>&1 |
+  grep -vE "^(SET|BEGIN|COMMIT|INSERT|UPDATE|DO|NOTICE:|psql:|resultado|---|\(1 row\)|\s*$)" |
+  sed 's/^NOTICE:  //'
+
+echo ""
 echo "La firma del cliente:"
 su pg -c "$BIN/psql -h $SOCK -p 5433 -U postgres -q -f $TRABAJO/firma-del-cliente.sql" 2>&1 |
   grep -vE "^(SET|BEGIN|COMMIT|INSERT|UPDATE|SAVEPOINT|DO|NOTICE:  relation|NOTICE:  policy|NOTICE:  trigger|NOTICE:  function|NOTICE:  schema|resultado|---|\(1 row\)|^$)" |
