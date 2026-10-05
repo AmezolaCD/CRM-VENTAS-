@@ -43,6 +43,7 @@
    copiar el archivo COMPLETO y a correrlo.
    --------------------------------------------------------------------------- */
 begin;
+-- @tabla
 create table if not exists public.crm_folios (
   tipo        text        not null,          -- 'convenios', 'contratos', 'eventos'…
   anio        int         not null,
@@ -52,6 +53,7 @@ create table if not exists public.crm_folios (
   creado      timestamptz not null default now(),
   primary key (tipo, anio, numero)
 );
+-- @fin-tabla
 
 alter table public.crm_folios enable row level security;
 

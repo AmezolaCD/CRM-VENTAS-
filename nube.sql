@@ -31,6 +31,7 @@
    copiar el archivo COMPLETO y a correrlo.
    --------------------------------------------------------------------------- */
 begin;
+-- @tabla
 create table if not exists public.crm_datos (
   id              text primary key,             -- "clientes:c1", "ajustes:global"
   tipo            text not null,                -- clientes | actividades | convenios | huespedes | habitaciones | ajustes
@@ -39,6 +40,7 @@ create table if not exists public.crm_datos (
   actualizado     timestamptz not null default now(),
   actualizado_por text
 );
+-- @fin-tabla
 
 -- La aplicación pregunta "¿qué cambió desde tal fecha?" en cada sondeo.
 create index if not exists crm_datos_actualizado_idx on public.crm_datos (actualizado);
@@ -93,6 +95,7 @@ create policy "equipo edita"   on public.crm_datos for update to authenticated u
 --    pregunte "¿quién le cambió la tarifa a este cliente?" la respuesta
 --    está aquí. Sólo se puede leer.
 -- ---------------------------------------------------------------------------
+-- @tabla
 create table if not exists public.crm_bitacora (
   n           bigserial primary key,
   id          text not null,
@@ -102,6 +105,7 @@ create table if not exists public.crm_bitacora (
   quien       text,
   cuando      timestamptz not null default now()
 );
+-- @fin-tabla
 
 create or replace function public.crm_apunta()
 returns trigger

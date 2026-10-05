@@ -58,6 +58,7 @@
    copiar el archivo COMPLETO y a correrlo.
    --------------------------------------------------------------------------- */
 begin;
+-- @tabla
 create table if not exists public.crm_wa (
   id         bigserial primary key,
   mensaje_id text not null,                      -- el de Meta: wamid.XXXX
@@ -78,6 +79,7 @@ create table if not exists public.crm_wa (
   recibido   timestamptz not null default now(),
   aplicada   boolean not null default false
 );
+-- @fin-tabla
 
 -- Único de verdad, no un índice cualquiera: es lo que hace que un reintento no
 -- levante un segundo lead de la misma persona.
@@ -94,6 +96,7 @@ alter table public.crm_wa enable row level security;
 --    se caiga los leads simplemente dejarían de llegar y nadie se enteraría
 --    hasta preguntarse por qué ya nadie escribe.
 -- ---------------------------------------------------------------------------
+-- @tabla
 create table if not exists public.crm_wa_log (
   id      bigserial primary key,
   cuando  timestamptz not null default now(),
@@ -101,6 +104,7 @@ create table if not exists public.crm_wa_log (
   ok      boolean not null default true,
   detalle text not null default ''
 );
+-- @fin-tabla
 create index if not exists crm_wa_log_cuando_idx on public.crm_wa_log (cuando desc);
 
 alter table public.crm_wa_log enable row level security;

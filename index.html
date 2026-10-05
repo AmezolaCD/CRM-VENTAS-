@@ -810,7 +810,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.06-92";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.06-93";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -16857,6 +16857,46 @@ const ARCHIVOS_SQL = {
    queda sin saber si sirvió —y ya pasó: el editor de Supabase contesta
    «Success» aunque sólo haya recibido la mitad—.
    ========================================================================== */
+/* ==========================================================================
+   POR QUÉ ESTO VA EN DOS PEGADOS
+
+   El editor de Supabase, cuando ve que se CREA UNA TABLA NUEVA, le agrega SQL
+   suyo —un «alter table … enable row level security»— al final de lo que
+   recibió. Para saber dónde ponerlo tiene que partir el texto en
+   instrucciones, y lo hace cortando en cada `;` SIN RESPETAR LOS `$$`. Si en
+   el mismo pegado hay funciones, los cortes y el agregado caen DENTRO del
+   cuerpo de una y parten el `$$` por la mitad. Eso es lo que contesta
+   «unterminated dollar-quoted string», y también lo que hace que de pronto
+   aparezca un `return v_folio;` suelto, que es el interior de una función.
+
+   Se nota en qué archivo pega y en cuál no: `firmas.sql` entró a la primera
+   porque su tabla ya existía —sin tabla nueva no hay nada que agregar—, y
+   `folios.sql` reventó tres veces porque la suya no.
+
+   La salida es separarlos. Primero las tablas, donde el agregado es
+   inofensivo —de hecho es justo lo que queremos—; después todo lo demás, que
+   ya no trae ninguna tabla nueva y por lo tanto no dispara nada.
+
+   Cada `.sql` trae sus tablas marcadas con `-- @tabla` para que esto sea
+   mecánico y no haya que adivinar dónde cortar. El archivo sigue valiendo
+   entero: en una consola de verdad se corre de un jalón, como siempre. Esto
+   es sólo para el editor de Supabase.
+   ========================================================================== */
+function sqlPorPasos(texto, senia){
+  const bloques = [];
+  const resto = String(texto).replace(
+    /^-- @tabla\n([\s\S]*?)\n-- @fin-tabla$/gm,
+    (todo, dentro) => { bloques.push(dentro); return ""; });
+  const paso2 = sqlSinComentarios(resto, senia);
+  if (!bloques.length) return [{ titulo:"", sql: paso2 }];
+  return [
+    { titulo: "Paso 1 · las tablas",
+      sql: "begin;\n" + bloques.join("\n") + "\ncommit;\n\n" +
+           "select 'LISTO · paso 1 de 2: las tablas' as resultado;\n" },
+    { titulo: "Paso 2 · lo demás", sql: paso2 }
+  ];
+}
+
 async function panelCorrerSql(cual){
   const a = ARCHIVOS_SQL[cual];
   if (!a) return;
@@ -16878,6 +16918,7 @@ async function panelCorrerSql(cual){
             abrir nada ni seleccionar nada.</li>
           <li>En <b>supabase.com</b>, con el proyecto del hotel abierto:
             <b>SQL Editor</b> → <b>New query</b> → pegar → <b>Run</b>.
+            <b id="afCuantos"></b>
             <div class="hint"><b>Abajo tiene que salir un renglón que diga «LISTO».</b>
               Si dice <i>«Success. No rows returned»</i>, o un error que hable de
               <code>$$</code>, el pegado se cortó y <b>no se aplicó nada</b>: vuelve a
@@ -16885,7 +16926,7 @@ async function panelCorrerSql(cual){
               medias deja la base <b>exactamente como estaba</b> — no la deja peor.</div></li>
           <li>Vuelve aquí y pica <b>Ya lo corrí</b>.</li>
         </ol>
-        <p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center" id="afBotones">
           <button class="btn primary" id="afCopiar">Copiar el SQL</button>
           <button class="btn" id="afBajar">O descargar el archivo</button>
           <button class="btn ok" id="afVerificar">Ya lo corrí · Verificar</button></p>
@@ -16912,11 +16953,26 @@ async function panelCorrerSql(cual){
     return completo;
   };
 
+  let pasos = null, enPaso = 0;
+
+  /* Cada pegado se copia por separado y en orden. El botón va diciendo cuál
+     toca, para que nadie tenga que acordarse. */
+  const pintarPaso = () => {
+    const b = ov.querySelector("#afCopiar");
+    const cuantos = ov.querySelector("#afCuantos");
+    if (!pasos || pasos.length < 2){ b.textContent = "Copiar el SQL"; return; }
+    b.textContent = enPaso ? "Copiar el paso 2" : "Copiar el paso 1";
+    cuantos.innerHTML = `<br>Son <b>dos pegados</b>, uno después del otro: primero las
+      tablas y luego lo demás. Cada uno te dice LISTO al terminar.`;
+  };
+
   ov.querySelector("#afCopiar").onclick = async e => {
     const b = e.currentTarget, antes = b.textContent;
     b.disabled = true; b.textContent = "Trayéndolo…";
     try{
-      const sql = sqlSinComentarios(await traer(), a.senia);
+      if (!pasos){ pasos = sqlPorPasos(await traer(), a.senia); pintarPaso(); }
+      const paso = pasos[Math.min(enPaso, pasos.length - 1)];
+      const sql = paso.sql;
       try{ await navigator.clipboard.writeText(sql); }
       catch(err){
         dicho.innerHTML = `<div class="note warn">Este navegador no deja copiar solo.
@@ -16927,15 +16983,25 @@ async function panelCorrerSql(cual){
         t.value = sql; t.focus(); t.select();
         return;
       }
-      dicho.innerHTML = `<div class="note"><b>Copiado completo</b> —
-        ${sql.trim().split("\n").length} renglones, sin comentarios para que no se corte—.
-        Pégalo en el SQL Editor y dale <b>Run</b>.
+      const ultimo = sql.trim().split("\n").pop();
+      const quedan = pasos.length > 1 && enPaso === 0;
+      dicho.innerHTML = `<div class="note"><b>Copiado${
+        paso.titulo ? " · " + esc(paso.titulo) : " completo"}</b> —
+        ${sql.trim().split("\n").length} renglones—. Pégalo en el SQL Editor y dale
+        <b>Run</b>.
         <br><br>El último renglón de lo que pegues tiene que ser éste:
-        <br><code style="font-size:11px">${esc(sql.trim().split("\n").pop())}</code></div>`;
+        <br><code style="font-size:11px">${esc(ultimo)}</code>
+        ${quedan ? `<br><br><b>Cuando salga ese LISTO</b>, vuelve aquí y pícale otra vez
+          al botón para llevarte el <b>paso 2</b>.` : ""}</div>`;
+      if (quedan) enPaso = 1;
     }catch(err){
       dicho.innerHTML = `<div class="errbox">No se pudo traer el archivo: ${esc(err.message)}
         <br><br>Está en el repositorio con el nombre <code>${esc(archivo)}</code>.</div>`;
-    }finally{ b.disabled = false; b.textContent = antes; }
+    }finally{
+      b.disabled = false;
+      b.textContent = antes;
+      pintarPaso();
+    }
   };
 
   /* La segunda vía, por si el portapapeles también se corta: un archivo en

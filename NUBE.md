@@ -450,6 +450,30 @@ panel con tres pasos y dos maneras de llevarse el SQL:
 
 Y al final, **Ya lo corrí · Verificar**, que le pregunta al servidor y contesta en el momento.
 
+### Los .sql que crean tablas van en DOS pegados
+
+Éste es el que costó tres intentos. El editor de Supabase, al ver que se **crea una tabla
+nueva**, le agrega SQL suyo —un `alter table … enable row level security`— al final de lo que
+recibió. Para saber dónde ponerlo parte el texto en instrucciones **cortando en cada `;` sin
+respetar los `$$`**. Si en el mismo pegado hay funciones, los cortes y el agregado caen **dentro
+del cuerpo de una** y la parten por la mitad. De ahí:
+
+- *«unterminated dollar-quoted string»*, y
+- errores sobre renglones sueltos como `return v_folio;`, que es el **interior** de una función.
+
+Se nota en qué archivo pega y en cuál no: `firmas.sql` entró a la primera porque `crm_firmas` ya
+existía —sin tabla nueva no hay nada que agregar— y `folios.sql` reventó tres veces porque
+`crm_folios` no.
+
+**La salida es separarlos**, y el CRM ya lo hace solo: el botón **Copiar el SQL** entrega
+**primero las tablas** —donde el agregado es inofensivo, de hecho es justo lo que queremos— y
+después **todo lo demás**, que ya no trae ninguna tabla nueva y por lo tanto no dispara nada.
+Cada pegado avisa con su propio **LISTO**, y el botón va diciendo cuál toca.
+
+Cada `.sql` trae sus tablas marcadas con `-- @tabla` para que el corte sea mecánico. **El archivo
+sigue valiendo entero**: en una consola de verdad se corre de un jalón, como siempre. La
+separación es sólo para el editor de Supabase.
+
 ### Y una cosa que hace el editor de Supabase
 
 Cuando detecta que se crea una tabla nueva, **le agrega al final** un

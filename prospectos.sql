@@ -44,6 +44,7 @@
    copiar el archivo COMPLETO y a correrlo.
    --------------------------------------------------------------------------- */
 begin;
+-- @tabla
 create table if not exists public.crm_altas (
   id          bigserial primary key,
   token       text not null,
@@ -57,6 +58,7 @@ create table if not exists public.crm_altas (
   aplicada    boolean not null default false,
   creado      timestamptz not null default now()
 );
+-- @fin-tabla
 create index if not exists crm_altas_pend_idx on public.crm_altas (aplicada) where aplicada = false;
 
 alter table public.crm_altas enable row level security;

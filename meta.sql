@@ -52,6 +52,7 @@
    copiar el archivo COMPLETO y a correrlo.
    --------------------------------------------------------------------------- */
 begin;
+-- @tabla
 create table if not exists public.crm_meta_objetos (
   nivel      text not null,                      -- 'campana', 'conjunto', 'anuncio'
   objeto     text not null,                      -- el id de Meta
@@ -62,6 +63,7 @@ create table if not exists public.crm_meta_objetos (
   visto      timestamptz not null default now(), -- la última vez que Meta lo mencionó
   primary key (nivel, objeto)
 );
+-- @fin-tabla
 
 -- ---------------------------------------------------------------------------
 -- 2. Las cifras, un renglón por objeto y por día
@@ -75,6 +77,7 @@ create table if not exists public.crm_meta_objetos (
 --    de cambio que es texto libre, y adivinar una conversión sería inventarse
 --    un número que después alguien lee como si fuera cierto.
 -- ---------------------------------------------------------------------------
+-- @tabla
 create table if not exists public.crm_meta_metricas (
   nivel        text not null,
   objeto       text not null,
@@ -89,6 +92,7 @@ create table if not exists public.crm_meta_metricas (
   actualizado  timestamptz not null default now(),
   primary key (nivel, objeto, fecha)
 );
+-- @fin-tabla
 
 create index if not exists crm_meta_metricas_fecha_idx
   on public.crm_meta_metricas (fecha);
@@ -101,6 +105,7 @@ create index if not exists crm_meta_metricas_fecha_idx
 --    y, si falló, por qué. Sin esto, el día que el acceso caduque las cifras
 --    simplemente se congelarían y nadie se enteraría hasta la junta.
 -- ---------------------------------------------------------------------------
+-- @tabla
 create table if not exists public.crm_meta_sync (
   id      bigserial primary key,
   cuando  timestamptz not null default now(),
@@ -112,6 +117,7 @@ create table if not exists public.crm_meta_sync (
   ok      boolean not null default true,
   detalle text not null default ''
 );
+-- @fin-tabla
 
 create index if not exists crm_meta_sync_cuando_idx
   on public.crm_meta_sync (cuando desc);

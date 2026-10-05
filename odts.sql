@@ -60,6 +60,7 @@
    copiar el archivo COMPLETO y a correrlo.
    --------------------------------------------------------------------------- */
 begin;
+-- @tabla
 create table if not exists public.crm_odts (
   id        bigserial primary key,
   token     text not null,
@@ -76,6 +77,7 @@ create table if not exists public.crm_odts (
   -- meter en una sola petición.
   constraint crm_odts_cabe check (octet_length(adjuntos::text) <= 20000000)
 );
+-- @fin-tabla
 create index if not exists crm_odts_pend_idx on public.crm_odts (aplicada) where aplicada = false;
 
 alter table public.crm_odts enable row level security;

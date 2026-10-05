@@ -38,6 +38,7 @@
    copiar el archivo COMPLETO y a correrlo.
    --------------------------------------------------------------------------- */
 begin;
+-- @tabla
 create table if not exists public.crm_firmas (
   id          bigserial primary key,
   convenio_id text not null,
@@ -49,6 +50,7 @@ create table if not exists public.crm_firmas (
   aplicada    boolean not null default false,
   creado      timestamptz not null default now()
 );
+-- @fin-tabla
 create index if not exists crm_firmas_pend_idx on public.crm_firmas (aplicada) where aplicada = false;
 
 alter table public.crm_firmas enable row level security;

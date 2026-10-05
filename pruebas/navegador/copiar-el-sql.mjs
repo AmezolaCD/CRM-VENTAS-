@@ -86,17 +86,28 @@ await p.evaluate(u => {
   nube.sesion = { access_token:'ficticio', user:{ email:'ana@ejemplo.example' } };
 }, `http://127.0.0.1:${PUERTO}`);
 
-/** Abre el panel de ese archivo y pica «Copiar el SQL». */
+/**
+ * Abre el panel y pica «Copiar» tantas veces como pasos haya.
+ *
+ * El .sql va en DOS pegados cuando crea tablas: el editor de Supabase, al ver
+ * una tabla nueva, le agrega SQL suyo partiendo el texto en cada `;` sin
+ * respetar los `$$`, y ese agregado cae dentro del cuerpo de una función.
+ */
 const copiar = cual => p.evaluate(async cual => {
   document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
-  let copiado = null;
-  navigator.clipboard.writeText = t => { copiado = t; return Promise.resolve(); };
+  const copias = [];
+  navigator.clipboard.writeText = t => { copias.push(t); return Promise.resolve(); };
   panelCorrerSql(cual);
   await new Promise(r => setTimeout(r, 200));
-  document.querySelector('#afCopiar').click();
-  for (let i = 0; i < 80 && copiado === null; i++) await new Promise(r => setTimeout(r, 100));
-  return { copiado, dicho: (document.querySelector('#afDicho') || {}).innerText || '',
-           titulo: document.querySelector('.modal-head h2').innerText };
+  for (let v = 0; v < 2; v++){
+    const antes = copias.length;
+    document.querySelector('#afCopiar').click();
+    for (let i = 0; i < 80 && copias.length === antes; i++)
+      await new Promise(r => setTimeout(r, 100));
+  }
+  return { copias, dicho: (document.querySelector('#afDicho') || {}).innerText || '',
+           titulo: document.querySelector('.modal-head h2').innerText,
+           boton: document.querySelector('#afCopiar').textContent };
 }, cual);
 
 const esperado = {
@@ -107,25 +118,45 @@ const esperado = {
 for (const cual of ['firmas', 'folios']){
   await bloque(`· ${cual}.sql se copia ENTERO`, async () => {
     const r = await copiar(cual);
-    const sql = String(r.copiado || '');
-    const renglones = sql.trim().split('\n').length;
-    console.log(`     ${renglones} renglones (el archivo tiene ` +
+    const [paso1, paso2] = r.copias;
+    console.log(`     paso 1: ${String(paso1||'').trim().split('\n').length} renglones · ` +
+      `paso 2: ${String(paso2||'').trim().split('\n').length} (el archivo tiene ` +
       `${fs.readFileSync(RAIZ + '/' + cual + '.sql', 'utf8').trim().split('\n').length})`);
     afirma('el panel es el de ese archivo', esperado[cual].titulo.test(r.titulo));
-    afirma('empieza la transacción', /^begin;/.test(sql));
-    afirma('la cierra', /\ncommit;/.test(sql));
+    afirma('son dos pegados', r.copias.length === 2 && paso1 !== paso2);
+
+    /* El paso 1 es el que puede disparar el agregado de Supabase, y por eso no
+       lleva ni una función: si el editor lo parte, no hay `$$` que partir. */
+    afirma('el paso 1 trae la tabla', /create table if not exists/.test(paso1));
+    afirma('y NINGUNA función', !/\$\$/.test(paso1));
+    afirma('el paso 1 es cortito', paso1.trim().split('\n').length < 40);
+    afirma('el paso 1 avisa que terminó', paso1.trim().endsWith('as resultado;'));
+
+    /* Y el paso 2 es al revés: trae las funciones y NINGUNA tabla nueva, que es
+       lo único que dispara el agregado. */
+    afirma('el paso 2 NO trae create table', !/create table/i.test(paso2));
+    afirma('el paso 2 sí trae las funciones', /\$\$/.test(paso2));
+    afirma('empieza la transacción', /^begin;/.test(paso2));
+    afirma('la cierra', /\ncommit;/.test(paso2));
     afirma('y termina con la prueba de que llegó completo',
-      sql.trim().endsWith('as resultado;'));
+      paso2.trim().endsWith('as resultado;'));
     for (const t of esperado[cual].trae)
-      afirma(`trae ${t}`, sql.includes(t));
+      afirma(`trae ${t}`, (paso1 + paso2).includes(t));
     afirma('no se coló un renglón de comentario',
-      !sql.split('\n').some(l => l.trim().startsWith('--')));
-    /* Lo que más importa: que sea el archivo, no un pedazo. Se compara contra
-       el del repositorio pasado por la misma compactación. */
+      !paso2.split('\n').some(l => l.trim().startsWith('--')));
+    afirma('los dos caben por debajo de los 100 renglones',
+      paso1.trim().split('\n').length < 100 && paso2.trim().split('\n').length < 100);
+
+    /* Y lo que más importa: que entre los dos esté TODO lo del archivo. */
     const real = fs.readFileSync(RAIZ + '/' + cual + '.sql', 'utf8');
-    const mismo = await p.evaluate(([t, se]) => sqlSinComentarios(t, se),
-                                   [real, esperado[cual].trae[0]]);
-    afirma('es el archivo completo, no un pedazo', sql === mismo);
+    const falta = await p.evaluate(([t, se, p1, p2]) => {
+      const juntos = (p1 + '\n' + p2).replace(/\s+/g, ' ');
+      return sqlSinComentarios(t.replace(/^-- @(fin-)?tabla$/gm, ''), se)
+        .split('\n').map(l => l.trim()).filter(Boolean)
+        .filter(l => !juntos.includes(l.replace(/\s+/g, ' ')));
+    }, [real, esperado[cual].trae[0], paso1, paso2]);
+    if (falta.length) console.log('     se quedó fuera: ' + falta.slice(0,3).join(' / '));
+    afirma('entre los dos pegados está TODO el archivo', falta.length === 0);
     afirma('se le dice cuántos renglones y cuál es el último',
       /renglones/.test(r.dicho) && r.dicho.includes('as resultado;'));
   });
