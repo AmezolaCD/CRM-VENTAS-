@@ -544,36 +544,50 @@
   .doc-contenido{position:relative; z-index:1}
 
   /* ----- El certificado de cortesía -----
-     Medidas sacadas del PowerPoint que se hacía a mano: hoja vertical, el
-     título en una columna a la izquierda, la firma a media hoja, las
-     condiciones abajo y el folio en la esquina. Van en píxeles de hoja carta a
-     96 dpi (816 x 1056), que es el lienzo del rasterizador, y por eso son
-     absolutas: esta hoja no se reacomoda, se imprime. */
+     Las medidas salen del machote del hotel: la foto ocupa la mitad de arriba,
+     con el título en un recuadro morado encima y, a la derecha, el nombre de
+     a quién va. La mitad de abajo es papel: el logotipo, la firma, las
+     condiciones y el folio. Van en píxeles de hoja carta a 96 dpi
+     (816 x 1056), que es el lienzo del rasterizador: esta hoja no se
+     reacomoda, se imprime. */
   .cert{position:relative; width:816px; height:1056px; overflow:hidden;
-    color:#fff; font-family:Georgia,"Times New Roman",serif;
+    background:#fff; color:#2b0d3a;
+    font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif;
     -webkit-print-color-adjust:exact; print-color-adjust:exact}
-  /* Una veladura: la foto del servicio puede ser clara justo donde va el texto,
-     y un certificado ilegible no sirve de nada. */
-  .cert-scrim{position:absolute; inset:0;
-    background:linear-gradient(100deg, rgba(20,8,32,.62) 0%, rgba(20,8,32,.42) 42%,
-      rgba(20,8,32,.08) 70%, rgba(20,8,32,0) 100%),
-    linear-gradient(0deg, rgba(20,8,32,.70) 0%, rgba(20,8,32,.28) 18%, rgba(20,8,32,0) 34%)}
-  .cert-mono{position:absolute; top:300px; left:0; right:0; display:flex;
-    justify-content:center; opacity:.10}
-  .cert-mono svg{width:420px; height:auto}
-  .cert-titulo{position:absolute; left:36px; top:320px; width:300px}
-  .cert-t1{font-size:33px; line-height:1.18; letter-spacing:.5px; text-transform:uppercase}
-  .cert-t2{font-size:21px; line-height:1.3; margin-top:14px; letter-spacing:.3px;
-    color:#e8dcf2}
-  .cert-firma{position:absolute; left:296px; top:690px; width:232px; text-align:center}
-  .cert-raya{border-top:1px solid rgba(255,255,255,.75); margin-bottom:6px}
-  .cert-f1{font-size:19px; min-height:24px}
-  .cert-f2{font-size:15px; color:#e8dcf2}
-  .cert-pie{position:absolute; left:48px; right:48px; top:852px;
-    font-size:15px; line-height:1.45; font-family:inherit}
-  .cert-folio{position:absolute; right:44px; bottom:26px; font-size:18px;
-    letter-spacing:1px; color:#e8dcf2}
-  /* En pantalla se enseña encogida, para que quepa en la ventana. */
+
+  .cert-foto{position:relative; height:528px; background:#2b1c3e;
+    background-size:cover; background-position:center}
+  /* El nombre del lugar, parado en la esquina: SENSES, BOKA, el temazcal. */
+  .cert-marca{position:absolute; top:28px; right:30px; writing-mode:vertical-rl;
+    font-size:27px; letter-spacing:7px; color:#fff; opacity:.92}
+  .cert-panel{position:absolute; left:20px; bottom:16px; width:330px;
+    background:var(--cert-morado, #3f2a63); color:#fff;
+    padding:26px 26px 28px}
+  .cert-t1{font-size:27px; line-height:1.22; letter-spacing:.5px; font-weight:600}
+  .cert-raya{width:92px; border-top:1px solid rgba(255,255,255,.65); margin:14px 0}
+  .cert-t2{font-size:23px; line-height:1.2; letter-spacing:.5px; font-weight:600}
+  /* A quién va dirigido: la etiqueta de la esquina. */
+  .cert-cliente{position:absolute; right:26px; bottom:16px; max-width:300px;
+    background:var(--cert-morado, #3f2a63); color:#fff; padding:12px 20px;
+    font-size:20px; letter-spacing:1px; text-align:center}
+
+  .cert-abajo{position:relative; height:528px; background:#fff}
+  .cert-agua{position:absolute; inset:0; display:flex; align-items:center;
+    justify-content:center; opacity:.055; pointer-events:none}
+  .cert-agua svg{width:430px; height:auto}
+  .cert-marcaHotel{position:absolute; top:52px; left:0; right:0;
+    display:flex; justify-content:center}
+  .cert-marcaHotel svg, .cert-marcaHotel img{width:250px; max-height:92px;
+    height:auto; object-fit:contain}
+  .cert-firma{position:absolute; top:168px; left:0; right:0; text-align:center;
+    color:#3f2a63}
+  .cert-f1{font-size:21px; font-weight:700; min-height:26px}
+  .cert-f2{font-size:17px; font-weight:700}
+  .cert-pie{position:absolute; top:272px; left:118px; right:118px;
+    text-align:center; font-size:13.5px; line-height:1.55}
+  .cert-folio{position:absolute; right:72px; bottom:72px; font-size:16px;
+    letter-spacing:.5px}
+
   .cert-marco{width:816px; transform-origin:top left; border-radius:8px;
     overflow:hidden; box-shadow:var(--shadow)}
   .doc-logo{max-height:78px; max-width:76%; display:block; margin:0 auto 6px}
@@ -810,7 +824,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.06-93";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.06-94";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2372,36 +2386,36 @@ function saneaLineaEv(l){
 
 const TIPOS_CERT = {
   spa_facial: {
-    name: "SPA · Facial", corto: "Facial",
-    titulo: "FACIAL EN SENSES SPA DE CORTESÍA",
+    name: "SPA · Facial", corto: "Facial", marca: "SENSES",
+    titulo: "FACIAL EN SENSES SPA\nDE CORTESÍA",
     condiciones: "Cortesía válida para un facial de 45 min. para una persona. " +
       "No incluye servicios adicionales, ni propinas. Sujeto a disponibilidad. Previa reservación.",
     contacto: "spa", imagen: "certificados/spa-facial.jpg"
   },
   spa_masaje: {
-    name: "SPA · Masaje", corto: "Masaje",
-    titulo: "MASAJE RELAJANTE DE CORTESÍA",
+    name: "SPA · Masaje", corto: "Masaje", marca: "SENSES",
+    titulo: "MASAJE RELAJANTE\nDE CORTESÍA",
     condiciones: "Cortesía válida para un masaje relajante de 45 min. para una persona. " +
       "No incluye servicios adicionales, ni propinas. Sujeto a disponibilidad. Previa reservación.",
     contacto: "spa", imagen: "certificados/spa-masaje.jpg"
   },
   hospedaje: {
-    name: "Hospedaje", corto: "Hospedaje",
-    titulo: "1 NOCHE DE HOSPEDAJE DE CORTESÍA",
+    name: "Hospedaje", corto: "Hospedaje", marca: "QUARTZ",
+    titulo: "1 NOCHE DE HOSPEDAJE\nDE CORTESÍA",
     condiciones: "Cortesía válida por una noche de hospedaje para dos personas. " +
       "No incluye servicios adicionales, no incluye desayuno. Sujeto a disponibilidad. " +
       "Previa reservación.",
     contacto: "reservaciones", imagen: "certificados/hospedaje.jpg"
   },
   restaurante: {
-    name: "Consumo en restaurante", corto: "Restaurante",
-    titulo: "CONSUMO EN RESTAURANTE",
+    name: "Consumo en restaurante", corto: "Restaurante", marca: "BOKA",
+    titulo: "CONSUMO\nEN RESTAURANTE",
     condiciones: "No incluye bebidas alcohólicas. No incluye propinas. Sujeto a disponibilidad.",
     contacto: "reservaciones", imagen: "certificados/restaurante.jpg"
   },
   temazcal: {
-    name: "Temazcal", corto: "Temazcal",
-    titulo: "TEMAZCAL DE CORTESÍA",
+    name: "Temazcal", corto: "Temazcal", marca: "TLALTEOHUA",
+    titulo: "TEMAZCAL\nDE CORTESÍA",
     condiciones: "Cortesía válida para una persona. No incluye servicios adicionales, " +
       "ni propinas. Sujeto a disponibilidad. Previa reservación.",
     contacto: "spa", imagen: "certificados/temazcal.jpg"
@@ -6821,36 +6835,46 @@ async function fondoCertificado(tipo){
  */
 function cuerpoCertificado(c, fondo){
   const h = state.ajustes.hotel;
+  const t = infoTipoCert(c.tipo);
   const con = contactoCert(c);
   const vig = vigenciaCert(c);
-  const sinFoto = `background:radial-gradient(120% 90% at 70% 15%, #5b4178 0%, ` +
-                  `${MORADO_QUARTZ} 55%, #2b1c3e 100%)`;
+  /* El título va en dos renglones con una raya en medio, como el machote:
+     arriba el servicio, abajo «DE CORTESÍA». Se captura como un solo texto
+     con salto de línea, así que quien lo corrija no tiene que pelearse con
+     dos campos. */
+  const lineas = tituloCert(c).split("\n").map(x => x.trim()).filter(Boolean);
+  const sinFoto = `background:radial-gradient(120% 120% at 70% 20%, #5b4178 0%, ` +
+                  `${MORADO_QUARTZ} 60%, #2b1c3e 100%)`;
   return `
-    <div class="cert" style="${fondo
-      ? `background-image:url('${fondo}');background-size:cover;background-position:center`
-      : sinFoto}">
-      ${fondo ? "" : `<div class="cert-mono">${monogramaQ("#ffffff")}</div>`}
-      <div class="cert-scrim"></div>
-
-      <div class="cert-titulo">
-        <div class="cert-t1">${esc(tituloCert(c))}</div>
-        ${c.paraQuien ? `<div class="cert-t2">${esc(c.paraQuien)}</div>` : ""}
+    <div class="cert">
+      <div class="cert-foto" style="${fondo
+        ? `background-image:url('${fondo}');background-size:cover;background-position:center`
+        : sinFoto}">
+        ${t.marca ? `<div class="cert-marca">${esc(t.marca)}</div>` : ""}
+        <div class="cert-panel">
+          <div class="cert-t1">${esc(lineas[0] || "")}</div>
+          ${lineas.length > 1 ? `<div class="cert-raya"></div>
+            <div class="cert-t2">${lineas.slice(1).map(esc).join("<br>")}</div>` : ""}
+        </div>
+        ${c.paraQuien ? `<div class="cert-cliente">${esc(c.paraQuien)}</div>` : ""}
       </div>
 
-      <div class="cert-firma">
-        <div class="cert-raya"></div>
-        <div class="cert-f1">${esc(h.director || "")}</div>
-        <div class="cert-f2">${esc(h.puestoDirector || "")}</div>
+      <div class="cert-abajo">
+        <div class="cert-agua">${monogramaQ(MORADO_QUARTZ)}</div>
+        <div class="cert-marcaHotel">${h.logo
+          ? `<img src="${esc(h.logo)}" alt="">` : logoQuartz(MORADO_QUARTZ)}</div>
+        <div class="cert-firma">
+          <div class="cert-f1">${esc(h.director || "")}</div>
+          <div class="cert-f2">${esc(h.puestoDirector || "")}</div>
+        </div>
+        <div class="cert-pie">
+          ${vig ? `<b>Fecha de validez: ${esc(vig)}</b><br>` : ""}
+          ${esc(condicionesCert(c))}
+          ${(con.email || con.tel) ? `<br>${esc(con.email)}${
+            con.email && con.tel ? " " : ""}${con.tel ? "Cel. " + esc(con.tel) : ""}` : ""}
+        </div>
+        <div class="cert-folio">No. Folio: <b>${esc(c.folio || "")}</b></div>
       </div>
-
-      <div class="cert-pie">
-        ${vig ? `<b>Fecha de validez: ${esc(vig)}</b><br>` : ""}
-        ${esc(condicionesCert(c))}
-        ${(con.email || con.tel) ? `<br>${esc(con.email)}${
-          con.email && con.tel ? " · " : ""}${con.tel ? "Cel. " + esc(con.tel) : ""}` : ""}
-      </div>
-
-      <div class="cert-folio">${esc(c.folio || "")}</div>
     </div>`;
 }
 
@@ -15792,21 +15816,23 @@ function editarCertificado(id){
         <div class="grid">
           <div><label class="lbl">Tipo de cortesía</label>
             <select class="field" id="ceTipo" style="width:100%">${opc}</select></div>
-          <div><label class="lbl">A nombre de</label>
+          <div><label class="lbl">Cliente</label>
             <input class="field" id="ceQuien" style="width:100%" value="${esc(c.paraQuien)}"
-              placeholder="Una persona, una empresa o un evento"></div>
+              placeholder="Se teclea: una persona, una empresa o un evento"></div>
           <div><label class="lbl">Válido desde</label>
             <input class="field" id="ceDesde" type="date" style="width:100%" value="${esc(c.desde)}"></div>
           <div><label class="lbl">Válido hasta</label>
             <input class="field" id="ceHasta" type="date" style="width:100%" value="${esc(c.hasta)}"></div>
           <div class="full"><label class="lbl">Lo que dice en grande</label>
-            <input class="field" id="ceTitulo" style="width:100%" value="${esc(c.titulo)}"
-              placeholder="${esc(infoTipoCert(c.tipo).titulo)}"></div>
+            <textarea class="field" id="ceTitulo" style="width:100%;height:54px"
+              >${esc(tituloCert(c))}</textarea>
+            <div class="hint">Dos renglones: arriba el servicio, abajo «DE CORTESÍA».
+              Entre los dos va la rayita del machote.</div></div>
           <div class="full"><label class="lbl">Información de la cortesía</label>
             <textarea class="field" id="ceCond" style="width:100%;height:84px"
-              placeholder="${esc(infoTipoCert(c.tipo).condiciones)}">${esc(c.condiciones)}</textarea>
-            <div class="hint">Vacío sale el texto de su tipo. El contacto y la firma salen de
-              <i>Ajustes → Hotel</i>.</div></div>
+              >${esc(condicionesCert(c))}</textarea>
+            <div class="hint">Los dos se llenan solos al escoger el tipo, y se pueden corregir.
+              El contacto y la firma salen de <i>Ajustes → Hotel</i>.</div></div>
           <div class="full"><label class="lbl">Nota interna</label>
             <input class="field" id="ceNotas" style="width:100%" value="${esc(c.notas)}"
               placeholder="Por qué se dio. No sale impresa."></div>
@@ -15823,11 +15849,29 @@ function editarCertificado(id){
     </div>`);
 
   const q = sel => ov.querySelector(sel);
-  // Al cambiar de tipo se refrescan los textos sugeridos, sin pisar lo escrito.
+
+  /* Escoger el tipo LLENA los dos textos, no los sugiere nada más.
+
+     Antes iban como sugerencia gris y había que escribirlos, o dejarlos
+     vacíos y confiar en que al imprimir saliera el del tipo. Eso es pedirle a
+     alguien que teclee lo que la aplicación ya sabe —y es exactamente de
+     donde salían las tres redacciones distintas de la misma condición en el
+     PowerPoint—. Ahora se escoge el servicio y los textos aparecen escritos,
+     listos para corregir si ese certificado trae algo especial.
+
+     Lo que sí se cuida: no pisar lo que alguien haya escrito: sólo se reescribe lo que esté
+     vacío o siga siendo, palabra por palabra, el texto del tipo anterior. Así
+     cambiar de tipo por equivocación no borra una redacción hecha a mano. */
+  let tipoAnterior = c.tipo;
   q("#ceTipo").onchange = e => {
-    const t = infoTipoCert(e.target.value);
-    q("#ceTitulo").placeholder = t.titulo;
-    q("#ceCond").placeholder = t.condiciones;
+    const antes = infoTipoCert(tipoAnterior), ahora = infoTipoCert(e.target.value);
+    const campo = (sel, viejo, nuevoTexto) => {
+      const el = q(sel), v = el.value.trim();
+      if (!v || v === viejo) el.value = nuevoTexto;
+    };
+    campo("#ceTitulo", antes.titulo, ahora.titulo);
+    campo("#ceCond", antes.condiciones, ahora.condiciones);
+    tipoAnterior = e.target.value;
   };
 
   const recoger = () => {
@@ -15854,7 +15898,7 @@ function editarCertificado(id){
   q("#ceEmitir").onclick = async e => {
     recoger();
     if (!c.paraQuien){
-      q("#ceErr").innerHTML = `<div class="errbox">Falta a nombre de quién va.</div>`;
+      q("#ceErr").innerHTML = `<div class="errbox">Falta el cliente al que va dirigido.</div>`;
       return;
     }
     if (!c.hasta){

@@ -158,7 +158,7 @@ await bloque('3 · no se emite sin nombre ni sin vencimiento', async () => {
     await new Promise(r => setTimeout(r, 400));
     return { sinNombre, sinFecha: document.querySelector('#ceErr').innerText };
   });
-  afirma('reclama a nombre de quién va', /a nombre de qui[eé]n/i.test(r.sinNombre));
+  afirma('reclama el cliente al que va dirigido', /cliente/i.test(r.sinNombre));
   afirma('y reclama hasta cuándo vale', /hasta cu[aá]ndo/i.test(r.sinFecha));
 });
 
@@ -212,7 +212,12 @@ await bloque('6 · la hoja dice lo que tiene que decir', async () => {
   afirma('la vigencia se redacta sola',
     r.vig === '10 de mayo al 30 de junio del 2026');
   afirma('sale en la hoja', r.texto.includes('10 de mayo al 30 de junio del 2026'));
-  afirma('el título por omisión del tipo', r.texto.includes('MASAJE RELAJANTE DE CORTESÍA'));
+  /* El título va en dos renglones con una raya en medio, como el machote. */
+  afirma('el título por omisión del tipo, en sus dos renglones',
+    r.texto.includes('MASAJE RELAJANTE') && r.texto.includes('DE CORTESÍA'));
+  afirma('con su rayita en medio', /cert-raya/.test(r.html));
+  afirma('y el nombre del lugar en la esquina', r.texto.includes('SENSES'));
+  afirma('el folio sale rotulado', /No\. Folio/.test(r.texto));
   afirma('a nombre de quién va', r.texto.includes('DÍA DE LAS MADRES'));
   afirma('las condiciones de su tipo', /45 min/.test(r.texto));
   afirma('el contacto del SPA, no el de reservaciones',
@@ -225,6 +230,44 @@ await bloque('7 · un año a caballo se redacta completo', async () => {
   const r = await p.evaluate(() => vigenciaCert(saneaCertificado({
     desde:'2026-11-15', hasta:'2027-02-28' })));
   afirma('dice los dos años', /2026/.test(r) && /2027/.test(r));
+});
+
+await bloque('8 · escoger el tipo LLENA los dos textos, y se pueden corregir', async () => {
+  const r = await p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    editarCertificado(null);
+    await new Promise(r => setTimeout(r, 150));
+    const t = () => document.querySelector('#ceTitulo');
+    const k = () => document.querySelector('#ceCond');
+    const cambiar = async v => {
+      const sel = document.querySelector('#ceTipo');
+      sel.value = v; sel.dispatchEvent(new Event('change'));
+      await new Promise(r => setTimeout(r, 60));
+    };
+    const alAbrir = { titulo:t().value, cond:k().value };
+
+    await cambiar('spa_facial');
+    const facial = { titulo:t().value, cond:k().value };
+
+    // Una redacción a mano NO se pierde al cambiar de tipo por equivocación.
+    t().value = 'DOS FACIALES PARA LA PAREJA';
+    k().value = 'Condiciones especiales de este certificado.';
+    await cambiar('hospedaje');
+    const propio = { titulo:t().value, cond:k().value };
+
+    // Pero lo que no se tocó sí sigue al tipo.
+    t().value = ''; k().value = '';
+    await cambiar('temazcal');
+    return { alAbrir, facial, propio, hereda:{ titulo:t().value, cond:k().value } };
+  });
+  afirma('al abrir ya viene lleno, no vacío', !!r.alAbrir.titulo && !!r.alAbrir.cond);
+  afirma('al escoger facial, el título es el del facial', /FACIAL/.test(r.facial.titulo));
+  afirma('y las condiciones son las del facial', /facial de 45 min/.test(r.facial.cond));
+  afirma('lo escrito a mano NO se pierde al cambiar de tipo',
+    r.propio.titulo === 'DOS FACIALES PARA LA PAREJA' &&
+    r.propio.cond === 'Condiciones especiales de este certificado.');
+  afirma('y un campo vacío sí se llena con el del tipo nuevo',
+    /TEMAZCAL/.test(r.hereda.titulo) && !!r.hereda.cond);
 });
 
 await br.close(); srv.close();
