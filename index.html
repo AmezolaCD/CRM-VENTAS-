@@ -774,7 +774,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.05-83";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.05-84";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -15046,10 +15046,13 @@ function pantallaFirmaCliente(datos){
         aviso("warn", `<b>Este enlace ya no sirve.</b><br><br>Puede ser que el documento ya se
           haya firmado, o que le hayan mandado un enlace nuevo. Pídale al hotel que se lo
           reenvíe.`);
-      else if (/401|403|permission|policy/i.test(e.message))
-        aviso("warn", `<b>Este enlace todavía no está habilitado.</b><br><br>Avísele al hotel:
-          les falta correr el archivo <code>firmas.sql</code> en su servidor.
-          <br><br><span class="hint">${esc(e.message)}</span>`);
+      else if (/401|403|permission|policy/i.test(e.message)){
+        // Mismo criterio que al firmar: se le dice, no se le encarga.
+        console.error("No se pudo abrir el documento: " + e.message);
+        aviso("warn", `<b>No es nada que usted haya hecho mal.</b><br><br>Al hotel le falta
+          habilitar las firmas en su sistema, y hasta que lo haga este enlace no abre.
+          No hace falta que usted haga nada más.`);
+      }
       else
         aviso("warn", `<b>No se pudo abrir ${comoSeLlama}.</b><br>${esc(e.message)}
           <br><br>Revise su conexión y vuelva a abrir el enlace.`);
@@ -15102,13 +15105,36 @@ function dibujarParaFirmar(caja, v, datos, pedir){
     return;
   }
 
+  /* Al cliente no se le pide NADA más que firmar.
+
+     Antes esto eran tres campos vacíos y el nombre era obligatorio: no se
+     podía firmar sin escribirlo. Pero el hotel ya tiene esos datos —los
+     capturó su ejecutivo en el destinatario, y van congelados dentro del
+     propio documento—, así que se le estaba pidiendo lo que ya se sabe.
+
+     Ahora ve un renglón con de quién es la firma que está dando, y los campos
+     sólo aparecen si le pica a «Corregir». Es el mismo par que usa la firma
+     capturada en la oficina (ver las llamadas a padFirma), para que las dos
+     maneras de firmar digan lo mismo.
+
+     Si no hay nada que poner —una orden de trabajo, que no va dirigida a un
+     cliente— los campos arrancan destapados; siguen sin ser obligatorios. */
+  const quienFirma = { nombre: c.contacto || "", celular: c.telefono || "" };
+  const resumen = [quienFirma.nombre, quienFirma.celular].filter(Boolean).join(" · ");
+
   zona.innerHTML = `
     <h3 class="sec">Su firma</h3>
-    <div class="grid">
+    ${resumen ? `<p class="hint" style="margin:0 0 10px">Firma como
+      <b style="color:var(--text)">${esc(resumen)}</b>
+      <button class="btn sm" type="button" id="cfCorregir"
+        style="margin-left:6px">Corregir</button></p>` : ""}
+    <div class="grid" id="cfDatos"${resumen ? ` style="display:none"` : ""}>
       <div class="full"><label class="lbl">Nombre completo</label>
-        <input class="field" id="cfNombre" style="width:100%" autocomplete="name"></div>
+        <input class="field" id="cfNombre" style="width:100%" autocomplete="name"
+          value="${esc(quienFirma.nombre)}"></div>
       <div><label class="lbl">Puesto</label><input class="field" id="cfPuesto" style="width:100%"></div>
-      <div><label class="lbl">Celular</label><input class="field" id="cfCel" style="width:100%" inputmode="tel"></div>
+      <div><label class="lbl">Celular</label><input class="field" id="cfCel" style="width:100%"
+        inputmode="tel" value="${esc(quienFirma.celular)}"></div>
     </div>
     <label class="lbl" style="margin-top:10px;display:block">Firme con el dedo o el ratón</label>
     <canvas class="sign-pad" id="pad"></canvas>
@@ -15121,11 +15147,18 @@ function dibujarParaFirmar(caja, v, datos, pedir){
   const limpiar = prepararPad(zona.querySelector("#pad"));
   zona.querySelector("#cfBorrar").onclick = limpiar;
 
+  const bCorregir = zona.querySelector("#cfCorregir");
+  if (bCorregir) bCorregir.onclick = () => {
+    zona.querySelector("#cfDatos").style.display = "";   // vuelve a su .grid
+    bCorregir.remove();
+    zona.querySelector("#cfNombre").focus();
+  };
+
   zona.querySelector("#cfOk").onclick = async e => {
     const err = zona.querySelector("#cfErr");
     const nombre = zona.querySelector("#cfNombre").value.trim();
     const pad = zona.querySelector("#pad");
-    if (!nombre){ err.innerHTML = `<div class="errbox">Escriba su nombre completo.</div>`; return; }
+    // Lo único que se le exige es la firma, que es lo que vino a hacer.
     if (!pad.dataset.trazado){ err.innerHTML = `<div class="errbox">Falta su firma.</div>`; return; }
     err.innerHTML = "";
     const b = e.currentTarget, antes = b.textContent;
@@ -15149,35 +15182,33 @@ function dibujarParaFirmar(caja, v, datos, pedir){
       });
       if (!r.ok) throw new Error(`${r.status} · ${(await r.text()).slice(0,200)}`);
       caja.innerHTML = `<div class="note" style="border-left:3px solid var(--ok)">
-        <b>Listo, ${esc(nombre)}. Su ${esc(comoSeLlama)} quedó firmada.</b><br><br>
+        <b>Listo${nombre ? ", " + esc(nombre) : ""}. Su ${esc(comoSeLlama)} quedó
+        firmada.</b><br><br>
         El hotel ya fue notificado. Si quiere guardar una copia, vuelva a abrir este enlace
         antes de cerrarlo y use <i>Descargar en PDF</i>.</div>`;
       window.scrollTo(0, 0);
     }catch(ex){
-      /* Lo que ve aquí es un CLIENTE del hotel, no un técnico. Antes se le
-         enseñaba el error crudo del servidor —«new row violates row-level
-         security policy for table crm_firmas»— y se quedaba sin firmar y sin
-         entender. La lectura ya traducía este caso; el depósito no.
+      /* Lo que ve aquí es un CLIENTE del hotel, no un técnico.
 
-         Y lo más importante: su firma no se tira. Se le ofrece mandarla al
-         hotel por WhatsApp para que la registren a mano, en vez de pedirle
-         que la vuelva a trazar. */
+         No se le enseña el error crudo del servidor —«new row violates
+         row-level security policy for table crm_firmas» es lo que vio un
+         cliente de verdad—, no se le pide que avise a nadie y no se le
+         encarga nada: se le dice qué pasó, de quién es, y ya.
+
+         A quien le toca arreglarlo se lo dice el renglón «Buzón de firmas»
+         de Ajustes → Nube y equipo → Probar conexión, sin que ningún cliente
+         se tenga que topar con esto para que el hotel se entere. */
       const m = String(ex.message || "");
+      console.error("No se pudo depositar la firma: " + m);
       const deRegla = /401|403|permission|policy|42501|row-level/i.test(m);
-      const tel = String((datos.w || "")).replace(/\D/g, "");
-      const aviso = deRegla
-        ? `<b>El hotel tiene que habilitar las firmas en su servidor.</b><br>
-           No es nada que usted haya hecho mal, y su firma no se perdió.`
-        : `<b>No se pudo registrar la firma en este momento.</b><br>
-           Puede ser la conexión.`;
-      err.innerHTML = `<div class="errbox">${aviso}<br><br>
-        ${tel ? `<a class="btn" style="display:inline-block" target="_blank" rel="noopener"
-             href="https://wa.me/${esc(tel)}?text=${encodeURIComponent(
-               "Hola, soy " + nombre + ". Firmé " + comoSeLlama + " desde el enlace que me " +
-               "mandaron y el sistema no la aceptó. ¿Me ayudan a registrarla?")}">
-             Avisarle al hotel por WhatsApp</a><br><br>` : ""}
-        <span class="hint">Si prefiere, inténtelo otra vez en un momento.
-        ${deRegla ? "Dato para el hotel: falta correr <code>firmas.sql</code>." : esc(m)}</span></div>`;
+      err.innerHTML = deRegla
+        ? `<div class="note warn" style="margin:0"><b>No es nada que usted haya hecho
+           mal.</b> Al hotel le falta habilitar las firmas en su sistema, y hasta que lo
+           haga esta pantalla no puede recibir la suya. No hace falta que usted haga
+           nada más.</div>`
+        : `<div class="errbox"><b>No se pudo registrar la firma en este momento.</b>
+           Puede ser la conexión. Su firma no se borró: vuelva a darle a <i>Firmar</i>
+           en un momento.</div>`;
       b.disabled = false; b.textContent = antes;
     }
   };
@@ -15935,13 +15966,12 @@ function cerrarOdt(o, firma){
  */
 const ligaFirma = (doc, tipo) =>
   location.origin + location.pathname + "#firmar=" +
-  /* `w` es el teléfono del hotel. Va dentro para que, si algo sale mal al
-     firmar, el cliente pueda avisar sin tener que buscar el número. Las ligas
-     que ya andan circulando no lo traen, y no pasa nada: el botón no sale. */
+  /* Una versión atrás esto llevaba dentro el teléfono del hotel, para que el
+     cliente pudiera avisar si la firma fallaba. Se quitó: al cliente no se le
+     encarga nada. Las ligas que ya andan circulando lo traen y no pasa nada,
+     porque el lector ignora lo que no usa. */
   b64url(JSON.stringify({ v: doc.id, d: DOCS_FIRMABLES[tipo] ? tipo : "convenios",
-                          t: doc.tokenFirma, u: nube.url, k: nube.anon,
-                          w: String(state.ajustes.hotel.telReservaciones ||
-                                    state.ajustes.hotel.telefono || "").replace(/\D/g, "") }));
+                          t: doc.tokenFirma, u: nube.url, k: nube.anon }));
 
 /** Cómo se llama ese documento en el buzón de firmas. */
 const idEnBuzon = (doc, tipo) => infoDoc(tipo).prefijo + doc.id;

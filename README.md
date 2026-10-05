@@ -201,6 +201,19 @@ El cliente no tiene cuenta ni tiene por qué tenerla. El enlace lleva una clave 
 azar, y esa clave es **lo único que abre ese convenio y ningún otro**. Al abrirlo, la
 aplicación se convierte en su documento: no enseña tablero, ni cartera, ni pestañas.
 
+**Al cliente no se le pide nada más que firmar.** Antes la pantalla le exigía escribir su
+nombre completo —sin eso el botón no dejaba pasar— y le enseñaba dos campos más vacíos. Pero
+el hotel ya tiene esos datos: los capturó su ejecutivo en el destinatario. Ahora el cliente ve
+un renglón con **de quién es la firma que está dando** —*Firma como Juan Pérez · 664 000 0000*—
+y, si algo está mal, le pica a **Corregir** y los campos aparecen ya llenos. Nada es
+obligatorio salvo el trazo. Si el documento no va dirigido a nadie —una orden de trabajo— los
+campos salen a la vista y se puede firmar igual.
+
+Si algo falla del lado del servidor, **al cliente se le avisa pero no se le encarga nada**: no
+ve el error de la base de datos, no ve nombres de archivos y no se le pide que llame al hotel.
+Quien tiene que enterarse es el hotel, y para eso está el renglón del buzón de firmas en
+*Ajustes → Nube y equipo → Probar conexión*.
+
 El convenio se le enseña **como papel: tinta oscura sobre blanco**, traiga su teléfono el tema
 que traiga. Y el destinatario va **congelado dentro del propio convenio**, junto con las
 tarifas y los textos: la carta que ve el cliente no depende de que nadie ande editando su

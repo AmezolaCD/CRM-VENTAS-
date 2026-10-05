@@ -39,7 +39,17 @@ begin;
 commit;
 
 \echo ''
-\echo '4. Con una clave que no es la suya, NO entra'
+\echo '4. Sin nombre también entra: al cliente ya no se le exige escribirlo'
+begin;
+  set local role anon;
+  select set_config('request.headers','{"x-firma-token":"laclavebuena"}',true) \g /dev/null
+  insert into public.crm_firmas (convenio_id, token, nombre, img)
+  values ('v_prueba','laclavebuena',null,'data:image/png;base64,AAAA');
+  \echo '   ok'
+commit;
+
+\echo ''
+\echo '5. Con una clave que no es la suya, NO entra'
 begin;
   set local role anon;
   select set_config('request.headers','{"x-firma-token":"inventada"}',true) \g /dev/null
@@ -54,7 +64,7 @@ begin;
 commit;
 
 \echo ''
-\echo '5. Con el documento borrado, tampoco'
+\echo '6. Con el documento borrado, tampoco'
 update public.crm_datos set borrado = true where id = 'convenios:v_prueba';
 begin;
   set local role anon;
@@ -70,7 +80,7 @@ commit;
 update public.crm_datos set borrado = false where id = 'convenios:v_prueba';
 
 \echo ''
-\echo '6. Y el que de verdad importa: un firmas.sql PEGADO A MEDIAS'
+\echo '7. Y el que de verdad importa: un firmas.sql PEGADO A MEDIAS'
 \echo '   no debe dejar el buzón peor de como estaba.'
 \i /tmp/pruebasql/firmas_cortado.sql
 select case when public.crm_buzon_ok() then '   ok · la regla sigue en pie'

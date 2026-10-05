@@ -457,6 +457,12 @@ la verdad. Antes se asomaba a la tabla con una consulta de lectura, y eso mentí
 tiene lectura para nadie de fuera a propósito, así que una tabla con las reglas tiradas contesta
 igual que una sana. Decía *«los clientes pueden firmar desde su enlace»* justo cuando no podían.
 
+Ese renglón es ahora **la única forma de enterarse a tiempo**, y por eso conviene mirarlo. Al
+cliente ya no se le enseña letra de técnico: si el servidor le rechaza la firma, ve que no es
+culpa suya y que al hotel le falta habilitarlas, y nada más. No se le pide que avise a nadie
+—cargarle un recado al cliente por una falla del hotel no es su trabajo—, así que el hotel **no
+se entera por él**.
+
 Si dice **LOS CLIENTES NO PUEDEN FIRMAR**, vuelva a correr `firmas.sql` completo. Para
 confirmarlo a mano, en el SQL Editor:
 
