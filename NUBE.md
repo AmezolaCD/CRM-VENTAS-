@@ -473,6 +473,24 @@ culpa suya y que al hotel le falta habilitarlas, y nada más. No se le pide que 
 —cargarle un recado al cliente por una falla del hotel no es su trabajo—, así que el hotel **no
 se entera por él**.
 
+### Arreglarlo sin salir del CRM
+
+Donde quiera que salga el aviso —en *Probar conexión* o al mandarle un convenio al cliente— hay
+un botón **Arreglar esto**. Abre un panel con tres pasos y dos botones:
+
+- **Copiar el archivo.** Trae `firmas.sql` del propio servidor del CRM —se publica junto al
+  `index.html`, así que siempre es la versión que corresponde— y lo deja en el portapapeles
+  **completo**. Ya no hay que encontrar el archivo, abrirlo ni seleccionarlo: por ahí fue por
+  donde se rompió la vez pasada.
+- **Ya lo corrí · Verificar.** Vuelve a preguntarle al servidor y contesta en el momento.
+
+Y el aviso **ya no se queda pegado**: la respuesta negativa no se guarda, así que en cuanto el
+archivo esté corrido el enlace de firma reaparece solo, sin recargar la página.
+
+Si después de correrlo con **COMMIT** a la vista el panel sigue diciendo que no, entonces no es
+el pegado y hay otra vía: una función `firma` en *Edge Functions*, como `wa-hook`, que guarda la
+firma con permisos de servidor sin depender de ninguna regla.
+
 Si dice **LOS CLIENTES NO PUEDEN FIRMAR**, vuelva a correr `firmas.sql` completo. Para
 confirmarlo a mano, en el SQL Editor:
 

@@ -209,6 +209,10 @@ y, si algo está mal, le pica a **Corregir** y los campos aparecen ya llenos. Na
 obligatorio salvo el trazo. Si el documento no va dirigido a nadie —una orden de trabajo— los
 campos salen a la vista y se puede firmar igual.
 
+Si al servidor le falta el buzón, el aviso trae un botón **Arreglar esto** que copia
+`firmas.sql` completo del propio servidor del CRM y, al terminar, verifica ahí mismo. El aviso
+desaparece solo en cuanto el archivo esté corrido, sin recargar.
+
 Y para que no llegue a fallar: **no se reparte un enlace que no va a funcionar.** Antes de
 ofrecerle el enlace al ejecutivo, el CRM le pregunta al servidor si el buzón de firmas está
 montado. Si no lo está, el enlace no se ofrece y se le dice por qué, en su pantalla, que es

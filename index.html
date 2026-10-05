@@ -774,7 +774,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.05-85";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.05-86";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3066,14 +3066,16 @@ async function probarNube(url, anon){
     if (r.status === 404)
       anota(false, "LOS CLIENTES NO PUEDEN FIRMAR",
         "Falta correr <code>firmas.sql</code> en el SQL Editor de Supabase. " +
-        "Pégalo <b>completo</b>: si se corta a la mitad no se aplica nada.");
+        "Pégalo <b>completo</b>: si se corta a la mitad no se aplica nada." +
+        `<p style="margin:8px 0 0"><button class="btn primary" type="button" onclick="panelArreglarFirmas()">Arreglar esto</button></p>`);
     else if ((await r.text()).trim() === "true")
       anota(true, "El buzón de firmas está montado",
         "Los clientes pueden firmar desde su enlace.");
     else
       anota(false, "LOS CLIENTES NO PUEDEN FIRMAR",
         "El buzón existe pero le falta la regla que deja al cliente depositar su firma. " +
-        "Vuelve a correr <code>firmas.sql</code> <b>completo</b> en el SQL Editor de Supabase.");
+        "Vuelve a correr <code>firmas.sql</code> <b>completo</b> en el SQL Editor de Supabase." +
+        `<p style="margin:8px 0 0"><button class="btn primary" type="button" onclick="panelArreglarFirmas()">Arreglar esto</button></p>`);
   }catch(e){ /* si falla la red ya se dijo arriba */ }
 
   // La tabla
@@ -16011,11 +16013,17 @@ const puedeMandarLiga = () => !!(nube.url && nube.anon);
    Se pregunta una vez por sesión: la respuesta no cambia sola, y el ejecutivo
    no tiene por qué esperar a una consulta cada vez que manda un documento.
    ========================================================================== */
-let _buzonOk = null;                       // null = todavía no se ha preguntado
+/* Sólo se recuerda el SÍ.
+
+   Un «no» es una tarea pendiente, y en cuanto alguien corra firmas.sql deja de
+   ser verdad. Si se guardara, el aviso seguiría saliendo hasta que el ejecutivo
+   recargara la página — y nadie recarga una página para ver si un aviso se fue.
+   Un «sí» no se deshace solo, así que ése sí se guarda. */
+let _buzonOk = false;
 
 async function buzonMontado(){
   if (!nubeActiva()) return true;          // sin nube no se ofrecen enlaces
-  if (_buzonOk !== null) return _buzonOk;
+  if (_buzonOk) return true;
   try{
     const r = await fetch(nube.url + "/rest/v1/rpc/crm_buzon_ok", {
       method:"POST",
@@ -16024,7 +16032,7 @@ async function buzonMontado(){
       body: "{}"
     });
     // 404: ni siquiera existe la pregunta, así que firmas.sql no se ha corrido.
-    _buzonOk = r.status === 404 ? false : (await r.text()).trim() === "true";
+    _buzonOk = r.status !== 404 && (await r.text()).trim() === "true";
   }catch(e){
     /* Si falló la red no se estorba: el ejecutivo puede estar sin señal, y
        eso no es razón para quitarle el enlace. Se vuelve a preguntar luego. */
@@ -16035,14 +16043,109 @@ async function buzonMontado(){
 
 /** Lo que ve el EJECUTIVO cuando el enlace no tiene a dónde llegar. */
 const avisoSinBuzon = () => `
-  <div class="note warn"><b>El enlace de firma todavía NO funciona.</b>
+  <div class="note warn" id="avisoSinBuzon"><b>El enlace de firma todavía NO funciona.</b>
     Si se lo mandas, el cliente va a leer el documento, lo va a firmar con el dedo
-    y su firma <b>no se va a poder registrar</b>.
-    <br><br>Al servidor le falta el buzón de firmas. Avísale a sistemas: hay que correr
-    <code>firmas.sql</code> <b>completo</b> en Supabase. Se confirma en
-    <i>Ajustes → Nube y equipo → Probar conexión</i>.
-    <br><br>Mientras tanto, mándale el PDF para que lo firme a mano y súbelo con
-    <i>Subir uno firmado</i>: queda igual de cerrado.</div>`;
+    y su firma <b>no se va a poder registrar</b>. Al servidor le falta el buzón de firmas.
+    <p style="margin:10px 0 0"><button class="btn primary" type="button"
+      onclick="panelArreglarFirmas()">Arreglar esto</button></p>
+    <p class="hint" style="margin:10px 0 0">Son dos minutos y lo puede hacer quien tenga la
+      cuenta de Supabase. Mientras tanto este documento <b>sí se puede cerrar</b>: mándale el
+      PDF y, cuando te lo devuelva firmado, súbelo con <i>Subir uno firmado</i>; o si firma
+      delante de ti, usa <i>Registrar firma del cliente</i>. Queda igual de cerrado.</p></div>`;
+
+/* ==========================================================================
+   ARREGLAR EL BUZÓN SIN SALIR DEL CRM
+
+   Antes esto decía «hay que correr firmas.sql completo», y ahí se acababa la
+   ayuda: a quien lo lee le tocaba encontrar el archivo, abrirlo, seleccionarlo
+   entero y pegarlo. Ese «seleccionarlo entero» es justo donde se rompió la vez
+   pasada —un pegado cortado dejó el buzón cerrado—, así que ya no pasa por las
+   manos de nadie: el botón trae el archivo del propio servidor del CRM, donde
+   se publica junto al index.html, y lo deja en el portapapeles COMPLETO.
+
+   Y al final se vuelve a preguntar, ahí mismo. Sin eso, el que lo corre se
+   queda sin saber si sirvió.
+   ========================================================================== */
+async function panelArreglarFirmas(){
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>Habilitar la firma en pantalla</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note"><b>Esto se hace una vez.</b> Le falta al servidor la regla que deja
+          al cliente depositar su firma. Son tres pasos y no se pierde nada de lo que ya hay.</div>
+        <ol style="padding-left:20px;line-height:1.9">
+          <li><b>Copia el archivo</b> con el botón de aquí abajo. Viene completo; no hay que
+            abrir nada ni seleccionar nada.</li>
+          <li>En <b>supabase.com</b>, con el proyecto del hotel abierto:
+            <b>SQL Editor</b> → <b>New query</b> → pegar → <b>Run</b>.
+            <div class="hint">Al final tiene que aparecer <b>COMMIT</b>. Si no aparece, no se
+              aplicó nada: vuelve a pegarlo y a correrlo. Todo va en una sola transacción, así
+              que un pegado a medias deja la base <b>exactamente como estaba</b>.</div></li>
+          <li>Vuelve aquí y pica <b>Ya lo corrí</b>.</li>
+        </ol>
+        <p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn primary" id="afCopiar">Copiar el archivo</button>
+          <button class="btn ok" id="afVerificar">Ya lo corrí · Verificar</button></p>
+        <div id="afDicho"></div>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cerrar</button></div>
+    </div>`);
+
+  const dicho = ov.querySelector("#afDicho");
+
+  ov.querySelector("#afCopiar").onclick = async e => {
+    const b = e.currentTarget, antes = b.textContent;
+    b.disabled = true; b.textContent = "Trayéndolo…";
+    try{
+      /* Se pide al servidor del propio CRM: firmas.sql se publica junto al
+         index.html, así que siempre es la versión que corresponde a lo que
+         está corriendo. */
+      const r = await fetch("firmas.sql", { cache:"no-store" });
+      if (!r.ok) throw new Error("el servidor contestó " + r.status);
+      const sql = await r.text();
+      if (!/^\s*--/.test(sql) || !/commit;/i.test(sql))
+        throw new Error("lo que llegó no parece el archivo");
+      try{ await navigator.clipboard.writeText(sql); }
+      catch(err){
+        dicho.innerHTML = `<div class="note warn">Este navegador no deja copiar solo.
+          Selecciona todo lo de abajo y cópialo a mano.</div>
+          <textarea class="field" style="width:100%;height:160px;font-family:monospace;
+            font-size:11px"></textarea>`;
+        const t = dicho.querySelector("textarea");
+        t.value = sql; t.focus(); t.select();
+        return;
+      }
+      dicho.innerHTML = `<div class="note"><b>Copiado completo</b> —
+        ${sql.split("\n").length} renglones—. Ahora pégalo en el SQL Editor de Supabase
+        y dale <b>Run</b>.</div>`;
+    }catch(err){
+      dicho.innerHTML = `<div class="errbox">No se pudo traer el archivo: ${esc(err.message)}
+        <br><br>Está en el repositorio con el nombre <code>firmas.sql</code>.</div>`;
+    }finally{ b.disabled = false; b.textContent = antes; }
+  };
+
+  ov.querySelector("#afVerificar").onclick = async e => {
+    const b = e.currentTarget, antes = b.textContent;
+    b.disabled = true; b.textContent = "Preguntando…";
+    _buzonOk = false;                       // que vuelva a preguntarle al servidor
+    const hay = nubeActiva() ? await buzonMontado() : false;
+    b.disabled = false; b.textContent = antes;
+    if (!nubeActiva()){
+      dicho.innerHTML = `<div class="note warn">Primero hay que entrar a la nube
+        (<i>Ajustes → Nube y equipo</i>): sin sesión no se le puede preguntar al servidor.</div>`;
+      return;
+    }
+    dicho.innerHTML = hay
+      ? `<div class="note" style="border-left:3px solid var(--ok)"><b>Listo: ya funciona.</b>
+         Cierra esta ventana y vuelve a abrir <i>Enviar al cliente</i>; el enlace de firma ya
+         está ahí. No hace falta recargar nada.</div>`
+      : `<div class="errbox"><b>Todavía no.</b> El servidor sigue diciendo que le falta el
+         buzón. Revisa que al correrlo haya aparecido <b>COMMIT</b> y que sea el proyecto del
+         hotel. Si ya salió COMMIT y aun así dice esto, avísame: hay otra vía y la montamos.</div>`;
+  };
+}
 
 /**
  * ¿El documento ya está en la nube CON ESTE ENLACE?

@@ -27,6 +27,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 
 const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
+const SQL    = '/home/user/CRM-VENTAS-/firmas.sql';
 const PUERTO = 8794;
 const CHROME = process.env.CHROME_PATH ||
   '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -45,6 +46,10 @@ const srv = http.createServer((req, res) => {
   if (u.pathname === '/app'){
     res.writeHead(200, { 'Content-Type':'text/html; charset=utf-8' });
     return res.end(fs.readFileSync(APP, 'utf8'));
+  }
+  if (u.pathname === '/firmas.sql'){
+    res.writeHead(200, { 'Content-Type':'text/plain; charset=utf-8' });
+    return res.end(fs.readFileSync(SQL, 'utf8'));
   }
   if (u.pathname === '/rest/v1/rpc/crm_buzon_ok'){
     if (buzon === 'falta'){ res.writeHead(404, cors); return res.end('{"message":"no existe"}'); }
@@ -89,7 +94,7 @@ await p.evaluate(url => {
 /** Vuelve a preguntar desde cero: la respuesta se guarda por sesión. */
 const preguntar = async modo => {
   buzon = modo;
-  return p.evaluate(async () => { _buzonOk = null; return await buzonMontado(); });
+  return p.evaluate(async () => { _buzonOk = false; return await buzonMontado(); });
 };
 
 await bloque('1 · buzonMontado() dice la verdad', async () => {
@@ -100,7 +105,7 @@ await bloque('1 · buzonMontado() dice la verdad', async () => {
 
 await bloque('2 · sin señal no estorba', async () => {
   const r = await p.evaluate(async () => {
-    _buzonOk = null;
+    _buzonOk = false;
     const antes = window.fetch;
     window.fetch = () => Promise.reject(new Error('sin red'));
     const v = await buzonMontado();
@@ -110,11 +115,20 @@ await bloque('2 · sin señal no estorba', async () => {
   afirma('si se cae la red, el enlace se sigue ofreciendo', r === true);
 });
 
-/** Abre «Enviar convenio al cliente» y devuelve lo que ve el ejecutivo. */
-const mandarConvenio = async modo => {
+/** Olvida lo que el CRM ya sabía: como empezar sesión de nuevo. */
+const sesionNueva = () => p.evaluate(() => { _buzonOk = false; });
+
+/**
+ * Abre «Enviar convenio al cliente» y devuelve lo que ve el ejecutivo.
+ *
+ * Por omisión arranca como una sesión nueva. El bloque 5 pide lo contrario a
+ * propósito —`fresco:false`—, porque lo que prueba es justamente qué pasa
+ * DENTRO de una misma sesión cuando el servidor se arregla.
+ */
+const mandarConvenio = async (modo, op = {}) => {
   buzon = modo;
+  if (op.fresco !== false) await sesionNueva();
   return p.evaluate(async () => {
-    _buzonOk = null;
     document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
     // saneaConv rellena lo que un convenio de verdad trae (textos, impuestos…).
     const v = saneaConv({ id:'v1', folio:'CV-2026-040', tokenFirma:'laclave', clienteId:'c1',
@@ -144,10 +158,22 @@ await bloque('3 · sin buzón, al ejecutivo NO se le ofrece el enlace', async ()
     /todav[ií]a NO funciona/i.test(r.texto));
   afirma('se le dice qué pasaría con el cliente',
     /no se va a poder registrar/i.test(r.texto));
-  afirma('se le dice a quién avisar y qué correr',
-    /sistemas/i.test(r.texto) && /firmas\.sql/i.test(r.texto));
+  afirma('y cómo arreglarlo, sin mandarlo a buscar nada',
+    /Arreglar esto/i.test(r.texto));
+  afirma('y que el documento se puede cerrar de todos modos',
+    /Subir uno firmado/i.test(r.texto));
   afirma('NO hay un solo botón para mandar el enlace', r.botonesDeEnlace === 0);
   afirma('el PDF sí se le sigue ofreciendo', /Descargar el PDF/i.test(r.texto));
+  /* El botón lleva su onclick en el propio HTML. Si la función no estuviera al
+     alcance, el botón no haría NADA y nadie se enteraría hasta usarlo. */
+  const abre = await p.evaluate(async () => {
+    const b = document.querySelector('#avisoSinBuzon button');
+    if (!b) return 'no hay botón';
+    b.click();
+    await new Promise(r => setTimeout(r, 300));
+    return document.querySelector('#afCopiar') ? 'abre' : 'no abrió';
+  });
+  afirma('y el botón de verdad abre el panel', abre === 'abre');
 });
 
 await bloque('4 · con el buzón montado, todo sigue como siempre', async () => {
@@ -155,6 +181,61 @@ await bloque('4 · con el buzón montado, todo sigue como siempre', async () => 
   afirma('se le ofrece el camino corto', /Que lo firme en su pantalla/i.test(r.texto));
   afirma('y los botones del enlace están ahí', r.botonesDeEnlace >= 3);
   afirma('sin el aviso de que falta algo', !/todav[ií]a NO funciona/i.test(r.texto));
+});
+
+await bloque('5 · un «no» NO se queda guardado', async () => {
+  /* Es el arreglo que importa: si el «no» se guardara por sesión, Marco podría
+     correr firmas.sql y el aviso seguiría saliendo hasta que alguien recargue
+     la página. Nadie recarga una página para ver si un aviso se fue. */
+  const antes = await mandarConvenio('falta');
+  afirma('con el buzón caído, no se ofrece el enlace', antes.botonesDeEnlace === 0);
+  // Sin recargar y sin olvidar nada: la misma sesión, el servidor ya arreglado.
+  const despues = await mandarConvenio('ok', { fresco:false });
+  afirma('al montarlo, el enlace vuelve solo', despues.botonesDeEnlace >= 3);
+  afirma('y el aviso desaparece', !/todav[ií]a NO funciona/i.test(despues.texto));
+});
+
+await bloque('6 · el panel trae el archivo ENTERO', async () => {
+  buzon = 'falta';
+  const r = await p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    let copiado = null;
+    navigator.clipboard.writeText = t => { copiado = t; return Promise.resolve(); };
+    panelArreglarFirmas();
+    await new Promise(r => setTimeout(r, 150));
+    document.querySelector('#afCopiar').click();
+    for (let i = 0; i < 60 && copiado === null; i++) await new Promise(r => setTimeout(r, 100));
+    return { copiado, dicho: (document.querySelector('#afDicho') || {}).innerText || '' };
+  });
+  // No basta con que se copiara «algo»: tiene que ser el archivo, completo.
+  const real = fs.readFileSync(SQL, 'utf8');
+  afirma('se copió el archivo tal cual, sin cortarlo', r.copiado === real);
+  afirma('y se le dice cuántos renglones son', /renglones/.test(r.dicho));
+});
+
+await bloque('7 · «Ya lo corrí» contesta la verdad, en el momento', async () => {
+  buzon = 'falta';
+  const malo = await p.evaluate(async () => {
+    document.querySelector('#afVerificar').click();
+    for (let i = 0; i < 60; i++){
+      const t = document.querySelector('#afDicho').innerText;
+      if (/Todav[ií]a no|ya funciona/i.test(t)) return t;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return '(no contestó)';
+  });
+  afirma('si sigue sin estar, lo dice', /Todav[ií]a no/i.test(malo));
+  buzon = 'ok';
+  const bueno = await p.evaluate(async () => {
+    document.querySelector('#afVerificar').click();
+    for (let i = 0; i < 60; i++){
+      const t = document.querySelector('#afDicho').innerText;
+      if (/ya funciona/i.test(t)) return t;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return '(no contestó)';
+  });
+  afirma('y en cuanto se arregla, lo dice ahí mismo', /ya funciona/i.test(bueno));
 });
 
 await br.close(); srv.close();
