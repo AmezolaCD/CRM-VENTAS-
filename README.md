@@ -767,6 +767,29 @@ ahí, pero el respaldo local sigue siendo la única copia que te llevas contigo.
 | PSDT | Presidencial | Deluxe | 14,601 |
 | CARE | Care | Recovery | N/A |
 
+## Certificados de cortesía
+
+Una cortesía con folio del hotel: una noche de hospedaje, un masaje, un facial, el temazcal o un
+consumo en el restaurante. Antes se hacían en un PowerPoint de 279 diapositivas —se duplicaba la
+última y se le cambiaban a mano el nombre, las fechas y el número—, y en ese archivo se ve lo que
+eso cuesta: folios repetidos, folios saltados, «31 DE DICIEMBRE 224», y las mismas condiciones
+redactadas de tres maneras distintas.
+
+Aquí:
+
+- **El número lo reparte el contador del hotel**, con su propia serie. No se repite aunque dos
+  personas emitan al mismo segundo, y **sin contador no se emite**: un folio adivinado es
+  exactamente como se repitieron los del PowerPoint.
+- **La fecha de validez se redacta sola** a partir de las dos fechas.
+- **El título y las condiciones salen de una plantilla por tipo de servicio**, y se pueden
+  corregir antes de emitir. Después ya no: el papel anda fuera con su folio impreso. Se marca
+  como usado o se cancela.
+- **Quién lo puede emitir se escoge por persona**, no por papel — ver `ROLES.md`.
+
+La hoja es la única del CRM que va **a sangre**: la foto del servicio llega hasta la orilla. Las
+fotos viven en `certificados/` con el nombre de su tipo; mientras no estén, el certificado sale
+con el fondo del hotel y su monograma.
+
 ## Sobre los datos de ejemplo
 
 **Todas las empresas, personas, teléfonos y correos que trae el código son inventados**, y los

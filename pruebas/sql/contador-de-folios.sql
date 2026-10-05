@@ -50,12 +50,19 @@ select case when public.crm_aparta_folio('eventos_cb','2026'::int,'CB','prueba')
             then '   ok' else '   FALLA' end as resultado;
 
 \echo ''
-\echo '5. Dos que piden a la vez se llevan números distintos'
+\echo '5. Y los certificados de cortesía llevan su propia serie'
+select case when public.crm_aparta_folio('certificados','2026'::int,'CE','prueba') = 'CE-2026-001'
+            then '   ok' else '   FALLA' end as resultado;
+select case when public.crm_aparta_folio('certificados','2026'::int,'CE','prueba') = 'CE-2026-002'
+            then '   ok · y el siguiente no se repite' else '   FALLA' end as resultado;
+
+\echo ''
+\echo '6. Dos que piden a la vez se llevan números distintos'
 select case when public.crm_aparta_folio('contratos','2026'::int,'CT','prueba') = 'CT-2026-013'
             then '   ok' else '   FALLA' end as resultado;
 
 \echo ''
-\echo '6. Un documento BORRADO no entra al contador'
+\echo '7. Un documento BORRADO no entra al contador'
 \echo '   (CT-2026-050 está borrado: si entrara, el contador se iría hasta el 051'
 \echo '    y el hotel perdería cuarenta números por un documento que ya no existe)'
 select case when not exists (select 1 from public.crm_folios

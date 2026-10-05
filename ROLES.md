@@ -1,5 +1,21 @@
 # Quién ve qué
 
+## Una palomita que no es un papel: los certificados
+
+Emitir un certificado de cortesía **no depende del papel sino de la persona**. Un certificado
+regala una noche, un masaje o un consumo: cuesta dinero, y el hotel escoge a quién se lo deja a
+mano. Por eso hay una columna **«Cert.»** en *Ajustes → Usuarios y permisos*, y no un papel nuevo.
+
+- Quien la tiene prendida puede emitir. **La administración siempre puede**, con palomita o sin ella.
+- **A quien no la tiene no se le enseña la pestaña**: para esa cuenta es como si no existiera.
+- Se cambia desde Ajustes, sin tocar código.
+
+**Es candado de aplicación, no de servidor**, igual que el resto de esta pantalla: quien supiera
+entrar por fuera podría escribir un certificado aunque no tenga la palomita. Para cerrarlo de
+verdad falta una regla en `roles.sql`.
+
+## Los papeles
+
 El CRM tiene nueve papeles:
 
 | Papel | Pestañas que ve | Qué alcanza |

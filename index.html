@@ -542,6 +542,40 @@
     z-index:0; opacity:.05; -webkit-print-color-adjust:exact; print-color-adjust:exact}
   .doc-agua svg, .doc-agua img{width:68%; max-width:470px; height:auto; object-fit:contain}
   .doc-contenido{position:relative; z-index:1}
+
+  /* ----- El certificado de cortesía -----
+     Medidas sacadas del PowerPoint que se hacía a mano: hoja vertical, el
+     título en una columna a la izquierda, la firma a media hoja, las
+     condiciones abajo y el folio en la esquina. Van en píxeles de hoja carta a
+     96 dpi (816 x 1056), que es el lienzo del rasterizador, y por eso son
+     absolutas: esta hoja no se reacomoda, se imprime. */
+  .cert{position:relative; width:816px; height:1056px; overflow:hidden;
+    color:#fff; font-family:Georgia,"Times New Roman",serif;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact}
+  /* Una veladura: la foto del servicio puede ser clara justo donde va el texto,
+     y un certificado ilegible no sirve de nada. */
+  .cert-scrim{position:absolute; inset:0;
+    background:linear-gradient(100deg, rgba(20,8,32,.62) 0%, rgba(20,8,32,.42) 42%,
+      rgba(20,8,32,.08) 70%, rgba(20,8,32,0) 100%),
+    linear-gradient(0deg, rgba(20,8,32,.70) 0%, rgba(20,8,32,.28) 18%, rgba(20,8,32,0) 34%)}
+  .cert-mono{position:absolute; top:300px; left:0; right:0; display:flex;
+    justify-content:center; opacity:.10}
+  .cert-mono svg{width:420px; height:auto}
+  .cert-titulo{position:absolute; left:36px; top:320px; width:300px}
+  .cert-t1{font-size:33px; line-height:1.18; letter-spacing:.5px; text-transform:uppercase}
+  .cert-t2{font-size:21px; line-height:1.3; margin-top:14px; letter-spacing:.3px;
+    color:#e8dcf2}
+  .cert-firma{position:absolute; left:296px; top:690px; width:232px; text-align:center}
+  .cert-raya{border-top:1px solid rgba(255,255,255,.75); margin-bottom:6px}
+  .cert-f1{font-size:19px; min-height:24px}
+  .cert-f2{font-size:15px; color:#e8dcf2}
+  .cert-pie{position:absolute; left:48px; right:48px; top:852px;
+    font-size:15px; line-height:1.45; font-family:inherit}
+  .cert-folio{position:absolute; right:44px; bottom:26px; font-size:18px;
+    letter-spacing:1px; color:#e8dcf2}
+  /* En pantalla se enseña encogida, para que quepa en la ventana. */
+  .cert-marco{width:816px; transform-origin:top left; border-radius:8px;
+    overflow:hidden; box-shadow:var(--shadow)}
   .doc-logo{max-height:78px; max-width:76%; display:block; margin:0 auto 6px}
   .doc-mono{width:52px; height:52px; margin:0 auto 5px; display:block}
   .doc-wordmark{width:270px; margin:0 auto 6px}
@@ -714,6 +748,7 @@ window.CORE_NUBE = { url:"", anon:"" };
     <button data-view="calendario">Calendario</button>
     <button data-view="reportes">Reportes</button>
     <button data-view="confirmaciones">Confirmaciones</button>
+    <button data-view="certificados">Certificados</button>
     <button data-view="leads">Leads</button>
     <button data-view="formulario">Formulario</button>
     <button data-view="ajustes">Ajustes</button>
@@ -751,6 +786,7 @@ window.CORE_NUBE = { url:"", anon:"" };
   <section class="view" id="v-calendario"><div class="table-wrap" id="tblCalendario"></div></section>
   <section class="view" id="v-reportes"><div class="table-wrap" id="tblReportes"></div></section>
   <section class="view" id="v-confirmaciones"><div class="table-wrap" id="tblConfirm"></div></section>
+  <section class="view" id="v-certificados"><div class="table-wrap" id="tblCertificados"></div></section>
   <section class="view" id="v-leads"><div class="table-wrap" id="tblLeads"></div></section>
   <section class="view" id="v-formulario"><div class="table-wrap" id="tblFormulario"></div></section>
   <section class="view" id="v-ajustes"><div class="table-wrap" id="panelAjustes"></div></section>
@@ -774,7 +810,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.06-91";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.06-92";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -881,6 +917,14 @@ const HOTEL_DEF = {
   ciudad: "Tijuana B.C.",
   telReservaciones: "664 374 2487",
   emailReservaciones: "reservaciones@quartzhotel.mx",
+  /* El spa atiende por su propia línea: en los certificados de facial y masaje
+     va ese contacto y no el de reservaciones. Vacíos se usan los de arriba. */
+  telSpa: "",
+  emailSpa: "",
+  /* Quien firma los certificados de cortesía. Va vacío a propósito: es una
+     firma, y una firma no se escribe en el código. Se captura en Ajustes. */
+  director: "",
+  puestoDirector: "Dirección General",
   sitio: "",                 // la página del hotel, para armar las ligas de campaña
   tokenAlta: "",             // la clave de la liga pública de registro
   logo: "",                 // data URI; si está vacío se usa el monograma
@@ -1246,7 +1290,7 @@ const USUARIOS_DEF = [
  */
 const VISTAS = ["tablero","clientes","actividades","convenios","contratos",
                 "eventos","contratosbq","mktdash","campanas","odts","calendario","reportes",
-                "confirmaciones","leads","formulario","ajustes"];
+                "confirmaciones","certificados","leads","formulario","ajustes"];
 /* Lo de banquetes es de banquetes. Gerencia de ventas ve toda la cartera y
    todo el hospedaje, pero los eventos son de otro departamento: no le
    aparecen, ni en sus pestañas ni en el calendario ni en los reportes. La
@@ -1271,7 +1315,7 @@ const DEPARTAMENTOS = [
   { id:"ventas", name:"Ventas", icono:"🛏️",
     sub:"Convenios de tarifas, contratos de estancia y confirmaciones de hospedaje",
     vistas:["tablero","clientes","actividades","convenios","contratos",
-            "confirmaciones","calendario","reportes","leads","formulario"] },
+            "confirmaciones","certificados","calendario","reportes","leads","formulario"] },
   { id:"banquetes", name:"Banquetes", icono:"🍽️",
     sub:"Cotizaciones y contratos de eventos, con su calendario y sus reportes",
     vistas:["tablero","clientes","actividades","eventos","contratosbq",
@@ -1464,7 +1508,11 @@ function otrosDepartamentos(){
 function vistasDelRol(){
   const base = VISTAS_ROL[rolActual()] || VISTAS_ROL.ejecutivo;
   const d = escogeDepto() ? deptoActual() : null;
-  return d ? base.filter(v => v === "ajustes" || d.vistas.includes(v)) : base;
+  const vs = d ? base.filter(v => v === "ajustes" || d.vistas.includes(v)) : base;
+  /* Los certificados no se esconden por departamento sino por PERSONA. A quien
+     no los puede emitir no se le enseña la pestaña: para esa cuenta es como si
+     no existiera. */
+  return puedeCertificados() ? vs : vs.filter(v => v !== "certificados");
 }
 const puedeVer = v => vistasDelRol().includes(v);
 
@@ -1475,8 +1523,28 @@ function saneaUsuario(u){
   o.nombre = String(o.nombre).trim();
   if (!ROLES.some(r => r.id === o.rol)) o.rol = "ejecutivo";
   o.firma = saneaFirma(o.firma);      // la que dejó guardada para no volver a trazarla
+  /* Emitir certificados no es cosa del PAPEL sino de la persona: un certificado
+     es una cortesía que cuesta dinero, y el hotel escoge a quién se lo deja a
+     mano. Por eso es una palomita en la ficha y no un rol nuevo.
+
+     Sólo existe cuando está prendida: un campo nuevo en todas las fichas las
+     haría verse editadas y volverían a subirse enteras. */
+  if (o.certificados) o.certificados = true; else delete o.certificados;
   return o;
 }
+
+/**
+ * ¿Esta persona puede emitir certificados de cortesía?
+ *
+ * La administración siempre. Los demás, sólo si alguien les prendió la
+ * palomita en Ajustes → Usuarios. Quien no puede ni ve la pestaña.
+ */
+const puedeCertificados = () => {
+  if (!nubeActiva()) return true;          // suelto, en una sola máquina, manda quien la usa
+  if (esAdmin()) return true;
+  const u = usuarioActual();
+  return !!(u && u.certificados);
+};
 
 /**
  * La firma del ejecutivo se traza una vez y se vuelve a usar.
@@ -1941,6 +2009,7 @@ function sanear(s){
     eventos:      Array.isArray(s.eventos) ? s.eventos.map(saneaEvento) : [],
     campanas:     Array.isArray(s.campanas) ? s.campanas.map(saneaCampana) : [],
     odts:         Array.isArray(s.odts) ? s.odts.map(saneaOdt) : [],
+    certificados: Array.isArray(s.certificados) ? s.certificados.map(saneaCertificado) : [],
     huespedes:    Array.isArray(s.huespedes) ? s.huespedes.map(saneaHuesped) : [],
     usuarios:     Array.isArray(s.usuarios) ? s.usuarios.map(saneaUsuario) : USUARIOS_DEF.map(saneaUsuario),
     habitaciones: catalogo(s.habitaciones),
@@ -2284,6 +2353,126 @@ function saneaLineaEv(l){
   o.conServicio = !!o.conServicio;
   return o;
 }
+
+/* ==========================================================================
+   LOS CERTIFICADOS DE CORTESÍA
+
+   El hotel regala estancias, masajes, faciales y consumos: a un cliente que
+   cerró bien el año, a una rifa, a una presentación de destino. Eso se hacía
+   en un PowerPoint de 279 diapositivas —se duplicaba la última y se le
+   cambiaban a mano el nombre, las fechas y el número—, y ahí se ve lo que eso
+   cuesta: folios repetidos, folios saltados, «31 DE DICIEMBRE 224», y las
+   mismas condiciones redactadas de tres maneras distintas.
+
+   Aquí el número lo reparte el contador del hotel, las condiciones salen de
+   una plantilla por tipo de servicio, y la fecha de validez se escribe sola.
+   Todo se puede corregir antes de emitir; después ya no, porque el papel anda
+   fuera con su folio impreso.
+   ========================================================================== */
+
+const TIPOS_CERT = {
+  spa_facial: {
+    name: "SPA · Facial", corto: "Facial",
+    titulo: "FACIAL EN SENSES SPA DE CORTESÍA",
+    condiciones: "Cortesía válida para un facial de 45 min. para una persona. " +
+      "No incluye servicios adicionales, ni propinas. Sujeto a disponibilidad. Previa reservación.",
+    contacto: "spa", imagen: "certificados/spa-facial.jpg"
+  },
+  spa_masaje: {
+    name: "SPA · Masaje", corto: "Masaje",
+    titulo: "MASAJE RELAJANTE DE CORTESÍA",
+    condiciones: "Cortesía válida para un masaje relajante de 45 min. para una persona. " +
+      "No incluye servicios adicionales, ni propinas. Sujeto a disponibilidad. Previa reservación.",
+    contacto: "spa", imagen: "certificados/spa-masaje.jpg"
+  },
+  hospedaje: {
+    name: "Hospedaje", corto: "Hospedaje",
+    titulo: "1 NOCHE DE HOSPEDAJE DE CORTESÍA",
+    condiciones: "Cortesía válida por una noche de hospedaje para dos personas. " +
+      "No incluye servicios adicionales, no incluye desayuno. Sujeto a disponibilidad. " +
+      "Previa reservación.",
+    contacto: "reservaciones", imagen: "certificados/hospedaje.jpg"
+  },
+  restaurante: {
+    name: "Consumo en restaurante", corto: "Restaurante",
+    titulo: "CONSUMO EN RESTAURANTE",
+    condiciones: "No incluye bebidas alcohólicas. No incluye propinas. Sujeto a disponibilidad.",
+    contacto: "reservaciones", imagen: "certificados/restaurante.jpg"
+  },
+  temazcal: {
+    name: "Temazcal", corto: "Temazcal",
+    titulo: "TEMAZCAL DE CORTESÍA",
+    condiciones: "Cortesía válida para una persona. No incluye servicios adicionales, " +
+      "ni propinas. Sujeto a disponibilidad. Previa reservación.",
+    contacto: "spa", imagen: "certificados/temazcal.jpg"
+  }
+};
+
+const infoTipoCert = t => TIPOS_CERT[t] || TIPOS_CERT.hospedaje;
+
+const ESTADOS_CERT = {
+  borrador: { name:"Borrador", bg:"var(--panel-2)", fg:"var(--muted)" },
+  emitido:  { name:"Emitido",  bg:"var(--ok-soft)", fg:"var(--ok)" },
+  usado:    { name:"Usado",    bg:"var(--accent-soft)", fg:"var(--accent)" },
+  cancelado:{ name:"Cancelado",bg:"var(--bad-soft)", fg:"var(--bad)" }
+};
+
+function saneaCertificado(c){
+  const o = Object.assign({
+    id:"", folio:"", tipo:"hospedaje", paraQuien:"", titulo:"", condiciones:"",
+    desde:"", hasta:"", estado:"borrador", notas:"",
+    emitidoPor:"", emitidoEn:"", createdAt:"", updatedAt:""
+  }, c || {});
+  o.id = o.id || nuevoId("ce");
+  if (!TIPOS_CERT[o.tipo]) o.tipo = "hospedaje";
+  if (!ESTADOS_CERT[o.estado]) o.estado = "borrador";
+  for (const k of ["folio","paraQuien","titulo","condiciones","desde","hasta",
+                   "notas","emitidoPor","emitidoEn","createdAt","updatedAt"])
+    o[k] = String(o[k] || "");
+  o.createdAt = o.createdAt || new Date().toISOString();
+  // Ver saneaContrato: el marcador sólo existe mientras el folio esté repetido.
+  if ("folioRepetido" in o){
+    o.folioRepetido = String(o.folioRepetido || "");
+    if (!o.folioRepetido) delete o.folioRepetido;
+  }
+  return o;
+}
+
+/** El título y las condiciones que van impresos: los suyos, o los de su tipo. */
+const tituloCert = c => String(c.titulo || "").trim() || infoTipoCert(c.tipo).titulo;
+const condicionesCert = c =>
+  String(c.condiciones || "").trim() || infoTipoCert(c.tipo).condiciones;
+
+/**
+ * «Fecha de validez: 22 de febrero al 22 de marzo del 2026».
+ *
+ * En el PowerPoint esto se escribía a mano, y de ahí salieron cosas como «31
+ * DE DICIEMBRE 224». Aquí sale de las dos fechas y no se puede escribir mal.
+ */
+function vigenciaCert(c){
+  const d = c.desde, h = c.hasta;
+  if (d && h){
+    const a = new Date(d.slice(0,10) + "T00:00:00"), b = new Date(h.slice(0,10) + "T00:00:00");
+    if (!isNaN(a) && !isNaN(b) && a.getFullYear() === b.getFullYear())
+      return `${a.getDate()} de ${MESES[a.getMonth()]} al ${b.getDate()} de ` +
+             `${MESES[b.getMonth()]} del ${b.getFullYear()}`;
+    return `${fechaTexto(d)} al ${fechaTexto(h)}`;
+  }
+  if (h) return `hasta el ${fechaTexto(h)}`;
+  if (d) return `a partir del ${fechaTexto(d)}`;
+  return "";
+}
+
+/** A dónde llama quien lo quiera usar: el spa tiene su propia línea. */
+function contactoCert(c){
+  const h = state.ajustes.hotel;
+  const esSpa = infoTipoCert(c.tipo).contacto === "spa";
+  return {
+    email: (esSpa && h.emailSpa) || h.emailReservaciones || "",
+    tel:   (esSpa && h.telSpa)   || h.telReservaciones   || ""
+  };
+}
+
 
 /**
  * Un documento de banquetes: la cotización de un evento o su contrato.
@@ -3306,7 +3495,7 @@ function menuSesion(){
 /* ----- Traducción entre el estado y las filas de la tabla ----- */
 
 const COLECCIONES = ["clientes","actividades","convenios","contratos","eventos","prospectos",
-                     "campanas","odts","huespedes","habitaciones","usuarios"];
+                     "campanas","odts","huespedes","habitaciones","usuarios","certificados"];
 /** Lo que roles.sql sólo deja escribir al administrador. */
 const SOLO_ADMIN = ["ajustes","usuarios","habitaciones"];
 
@@ -3325,7 +3514,7 @@ function estadoDesdeFilas(filas){
      perder datos —nadie se entera hasta que alguien pregunta por lo suyo—. */
   const bruto = { clientes:[], actividades:[], convenios:[], contratos:[], eventos:[],
                   prospectos:[], campanas:[], odts:[], huespedes:[], habitaciones:[],
-                  usuarios:[], ajustes:null };
+                  usuarios:[], certificados:[], ajustes:null };
   for (const f of filas){
     if (f.tipo === "ajustes") bruto.ajustes = f.datos;
     else if (bruto[f.tipo]) bruto[f.tipo].push(f.datos);
@@ -4896,7 +5085,11 @@ const PX_ANCHO = 816, PX_ALTO = 1056;     // la misma carta a 96 dpi
 const ESCALA_PDF = 2;                     // para que no se vea pixelado
 
 /** Convierte un elemento del documento en un JPEG del tamaño de una hoja carta. */
-function rasterizarHoja(el){
+function rasterizarHoja(el, op){
+  /* `sangrada` es para el certificado de cortesía: su imagen de fondo llega
+     hasta la orilla, así que la hoja no lleva margen. Una carta normal sí lo
+     lleva, y por eso es lo que sigue pasando sin pedir nada. */
+  const relleno = (op && op.sangrada) ? "0" : "16mm 18mm";
   return new Promise((resolve, reject) => {
     // Dentro del SVG el medio es "pantalla", así que las reglas de @media print
     // no aplican: la sangría de la hoja se pone aquí a mano.
@@ -4909,7 +5102,7 @@ function rasterizarHoja(el){
 
     const papel = document.createElement("div");
     papel.className = "doc-body";
-    papel.style.cssText = "width:100%;height:100%;padding:16mm 18mm;margin:0;" +
+    papel.style.cssText = `width:100%;height:100%;padding:${relleno};margin:0;` +
       "box-sizing:border-box;background:#fff;overflow:hidden";
     papel.appendChild(clon);
 
@@ -5074,7 +5267,7 @@ function render(){
   document.querySelectorAll(".view").forEach(v =>
     v.id === "v-" + vista ? v.setAttribute("data-on","") : v.removeAttribute("data-on"));
 
-  const buscando = ["tablero","clientes","actividades"].includes(vista);
+  const buscando = ["tablero","clientes","actividades","certificados"].includes(vista);
   const porEjecutivo = vista === "tablero" || vista === "clientes";
   document.getElementById("q").style.display      = buscando ? "" : "none";
   document.getElementById("fEje").style.display   = porEjecutivo ? "" : "none";
@@ -5103,6 +5296,7 @@ function render(){
   if (vista === "calendario") renderCalendario();
   if (vista === "reportes") renderReportes();
   if (vista === "confirmaciones") renderConfirmaciones();
+  if (vista === "certificados") renderCertificados();
   if (vista === "leads") renderLeads();
   if (vista === "formulario") renderFormulario();
   /* Los Ajustes son una pantalla entera de campos que se llenan a mano —la
@@ -6580,6 +6774,97 @@ async function pdfDeHuespedes(gs){
   return pdfDesdeImagenes(imgs);
 }
 
+/* ==========================================================================
+   LA HOJA DEL CERTIFICADO
+
+   Es la única hoja del CRM que va A SANGRE: la foto del servicio llega hasta
+   la orilla del papel, como en el PowerPoint del hotel. Por eso no usa el
+   margen de las demás y se arma con medidas absolutas.
+
+   Las medidas salen de medir el archivo que se hacía a mano: hoja vertical,
+   el título en una columna a la izquierda, la firma a media hoja, las
+   condiciones abajo y el folio chiquito en la esquina. Aquí van en píxeles de
+   hoja carta a 96 dpi, que es el lienzo con el que trabaja el rasterizador.
+   ========================================================================== */
+
+/* El fondo tiene que ser data URL: dentro del SVG que rasteriza la hoja no se
+   resuelven direcciones externas. Se trae una vez por tipo y se recuerda. */
+const fondosCert = new Map();
+
+async function fondoCertificado(tipo){
+  const ruta = infoTipoCert(tipo).imagen;
+  if (fondosCert.has(ruta)) return fondosCert.get(ruta);
+  let dato = null;
+  try{
+    const r = await fetch(ruta, { cache:"force-cache" });
+    if (r.ok){
+      const blob = await r.blob();
+      if (/^image\//.test(blob.type))
+        dato = await new Promise((ok, mal) => {
+          const fr = new FileReader();
+          fr.onload = () => ok(String(fr.result));
+          fr.onerror = () => mal(new Error("no se pudo leer"));
+          fr.readAsDataURL(blob);
+        });
+    }
+  }catch(e){ /* sin imagen se dibuja el fondo del hotel; no es un error */ }
+  fondosCert.set(ruta, dato);
+  return dato;
+}
+
+/**
+ * El certificado, listo para rasterizar o para enseñar en pantalla.
+ *
+ * `fondo` es el data URL de la foto, o null. Sin foto no se ve roto: queda el
+ * morado del hotel con su monograma, que es un certificado perfectamente
+ * presentable mientras llegan las imágenes.
+ */
+function cuerpoCertificado(c, fondo){
+  const h = state.ajustes.hotel;
+  const con = contactoCert(c);
+  const vig = vigenciaCert(c);
+  const sinFoto = `background:radial-gradient(120% 90% at 70% 15%, #5b4178 0%, ` +
+                  `${MORADO_QUARTZ} 55%, #2b1c3e 100%)`;
+  return `
+    <div class="cert" style="${fondo
+      ? `background-image:url('${fondo}');background-size:cover;background-position:center`
+      : sinFoto}">
+      ${fondo ? "" : `<div class="cert-mono">${monogramaQ("#ffffff")}</div>`}
+      <div class="cert-scrim"></div>
+
+      <div class="cert-titulo">
+        <div class="cert-t1">${esc(tituloCert(c))}</div>
+        ${c.paraQuien ? `<div class="cert-t2">${esc(c.paraQuien)}</div>` : ""}
+      </div>
+
+      <div class="cert-firma">
+        <div class="cert-raya"></div>
+        <div class="cert-f1">${esc(h.director || "")}</div>
+        <div class="cert-f2">${esc(h.puestoDirector || "")}</div>
+      </div>
+
+      <div class="cert-pie">
+        ${vig ? `<b>Fecha de validez: ${esc(vig)}</b><br>` : ""}
+        ${esc(condicionesCert(c))}
+        ${(con.email || con.tel) ? `<br>${esc(con.email)}${
+          con.email && con.tel ? " · " : ""}${con.tel ? "Cel. " + esc(con.tel) : ""}` : ""}
+      </div>
+
+      <div class="cert-folio">${esc(c.folio || "")}</div>
+    </div>`;
+}
+
+/** El PDF: una sola hoja, a sangre, sin librerías. */
+async function pdfDeCertificado(c){
+  const caja = document.createElement("div");
+  caja.innerHTML = cuerpoCertificado(c, await fondoCertificado(c.tipo));
+  return pdfDesdeImagenes([await rasterizarHoja(caja.firstElementChild, { sangrada:true })]);
+}
+
+const nombrePdfCert = c =>
+  "Certificado-" + nombreArchivo([c.folio, infoTipoCert(c.tipo).corto,
+                                  c.paraQuien].filter(Boolean).join(" ")) + ".pdf";
+
 /* --------------------------------------------------------------------------
    El convenio no cabe en una hoja: hay que paginarlo
 
@@ -6984,13 +7269,17 @@ function renderAjustes(){
         el campo <i>Ejecutivo</i> de cada cliente, no el correo: si aquí dice “Carmen Sotelo”
         y en un cliente importado dice “C. Sotelo”, ese cliente queda sin dueño y aparece
         más abajo, en <i>Nombres que no son de nadie</i>.</div>
+      <div class="note"><b>La columna «Cert.»</b> es quién puede emitir certificados de
+        cortesía. A quien no la tenga no se le enseña siquiera la pestaña. La administración
+        siempre puede.</div>
       <div class="note warn"><b>Esto acomoda lo que cada quien ve en pantalla.</b>
         Los datos siguen viajando completos a cada equipo, así que alguien con conocimientos
         podría leerlos de todas formas. Para que el servidor mismo se los niegue falta un paso
         aparte, explicado en <code>ROLES.md</code>.</div>
       <div style="overflow:auto"><table class="data" id="tUsr">
         <thead><tr><th>Correo con el que entra</th><th>Nombre en la cartera</th>
-          <th>Papel</th><th></th></tr></thead>
+          <th>Papel</th><th title="Quién puede emitir certificados de cortesía">Cert.</th>
+          <th></th></tr></thead>
         <tbody></tbody></table></div>
       <p style="margin:10px 0 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn" id="bAddUsr">+ Agregar persona</button>
@@ -7055,6 +7344,19 @@ function renderAjustes(){
           <input class="field" id="hTelRes" value="${esc(h.telReservaciones)}"></div>
         <div><label class="lbl">Correo de reservaciones</label>
           <input class="field" id="hMailRes" value="${esc(h.emailReservaciones)}"></div>
+        <div><label class="lbl">Teléfono del spa</label>
+          <input class="field" id="hTelSpa" value="${esc(h.telSpa)}"
+            placeholder="Vacío usa el de reservaciones">
+          <div class="hint">Sale en los certificados de facial, masaje y temazcal.</div></div>
+        <div><label class="lbl">Correo del spa</label>
+          <input class="field" id="hMailSpa" value="${esc(h.emailSpa)}"
+            placeholder="Vacío usa el de reservaciones"></div>
+        <div><label class="lbl">Quién firma los certificados</label>
+          <input class="field" id="hDirector" value="${esc(h.director)}"
+            placeholder="Nombre de quien firma">
+          <div class="hint">Su nombre va impreso en cada certificado de cortesía.</div></div>
+        <div><label class="lbl">Su puesto</label>
+          <input class="field" id="hPuestoDir" value="${esc(h.puestoDirector)}"></div>
         <div class="full"><label class="lbl">Página del hotel</label>
           <input class="field" id="hSitio" value="${esc(h.sitio)}"
             placeholder="https://www.quartzhotel.mx">
@@ -7176,6 +7478,8 @@ function renderAjustes(){
       <td><select class="field" data-uk="rol" style="width:100%">${ROLES.map(r =>
             `<option value="${r.id}"${r.id === u.rol ? " selected" : ""}>${esc(r.name)}</option>`).join("")}</select>
         <div class="hint">${esc(infoRol(u.rol).ayuda)}</div></td>
+      <td style="text-align:center"><input type="checkbox" data-uk="certificados"
+            title="Puede emitir certificados de cortesía"${u.certificados ? " checked" : ""}></td>
       <td><button class="btn sm danger" data-delu="${u.id}">Quitar</button></td></tr>`).join("") +
     `<datalist id="listaEje">${nombresCartera.map(n => `<option value="${esc(n)}">`).join("")}</datalist>`;
 
@@ -7289,6 +7593,10 @@ function renderAjustes(){
     h.ciudad    = p.querySelector("#hCiudad").value.trim();
     h.telReservaciones   = p.querySelector("#hTelRes").value.trim();
     h.emailReservaciones = p.querySelector("#hMailRes").value.trim();
+    h.telSpa         = p.querySelector("#hTelSpa").value.trim();
+    h.emailSpa       = p.querySelector("#hMailSpa").value.trim();
+    h.director       = p.querySelector("#hDirector").value.trim();
+    h.puestoDirector = p.querySelector("#hPuestoDir").value.trim();
     h.sitio = p.querySelector("#hSitio").value.trim();
     h.marcaAgua = p.querySelector("#hAgua").value;
     p.querySelectorAll("[data-legal]").forEach(i => { h[i.dataset.legal] = i.value.trim(); });
@@ -7311,6 +7619,10 @@ function renderAjustes(){
       u.correo = tr.querySelector('[data-uk="correo"]').value.trim().toLowerCase();
       u.nombre = tr.querySelector('[data-uk="nombre"]').value.trim();
       u.rol    = tr.querySelector('[data-uk="rol"]').value;
+      /* Emitir certificados es de la persona, no del papel: un certificado es
+         una cortesía que cuesta dinero y el hotel escoge a quién se lo deja a
+         mano. La administración siempre puede, con palomita o sin ella. */
+      u.certificados = tr.querySelector('[data-uk="certificados"]').checked;
     });
     state.usuarios = state.usuarios.filter(u => u.correo || u.nombre).map(saneaUsuario);
 
@@ -8215,7 +8527,15 @@ const folioAutomatico = f => /^CV-\d{4}-\d+$/i.test(String(f || "").trim());
    ========================================================================== */
 
 /** Se anota a la primera negativa del servidor y ya no se vuelve a molestar. */
-const hayContador = () => nubeActiva() && !nube.sinFolios;
+/* Se le vuelve a preguntar SIEMPRE que haya nube.
+
+   Antes, un «no está montado» se recordaba el resto de la sesión. Eso quiere
+   decir que si alguien corre folios.sql con el CRM abierto —que es justo lo que
+   va a pasar—, nadie puede emitir nada hasta recargar; y nadie recarga una
+   página para ver si un aviso se fue. `nube.sinFolios` queda nada más como
+   dato para el panel de Ajustes, no como candado. Cuesta una petición fallida
+   por intento, que es poquísimo al lado de dejar al equipo sin poder firmar. */
+const hayContador = () => nubeActiva();
 
 /** ¿Es un "esto no existe" —y no un problema de paso— lo que contestó? */
 function noExisteLaFuncion(e){
@@ -8380,6 +8700,13 @@ const SERIES_FOLIO = {
     lista: () => state.contratos,
     anio:  k => anioContrato(k),
     libre: k => folioContrato(anioContrato(k), k.id)
+  },
+  certificados: {
+    uno:"certificado", unos:"certificados", articulo:"el",
+    tipo:"certificados", prefijo:"CE",
+    lista: () => state.certificados,
+    anio:  c => anioCertificado(c),
+    libre: c => folioCertificado(anioCertificado(c), c.id)
   }
 };
 
@@ -11771,6 +12098,33 @@ function folioContrato(anio, excluirId){
 }
 
 const folioCtAutomatico = f => /^CT-\d{4}-\d+$/i.test(String(f || "").trim());
+
+/* El año de un certificado es el de su vigencia, no el de hoy: uno que se
+   emite en diciembre para el año que entra lleva el año que entra. */
+const anioCertificado = c =>
+  String(c.desde || c.hasta || c.createdAt || new Date().toISOString()).slice(0, 4);
+
+/**
+ * El siguiente folio de certificado CON LO QUE ESTE EQUIPO TIENE BAJADO.
+ *
+ * Es el camino de respaldo, el que se usa cuando el CRM trabaja suelto, sin
+ * nube. Con nube el número lo reparte el contador del hotel y punto: aquí no
+ * se adivina, porque adivinar es exactamente como se repitieron los folios en
+ * el PowerPoint.
+ */
+function folioCertificado(anio, excluirId){
+  const a = String(anio || new Date().getFullYear()).slice(0, 4);
+  const re = new RegExp("^CE-" + a + "-(\\d+)$", "i");
+  const usados = new Set(state.certificados
+    .filter(c => c.id !== excluirId)
+    .map(c => String(c.folio || "").trim().toUpperCase()));
+  let n = Math.max(0, ...state.certificados
+    .filter(c => c.id !== excluirId)
+    .map(c => Number((re.exec(String(c.folio || "").trim()) || [])[1]) || 0)) + 1;
+  let f;
+  do { f = `CE-${a}-${String(n++).padStart(3, "0")}`; } while (usados.has(f));
+  return f;
+}
 
 const ejecutivoDeCt = k => String(k.ejecutivo || "").trim() ||
   String((cliente(k.clienteId) || {}).ejecutivo || "").trim();
@@ -15352,6 +15706,248 @@ let filtroOdt = { q:"", tipo:"", estado:"", sinAsignar:false };
 
 /** ¿A esta persona le toca ver las órdenes de trabajo? */
 const veOdts = () => puedeVer("odts");
+
+
+/* ==========================================================================
+   CERTIFICADOS DE CORTESÍA · la pantalla
+
+   Lo que hay que poder hacer de un vistazo: ver cuáles andan vigentes, cuál se
+   le dio a quién y con qué folio, y emitir uno nuevo sin que el número se
+   repita. Lo demás —el formato, las condiciones, la redacción de la fecha—
+   sale solo, que es justamente lo que no pasaba cuando se hacían a mano.
+   ========================================================================== */
+
+function renderCertificados(){
+  const cont = document.getElementById("tblCertificados");
+  const q = String(filtros.q || "").toLowerCase();
+  const cs = state.certificados
+    .filter(c => !q || (c.folio + " " + c.paraQuien + " " + tituloCert(c) +
+                        " " + infoTipoCert(c.tipo).name).toLowerCase().includes(q))
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  const repetidos = cs.filter(c => c.folioRepetido);
+
+  const cab = avisoFoliosRepetidos(SERIES_FOLIO.certificados, repetidos) +
+    `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+      <b style="font-size:15px">Certificados de cortesía</b>
+      <span class="hint">${cs.length} en total</span>
+      <span style="flex:1"></span>
+      <button class="btn primary" id="bNuevoCert">+ Nuevo certificado</button></div>
+    <div class="note">Una cortesía con folio del hotel. El número lo reparte el servidor, así
+      que <b>no se repite</b> aunque dos personas emitan al mismo tiempo, y la fecha de validez
+      se redacta sola. Una vez emitido ya no se edita —su folio anda impreso—: se marca como
+      usado o se cancela.</div>`;
+
+  if (!cs.length){
+    cont.innerHTML = cab + `<div class="vacio">Todavía no hay certificados.<br>
+      Se crean con el botón de arriba.</div>`;
+    cont.querySelector("#bNuevoCert").onclick = () => editarCertificado(null);
+    return;
+  }
+
+  cont.innerHTML = cab + `<table class="data">
+    <thead><tr><th>Folio</th><th>Tipo</th><th>A nombre de</th><th>Vigencia</th>
+      <th>Estado</th><th>Emitido</th><th></th></tr></thead>
+    <tbody>${cs.map(c => {
+      const e = ESTADOS_CERT[c.estado] || ESTADOS_CERT.borrador;
+      return `<tr class="row-link" data-id="${c.id}">
+        <td><b>${esc(c.folio || "—")}</b>${c.folioRepetido
+          ? ` <span class="pill" style="background:var(--bad-soft);color:var(--bad)"
+               title="Otro certificado del hotel tiene este mismo folio">repetido</span>` : ""}</td>
+        <td class="nowrap">${esc(infoTipoCert(c.tipo).name)}</td>
+        <td>${esc(c.paraQuien || "—")}<div class="hint">${esc(tituloCert(c))}</div></td>
+        <td class="nowrap">${esc(vigenciaCert(c) || "—")}</td>
+        <td><span class="estado-chip" style="background:${e.bg};color:${e.fg}">${esc(e.name)}</span></td>
+        <td class="nowrap">${c.emitidoEn
+          ? esc(fechaCorta(c.emitidoEn)) + `<div class="hint">${esc(c.emitidoPor || "")}</div>`
+          : "—"}</td>
+        <td class="nowrap"><button class="btn sm" data-ver="${c.id}">Ver</button></td>
+      </tr>`;
+    }).join("")}</tbody></table>`;
+
+  cont.querySelectorAll("tr[data-id]").forEach(tr => tr.addEventListener("click", ev => {
+    const v = ev.target.closest("[data-ver]");
+    if (v){ ev.stopPropagation(); verCertificado(v.dataset.ver); return; }
+    const c = state.certificados.find(x => x.id === tr.dataset.id);
+    if (c && c.estado === "borrador") editarCertificado(c.id); else verCertificado(tr.dataset.id);
+  }));
+  engancharRenumTodos(cont, SERIES_FOLIO.certificados, cs, repetidos);
+  cont.querySelector("#bNuevoCert").onclick = () => editarCertificado(null);
+}
+
+/** Capturar o corregir uno que todavía es borrador. */
+function editarCertificado(id){
+  const nuevo = !id;
+  const c = nuevo ? saneaCertificado({}) : state.certificados.find(x => x.id === id);
+  if (!c) return;
+  if (!nuevo && c.estado !== "borrador"){ verCertificado(c.id); return; }
+
+  const opc = Object.entries(TIPOS_CERT).map(([k, t]) =>
+    `<option value="${k}"${k === c.tipo ? " selected" : ""}>${esc(t.name)}</option>`).join("");
+
+  const ov = modal(`
+    <div class="modal">
+      <div class="modal-head"><h2>${nuevo ? "Nuevo certificado" : "Certificado " + esc(c.folio || "")}</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="grid">
+          <div><label class="lbl">Tipo de cortesía</label>
+            <select class="field" id="ceTipo" style="width:100%">${opc}</select></div>
+          <div><label class="lbl">A nombre de</label>
+            <input class="field" id="ceQuien" style="width:100%" value="${esc(c.paraQuien)}"
+              placeholder="Una persona, una empresa o un evento"></div>
+          <div><label class="lbl">Válido desde</label>
+            <input class="field" id="ceDesde" type="date" style="width:100%" value="${esc(c.desde)}"></div>
+          <div><label class="lbl">Válido hasta</label>
+            <input class="field" id="ceHasta" type="date" style="width:100%" value="${esc(c.hasta)}"></div>
+          <div class="full"><label class="lbl">Lo que dice en grande</label>
+            <input class="field" id="ceTitulo" style="width:100%" value="${esc(c.titulo)}"
+              placeholder="${esc(infoTipoCert(c.tipo).titulo)}"></div>
+          <div class="full"><label class="lbl">Información de la cortesía</label>
+            <textarea class="field" id="ceCond" style="width:100%;height:84px"
+              placeholder="${esc(infoTipoCert(c.tipo).condiciones)}">${esc(c.condiciones)}</textarea>
+            <div class="hint">Vacío sale el texto de su tipo. El contacto y la firma salen de
+              <i>Ajustes → Hotel</i>.</div></div>
+          <div class="full"><label class="lbl">Nota interna</label>
+            <input class="field" id="ceNotas" style="width:100%" value="${esc(c.notas)}"
+              placeholder="Por qué se dio. No sale impresa."></div>
+        </div>
+        <div id="ceErr" style="margin-top:10px"></div>
+      </div>
+      <div class="modal-foot">
+        ${!nuevo ? `<button class="btn danger" id="ceBorrar">Eliminar</button>` : ""}
+        <div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn" id="ceGuardar">Guardar borrador</button>
+        <button class="btn primary" id="ceEmitir">Emitir con folio</button>
+      </div>
+    </div>`);
+
+  const q = sel => ov.querySelector(sel);
+  // Al cambiar de tipo se refrescan los textos sugeridos, sin pisar lo escrito.
+  q("#ceTipo").onchange = e => {
+    const t = infoTipoCert(e.target.value);
+    q("#ceTitulo").placeholder = t.titulo;
+    q("#ceCond").placeholder = t.condiciones;
+  };
+
+  const recoger = () => {
+    c.tipo = q("#ceTipo").value;
+    c.paraQuien = q("#ceQuien").value.trim();
+    c.desde = q("#ceDesde").value;
+    c.hasta = q("#ceHasta").value;
+    c.titulo = q("#ceTitulo").value.trim();
+    c.condiciones = q("#ceCond").value.trim();
+    c.notas = q("#ceNotas").value.trim();
+    c.updatedAt = new Date().toISOString();
+    if (nuevo && !state.certificados.includes(c)) state.certificados.push(c);
+  };
+
+  q("#ceGuardar").onclick = () => { recoger(); guardar(); render(); ov.remove(); };
+
+  const bb = q("#ceBorrar");
+  if (bb) bb.onclick = () => {
+    if (!confirm("¿Eliminar este borrador? No se puede deshacer.")) return;
+    state.certificados = state.certificados.filter(x => x.id !== c.id);
+    guardar(); render(); ov.remove();
+  };
+
+  q("#ceEmitir").onclick = async e => {
+    recoger();
+    if (!c.paraQuien){
+      q("#ceErr").innerHTML = `<div class="errbox">Falta a nombre de quién va.</div>`;
+      return;
+    }
+    if (!c.hasta){
+      q("#ceErr").innerHTML = `<div class="errbox">Falta hasta cuándo vale. Un certificado
+        sin fecha de vencimiento no se puede dar por terminado nunca.</div>`;
+      return;
+    }
+    const b = e.currentTarget, antes = b.textContent;
+    b.disabled = true; b.textContent = "Pidiendo el folio…";
+    const folio = await folioParaFirmar(c, "certificados", "CE", anioCertificado(c),
+                                        () => folioCertificado(anioCertificado(c), c.id));
+    b.disabled = false; b.textContent = antes;
+    /* Sin número garantizado NO se emite. Es la regla que pidió Marco y es la
+       misma de los convenios: un folio adivinado es exactamente como se
+       repitieron los del PowerPoint. Y como no se apartó nada, tampoco se
+       gastó un número. */
+    if (!folio){ alert(AVISO_SIN_CONTADOR); return; }
+    c.folio = folio;
+    c.estado = "emitido";
+    c.emitidoPor = miNombre() || correoSesion();
+    c.emitidoEn = new Date().toISOString();
+    c.updatedAt = c.emitidoEn;
+    guardar(); render(); ov.remove();
+    verCertificado(c.id);
+  };
+}
+
+/** Verlo como va a quedar, bajarlo y marcarlo. */
+function verCertificado(id){
+  const c = state.certificados.find(x => x.id === id);
+  if (!c) return;
+  const e = ESTADOS_CERT[c.estado] || ESTADOS_CERT.borrador;
+
+  const ov = modal(`
+    <div class="modal" style="max-width:720px">
+      <div class="modal-head"><h2>Certificado ${esc(c.folio || "sin folio")}</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <p style="margin:0 0 10px">
+          <span class="estado-chip" style="background:${e.bg};color:${e.fg}">${esc(e.name)}</span>
+          <span class="hint" style="margin-left:8px">${esc(infoTipoCert(c.tipo).name)}${
+            c.emitidoEn ? " · emitido el " + esc(fechaCorta(c.emitidoEn)) +
+            (c.emitidoPor ? " por " + esc(c.emitidoPor) : "") : ""}</span></p>
+        <div id="ceVista" style="height:530px;overflow:hidden"><p class="hint">Dibujando…</p></div>
+        ${c.notas ? `<p class="hint" style="margin-top:10px"><b>Nota interna:</b>
+          ${esc(c.notas)}</p>` : ""}
+      </div>
+      <div class="modal-foot">
+        ${c.estado === "emitido" ? `<button class="btn" id="ceUsado">Marcar como usado</button>
+          <button class="btn danger" id="ceCancelar">Cancelar certificado</button>` : ""}
+        <div class="spacer"></div>
+        <button class="btn" data-close>Cerrar</button>
+        <button class="btn primary" id="cePdf">Descargar en PDF</button>
+      </div>
+    </div>`);
+
+  (async () => {
+    const caja = ov.querySelector("#ceVista");
+    const fondo = await fondoCertificado(c.tipo);
+    // La hoja mide 816 px; se encoge para que quepa en la ventana.
+    caja.innerHTML = `<div class="cert-marco" style="transform:scale(.49)">
+      ${cuerpoCertificado(c, fondo)}</div>`;
+    if (!fondo) caja.insertAdjacentHTML("beforeend",
+      `<p class="hint" style="margin-top:-500px;position:relative">Todavía no está cargada la
+       imagen de este tipo de certificado; mientras tanto sale el fondo del hotel.</p>`);
+  })();
+
+  ov.querySelector("#cePdf").onclick = async ev => {
+    const b = ev.currentTarget, antes = b.textContent;
+    b.disabled = true; b.textContent = "Generando…";
+    try{
+      descargarBlob(new Blob([await pdfDeCertificado(c)], { type:"application/pdf" }),
+                    nombrePdfCert(c));
+    }catch(err){ alert("No se pudo generar el PDF: " + err.message); }
+    finally{ b.disabled = false; b.textContent = antes; }
+  };
+
+  const marcar = (estado, pregunta) => {
+    if (!confirm(pregunta)) return;
+    c.estado = estado;
+    c.updatedAt = new Date().toISOString();
+    guardar(); render(); ov.remove();
+  };
+  const bu = ov.querySelector("#ceUsado");
+  if (bu) bu.onclick = () => marcar("usado",
+    "¿Marcar este certificado como usado?\n\nSu folio se queda igual: sirve para saber que " +
+    "ya se canjeó.");
+  const bc = ov.querySelector("#ceCancelar");
+  if (bc) bc.onclick = () => marcar("cancelado",
+    "¿Cancelar este certificado?\n\nSu folio NO se reusa —el papel pudo haber salido del " +
+    "hotel—, pero queda marcado como cancelado.");
+}
+
 
 /**
  * A quién se le puede asignar una orden.
