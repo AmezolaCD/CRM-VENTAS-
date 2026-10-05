@@ -774,7 +774,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.05-84";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.05-85";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -12248,13 +12248,14 @@ function enviarContrato(k, c){
   /* El enlace para que la firme en su pantalla, igual que en los convenios.
      Hace falta la nube —el enlace vive ahí— y que el ejecutivo ya haya
      firmado, porque es al firmar cuando se genera la clave. */
-  const conLiga = !!(k.tokenFirma && puedeMandarLiga());
-  const msgLiga = `Estimado(a) ${(c && c.contacto) || ""}:\n\n` +
+  let conLiga = !!(k.tokenFirma && puedeMandarLiga());   // se baja si no hay buzón
+  let sinBuzon = false;
+  const msgLiga = () => `Estimado(a) ${(c && c.contacto) || ""}:\n\n` +
     `Le comparto la ${doc.toLowerCase()} ${k.folio} de ${h.nombre}` +
     (k.titulo ? ` para ${k.titulo}` : "") + `.` +
     (k.vigencia ? ` Tiene vigencia hasta el ${fechaTexto(k.vigencia)}.` : "") +
     `\n\nPuede revisarla y firmarla desde este enlace, sin instalar nada:\n` +
-    (conLiga ? ligaFirma(k, "contratos") : "") +
+    ligaFirma(k, "contratos") +
     `\n\nQuedo al pendiente.\n\nSaludos cordiales,\n${firmante}\n${h.nombre}`;
 
   const ov = modal(`
@@ -12274,7 +12275,8 @@ function enviarContrato(k, c){
     guardar(); render();
   };
 
-  pdfDeDocumento(cuerpoContrato(k, c)).then(bytes => {
+  pdfDeDocumento(cuerpoContrato(k, c)).then(async bytes => {
+    if (conLiga && !(await buzonMontado())){ conLiga = false; sinBuzon = true; }
     const blob = new Blob([bytes], { type:"application/pdf" });
     const file = new File([blob], archivo, { type:"application/pdf" });
     const puedeCompartir = typeof navigator.canShare === "function" &&
@@ -12294,6 +12296,7 @@ function enviarContrato(k, c){
            <p class="hint">El enlace sólo abre este documento y deja de servir en cuanto se firma.</p>
            ${enlaceYaViajo(k, "contratos") ? "" : avisoSinSubir()}
            <h3 class="sec">O mándale el PDF</h3>`
+        : sinBuzon ? avisoSinBuzon()
         : `<div class="note warn"><b>El enlace de firma no está disponible.</b>
              ${!puedeMandarLiga()
                ? "Hace falta tener la nube configurada (Ajustes → Nube y equipo): el enlace vive ahí."
@@ -12332,12 +12335,12 @@ function enviarContrato(k, c){
     const ml = ov.querySelector("#kMailLiga");
     if (ml && !ml.disabled) ml.onclick = () => {
       window.location.href = `mailto:${encodeURIComponent((c && c.email) || "")}` +
-        `?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(msgLiga)}`;
+        `?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(msgLiga())}`;
       anotar("correo"); ov.remove();
     };
     const wl = ov.querySelector("#kWaLiga");
     if (wl && !wl.disabled) wl.onclick = () => {
-      window.open(waLink((c && c.telefono) || "", msgLiga, ladaDe(c)), "_blank", "noopener");
+      window.open(waLink((c && c.telefono) || "", msgLiga(), ladaDe(c)), "_blank", "noopener");
       anotar("whatsapp"); ov.remove();
     };
     ov.querySelector("#kBajar").onclick = () => descargarBlob(blob, archivo);
@@ -15745,7 +15748,21 @@ function verOdt(id){
   enganchaSubirYa(ov, o, "odts");
 
   const bDir = q("#bLigaDir");
-  if (bDir) bDir.onclick = () => {
+  if (bDir) bDir.onclick = async ev => {
+    /* No se reparte un enlace que no va a funcionar: si al servidor le falta el
+       buzón, el director firmaría y su firma no se podría registrar. */
+    const b = ev.currentTarget, antes = b.textContent;
+    b.disabled = true; b.textContent = "Revisando…";
+    const hayBuzon = await buzonMontado();
+    b.disabled = false; b.textContent = antes;
+    if (!hayBuzon){
+      alert("El enlace de firma todavía NO funciona.\n\n" +
+            "Si se lo mandas, el director va a abrir la orden, la va a firmar, y su firma " +
+            "no se va a poder registrar.\n\n" +
+            "Al servidor le falta el buzón de firmas: hay que correr firmas.sql completo en " +
+            "Supabase. Se confirma en Ajustes → Nube y equipo → Probar conexión.");
+      return;
+    }
     if (!o.tokenFirma){ o.tokenFirma = nuevoToken(); o.updatedAt = new Date().toISOString(); guardar(); }
     const liga = ligaFirma(o, "odts");
     const ok = () => alert("Enlace copiado.\n\nMándaselo al director: abre la orden, la lee " +
@@ -15978,6 +15995,55 @@ const idEnBuzon = (doc, tipo) => infoDoc(tipo).prefijo + doc.id;
 
 const puedeMandarLiga = () => !!(nube.url && nube.anon);
 
+/* ==========================================================================
+   NO SE REPARTE UN ENLACE QUE NO VA A FUNCIONAR
+
+   Un cliente de verdad leyó su convenio, lo firmó con el dedo, y al mandarlo
+   le salió un error de base de datos: al servidor le faltaba la regla que lo
+   deja depositar su firma. El ejecutivo le había mandado un enlace que nunca
+   pudo funcionar, y nadie podía saberlo hasta que el cliente se topó con eso.
+
+   Eso es lo que se cierra aquí. Antes de ponerle a nadie un enlace de firma en
+   la mano se le pregunta al servidor si el buzón está montado. Si no lo está,
+   el enlace NO se ofrece y se dice por qué, en la pantalla del ejecutivo, que
+   es quien puede hacer algo al respecto.
+
+   Se pregunta una vez por sesión: la respuesta no cambia sola, y el ejecutivo
+   no tiene por qué esperar a una consulta cada vez que manda un documento.
+   ========================================================================== */
+let _buzonOk = null;                       // null = todavía no se ha preguntado
+
+async function buzonMontado(){
+  if (!nubeActiva()) return true;          // sin nube no se ofrecen enlaces
+  if (_buzonOk !== null) return _buzonOk;
+  try{
+    const r = await fetch(nube.url + "/rest/v1/rpc/crm_buzon_ok", {
+      method:"POST",
+      headers:{ apikey: nube.anon, "Content-Type":"application/json",
+        Authorization: "Bearer " + ((nube.sesion && nube.sesion.access_token) || nube.anon) },
+      body: "{}"
+    });
+    // 404: ni siquiera existe la pregunta, así que firmas.sql no se ha corrido.
+    _buzonOk = r.status === 404 ? false : (await r.text()).trim() === "true";
+  }catch(e){
+    /* Si falló la red no se estorba: el ejecutivo puede estar sin señal, y
+       eso no es razón para quitarle el enlace. Se vuelve a preguntar luego. */
+    return true;
+  }
+  return _buzonOk;
+}
+
+/** Lo que ve el EJECUTIVO cuando el enlace no tiene a dónde llegar. */
+const avisoSinBuzon = () => `
+  <div class="note warn"><b>El enlace de firma todavía NO funciona.</b>
+    Si se lo mandas, el cliente va a leer el documento, lo va a firmar con el dedo
+    y su firma <b>no se va a poder registrar</b>.
+    <br><br>Al servidor le falta el buzón de firmas. Avísale a sistemas: hay que correr
+    <code>firmas.sql</code> <b>completo</b> en Supabase. Se confirma en
+    <i>Ajustes → Nube y equipo → Probar conexión</i>.
+    <br><br>Mientras tanto, mándale el PDF para que lo firme a mano y súbelo con
+    <i>Subir uno firmado</i>: queda igual de cerrado.</div>`;
+
 /**
  * ¿El documento ya está en la nube CON ESTE ENLACE?
  *
@@ -16082,7 +16148,8 @@ function enviarConvenio(v, c){
   const h = state.ajustes.hotel;
   const asunto = `Carta-convenio ${v.folio} · ${h.nombre}`;
   const archivo = nombrePdfConvenio(v, c);
-  const conLiga = puedeMandarLiga() && !!v.tokenFirma;
+  let conLiga = puedeMandarLiga() && !!v.tokenFirma;   // se baja si no hay buzón
+  let sinBuzon = false;
   const firmante = (v.firmaHotel && v.firmaHotel.nombre) || ejecutivoDe(v);
 
   const saludo = `Estimado(a) ${(c && c.contacto) || ""}:\n\n` +
@@ -16090,8 +16157,9 @@ function enviarConvenio(v, c){
     `${textoVigencia(v)}, ya firmada por nuestra parte.\n\n`;
   const despedida = `\nSaludos cordiales,\n${firmante}\n${h.nombre}`;
 
-  const msgLiga = saludo +
-    `Puede revisarla y firmarla desde este enlace, sin instalar nada:\n${conLiga ? ligaFirma(v) : ""}\n\n` +
+  // Función y no cadena: el enlace se arma al mandarlo, no antes de saber si sirve.
+  const msgLiga = () => saludo +
+    `Puede revisarla y firmarla desde este enlace, sin instalar nada:\n${ligaFirma(v)}\n\n` +
     `En cuanto la firme, queda registrada de nuestro lado.` + despedida;
   const msgPdf = saludo +
     `Le suplicamos hacerla llegar debidamente firmada de aceptación para proceder con la carga ` +
@@ -16128,7 +16196,8 @@ function enviarConvenio(v, c){
       <button class="btn wa" data-wa="${id}" ${(c && c.telefono) ? "" : "disabled"}
         title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button></p>`;
 
-  pdfDeConvenio(v, c).then(bytes => {
+  pdfDeConvenio(v, c).then(async bytes => {
+    if (conLiga && !(await buzonMontado())){ conLiga = false; sinBuzon = true; }
     const blob = new Blob([bytes], { type:"application/pdf" });
     const file = new File([blob], archivo, { type:"application/pdf" });
     const puedeCompartir = typeof navigator.canShare === "function" && navigator.canShare({ files:[file] });
@@ -16148,6 +16217,7 @@ function enviarConvenio(v, c){
          <h3 class="sec">O mándale el PDF</h3>
          <div class="note warn">Para quien prefiera imprimirlo y firmarlo a mano. Cuando te
            lo devuelva, súbelo con <b>Subir convenio firmado</b> en la carta.</div>`
+      : sinBuzon ? avisoSinBuzon()
       : `<div class="note warn"><b>El enlace de firma no está disponible.</b>
            ${puedeMandarLiga()
              ? "Este convenio se firmó antes de que existiera esa opción: vuelve a abrir la carta y usa <i>Rehacer enlace de firma</i>."
@@ -16181,17 +16251,19 @@ function enviarConvenio(v, c){
     };
     ov.querySelector("#cBajar").onclick = bajar;
     ov.querySelectorAll("[data-mail]").forEach(b => { if (!b.disabled) b.onclick = () =>
-      abrirCorreo(b.dataset.mail === "liga" ? msgLiga : msgPdf); });
+      abrirCorreo(b.dataset.mail === "liga" ? msgLiga() : msgPdf); });
     ov.querySelectorAll("[data-wa]").forEach(b => { if (!b.disabled) b.onclick = () =>
-      abrirWa(b.dataset.wa === "liga" ? msgLiga : msgPdf); });
-  }).catch(err => {
+      abrirWa(b.dataset.wa === "liga" ? msgLiga() : msgPdf); });
+  }).catch(async err => {
+    if (conLiga && !(await buzonMontado())){ conLiga = false; sinBuzon = true; }
     ov.querySelector("#cuerpoEnvioC").innerHTML =
       `<div class="note warn"><b>No se pudo generar el PDF aquí.</b> ${esc(err.message)}</div>` +
+      (sinBuzon ? avisoSinBuzon() : "") +
       (conLiga ? botones("liga", "El enlace de firma sí funciona; mándaselo:") : "") +
       `<p><button class="btn" id="cVer">Abrir la carta para imprimirla</button></p>`;
     ov.querySelector("#cVer").onclick = () => { ov.remove(); verConvenio(v.id); };
-    ov.querySelectorAll("[data-mail]").forEach(b => { if (!b.disabled) b.onclick = () => abrirCorreo(msgLiga); });
-    ov.querySelectorAll("[data-wa]").forEach(b => { if (!b.disabled) b.onclick = () => abrirWa(msgLiga); });
+    ov.querySelectorAll("[data-mail]").forEach(b => { if (!b.disabled) b.onclick = () => abrirCorreo(msgLiga()); });
+    ov.querySelectorAll("[data-wa]").forEach(b => { if (!b.disabled) b.onclick = () => abrirWa(msgLiga()); });
   });
 }
 

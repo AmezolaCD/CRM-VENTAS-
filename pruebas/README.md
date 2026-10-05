@@ -22,9 +22,17 @@ violates row-level security policy*— sólo lo contesta PostgreSQL.
 ## `navegador/` · lo que ve el cliente
 
 ```sh
-node pruebas/navegador/firma-del-cliente.mjs          # sólo las afirmaciones
+node pruebas/navegador/firma-del-cliente.mjs          # lo que ve el cliente
 node pruebas/navegador/firma-del-cliente.mjs --fotos  # además deja capturas
+node pruebas/navegador/enlace-que-no-sirve.mjs        # lo que ve el ejecutivo
 ```
+
+`firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
+servidor rechaza su firma, no ve letra de técnico ni se le encarga nada.
+
+`enlace-que-no-sirve.mjs` comprueba lo de antes del enlace: que si al servidor le falta el buzón
+de firmas, al ejecutivo **no se le ofrece el enlace** y se le dice por qué — y que si lo que se
+cayó fue la red, no se le estorba.
 
 Necesita `playwright` y un Chromium. Si el Chromium no está donde la prueba lo busca, se le
 dice con `CHROME_PATH`. Con `APP_HTML` se le puede apuntar a **otra copia del `index.html`**,

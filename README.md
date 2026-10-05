@@ -209,7 +209,13 @@ y, si algo está mal, le pica a **Corregir** y los campos aparecen ya llenos. Na
 obligatorio salvo el trazo. Si el documento no va dirigido a nadie —una orden de trabajo— los
 campos salen a la vista y se puede firmar igual.
 
-Si algo falla del lado del servidor, **al cliente se le avisa pero no se le encarga nada**: no
+Y para que no llegue a fallar: **no se reparte un enlace que no va a funcionar.** Antes de
+ofrecerle el enlace al ejecutivo, el CRM le pregunta al servidor si el buzón de firmas está
+montado. Si no lo está, el enlace no se ofrece y se le dice por qué, en su pantalla, que es
+quien puede hacer algo al respecto. Esto existe porque pasó al revés: un cliente recibió un
+enlace que nunca pudo funcionar, y nadie se enteró hasta que él se topó con el error.
+
+Si aun así algo falla del lado del servidor, **al cliente se le avisa pero no se le encarga nada**: no
 ve el error de la base de datos, no ve nombres de archivos y no se le pide que llame al hotel.
 Quien tiene que enterarse es el hotel, y para eso está el renglón del buzón de firmas en
 *Ajustes → Nube y equipo → Probar conexión*.

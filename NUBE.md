@@ -457,6 +457,16 @@ la verdad. Antes se asomaba a la tabla con una consulta de lectura, y eso mentí
 tiene lectura para nadie de fuera a propósito, así que una tabla con las reglas tiradas contesta
 igual que una sana. Decía *«los clientes pueden firmar desde su enlace»* justo cuando no podían.
 
+**Y ya no hace falta acordarse de mirarlo.** Antes de ponerle a un ejecutivo un enlace de
+firma en la mano, el CRM le pregunta al servidor si el buzón está montado. Si no lo está, **el
+enlace no se ofrece**: en su lugar sale un aviso que dice que el cliente leería el documento, lo
+firmaría y su firma no se podría registrar, y que hay que correr `firmas.sql` completo. Se le
+sigue ofreciendo el PDF, que sí funciona. Lo mismo con los contratos y con el enlace del
+director en las órdenes de trabajo.
+
+Se pregunta una vez por sesión, y si se cae la red **no estorba**: un ejecutivo sin señal no se
+queda sin poder mandar su enlace.
+
 Ese renglón es ahora **la única forma de enterarse a tiempo**, y por eso conviene mirarlo. Al
 cliente ya no se le enseña letra de técnico: si el servidor le rechaza la firma, ve que no es
 culpa suya y que al hotel le falta habilitarlas, y nada más. No se le pide que avise a nadie
