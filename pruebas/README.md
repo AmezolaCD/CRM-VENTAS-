@@ -35,6 +35,7 @@ node pruebas/navegador/firma-del-cliente.mjs          # lo que ve el cliente
 node pruebas/navegador/firma-del-cliente.mjs --fotos  # además deja capturas
 node pruebas/navegador/enlace-que-no-sirve.mjs        # lo que ve el ejecutivo
 node pruebas/navegador/borrar-se-propaga.mjs         # un borrado llega a todos
+node pruebas/navegador/copiar-es-enviar.mjs          # copiar el enlace es mandarlo
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el

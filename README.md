@@ -182,6 +182,12 @@ enumera arriba del formulario y las filas incompletas se marcan en rojo:
 
 Cada paso deja constancia en la bitácora del cliente.
 
+**Copiar el enlace cuenta como enviarlo.** La columna *Enviado* se marcaba sólo si se usaba uno
+de los dos botones de adentro —correo o WhatsApp—, así que el caso más común quedaba mintiendo:
+el ejecutivo copia el enlace, se lo manda al cliente por donde quiera, y la lista seguía diciendo
+*Sin enviar*. A partir de que se copia, el enlace anda fuera del hotel; eso es haberlo mandado, y
+así queda apuntado —con la fecha, con quién, y en la bitácora del cliente—.
+
 ##### El paso 4 tiene tres caminos, y los tres cierran igual
 
 - **En su pantalla.** El cliente abre el enlace, lee su convenio y firma con el dedo o el

@@ -774,7 +774,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.06-88";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.06-89";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2510,7 +2510,20 @@ function nuevoToken(){
   return [...b].map(x => x.toString(36).padStart(2,"0")).join("").slice(0, 28);
 }
 
-const VIAS = { correo:"correo", whatsapp:"WhatsApp" };
+/* Por dónde se le hizo llegar al cliente.
+
+   `enlace` es el caso que faltaba y que dejaba mintiendo a la columna
+   ENVIADO: el ejecutivo copia el enlace de firma y se lo manda por donde
+   quiera —un WhatsApp desde el teléfono, un correo de la empresa, un mensaje
+   interno—, y la columna seguía diciendo «Sin enviar». Copiarlo ES mandarlo:
+   a partir de ahí el enlace anda fuera del hotel. */
+const VIAS = { correo:"correo", whatsapp:"WhatsApp", enlace:"enlace" };
+
+/** A dónde se mandó, para dejarlo escrito en la bitácora. */
+const destinoEnvio = (via, c) =>
+  via === "correo"   ? `Enviado a ${(c && c.email) || "su correo"}.`
+: via === "whatsapp" ? `Enviado a ${(c && c.telefono) || "su teléfono"}.`
+: "Se copió el enlace de firma para hacérselo llegar.";
 
 function marcarEnviada(id, via){
   const g = state.huespedes.find(x => x.id === id);
@@ -12300,7 +12313,7 @@ function enviarContrato(k, c){
     k.enviado = { fecha:new Date().toISOString(), via, quien: correoSesion() };
     k.updatedAt = new Date().toISOString();
     registrarAuto(k.clienteId, `${doc} ${k.folio} enviada por ${VIAS[via]}`,
-      `Enviada a ${via === "correo" ? (c && c.email) : (c && c.telefono)}.`, ejecutivoDeCt(k));
+      destinoEnvio(via, c), ejecutivoDeCt(k));
     guardar(); render();
   };
 
@@ -12360,6 +12373,9 @@ function enviarContrato(k, c){
       const liga = ligaFirma(k, "contratos");
       try{ await navigator.clipboard.writeText(liga); alert("Enlace copiado."); }
       catch(e){ prompt("Copia este enlace y mándaselo al cliente:", liga); }
+      // Se apunta en los dos caminos: por el portapapeles o a mano, el enlace
+      // ya salió de aquí.
+      anotar("enlace");
     };
     const ml = ov.querySelector("#kMailLiga");
     if (ml && !ml.disabled) ml.onclick = () => {
@@ -14188,7 +14204,7 @@ function enviarEvento(e, c){
     if (e.estado === "firmado") e.estado = "enviada";
     e.updatedAt = new Date().toISOString();
     registrarAuto(e.clienteId, `${doc} ${e.folio} enviada por ${VIAS[via]}`,
-      `Enviada a ${via === "correo" ? (c && c.email) : (c && c.telefono)}.`, ejecutivoDeEv(e));
+      destinoEnvio(via, c), ejecutivoDeEv(e));
     guardar(); render();
   };
 
@@ -16364,7 +16380,7 @@ function enviarConvenio(v, c){
   const anotar = via => {
     v.enviado = { fecha: new Date().toISOString(), via, quien: correoSesion() };
     registrarAuto(v.clienteId, `Convenio ${v.folio} enviado por ${VIAS[via]}`,
-      `Enviado a ${via === "correo" ? (c && c.email) : (c && c.telefono)}.`, ejecutivoDe(v));
+      destinoEnvio(via, c), ejecutivoDe(v));
     guardar(); render();
   };
   const abrirCorreo = cuerpo => {
@@ -16427,6 +16443,7 @@ function enviarConvenio(v, c){
     if (cop) cop.onclick = async () => {
       try{ await navigator.clipboard.writeText(ligaFirma(v)); alert("Enlace copiado."); }
       catch(e){ prompt("Copia este enlace y mándaselo al cliente:", ligaFirma(v)); }
+      anotar("enlace");
     };
     const bc = ov.querySelector("#cCompartir");
     if (bc) bc.onclick = async () => {
