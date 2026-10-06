@@ -688,6 +688,136 @@
 <script>
 window.CORE_NUBE = { url:"", anon:"" };
 </script>
+
+<!-- ==========================================================================
+     EL SEGURO DE ARRANQUE
+
+     Va aparte y antes del script grande a propósito: si estuviera dentro, se
+     moriría con él, que es justo cuando hace falta.
+
+     Hace dos cosas, las dos para que una pantalla morada no se quede nunca
+     más callada:
+
+       1. A los 6 segundos, si el logo de entrada sigue ahí, lo quita. Pase lo
+          que pase con el resto de la aplicación.
+       2. Si algo revienta mientras arranca, enseña QUÉ fue —el mensaje y el
+          renglón— en una caja que se puede leer y copiar, en vez de dejar al
+          ejecutivo mirando un logo eterno sin saber a quién avisarle.
+
+     En cuanto la aplicación termina de arrancar llama a CORE_ARRANCO() y este
+     equipo se hace a un lado: de ahí en adelante los errores los atiende la
+     aplicación, no esta caja.
+     ========================================================================== -->
+<script>
+(function seguroDeArranque(){
+  "use strict";
+
+  var arranco = false;
+  window.CORE_ARRANCO = function(){ arranco = true; };
+
+  function quitarEntrada(){
+    var el = document.getElementById("intro");
+    if (el && el.parentNode) el.remove();
+    var raiz = document.documentElement;
+    if (raiz && raiz.classList) raiz.classList.remove("intro-activa");
+  }
+
+  /* 1 · El seguro. */
+  setTimeout(function(){ if (!arranco) quitarEntrada(); }, 6000);
+
+  /* 2 · Qué fue. */
+  function avisar(detalle){
+    if (arranco) return;                                  // ya arrancó: no es cosa de aquí
+    if (document.getElementById("core-falla")) return;    // con un aviso basta
+    quitarEntrada();
+
+    var caja = document.createElement("div");
+    caja.id = "core-falla";
+    caja.setAttribute("style",
+      "position:fixed;inset:0;z-index:99999;display:flex;align-items:center;" +
+      "justify-content:center;padding:20px;background:rgba(15,10,30,.92);" +
+      "font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif");
+
+    var tarjeta = document.createElement("div");
+    tarjeta.setAttribute("style",
+      "max-width:560px;width:100%;background:#fff;color:#1a1a2e;border-radius:14px;" +
+      "padding:22px 24px;box-shadow:0 20px 60px rgba(0,0,0,.45)");
+
+    var titulo = document.createElement("div");
+    titulo.setAttribute("style","font-size:18px;font-weight:700;margin-bottom:8px");
+    titulo.textContent = "CORE no pudo abrir";
+
+    var texto = document.createElement("p");
+    texto.setAttribute("style","margin:0 0 12px");
+    texto.textContent =
+      "Algo falló al arrancar. Tus datos siguen guardados en este equipo y en " +
+      "la nube: no se perdió nada. Copia el aviso de abajo y mándalo para que " +
+      "se corrija.";
+
+    var pre = document.createElement("pre");
+    pre.setAttribute("style",
+      "margin:0 0 14px;padding:10px 12px;background:#f3f2f8;border-radius:10px;" +
+      "font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;" +
+      "white-space:pre-wrap;word-break:break-word;max-height:30vh;overflow:auto");
+    pre.textContent = detalle;
+
+    var fila = document.createElement("div");
+    fila.setAttribute("style","display:flex;gap:8px;flex-wrap:wrap");
+
+    function boton(etiqueta, principal, alHacer){
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = etiqueta;
+      b.setAttribute("style",
+        "appearance:none;border:1px solid " + (principal ? "#5b3fd6" : "#c9c7d6") + ";" +
+        "background:" + (principal ? "#5b3fd6" : "#fff") + ";" +
+        "color:" + (principal ? "#fff" : "#1a1a2e") + ";" +
+        "border-radius:9px;padding:9px 14px;font:inherit;font-weight:600;cursor:pointer");
+      b.addEventListener("click", alHacer);
+      return b;
+    }
+
+    fila.appendChild(boton("Copiar el aviso", true, function(){
+      var t = "CORE no pudo abrir\n" + detalle;
+      var listo = function(){ this.textContent = "Copiado"; };
+      try{
+        if (navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(t).then(listo.bind(this), function(){});
+          return;
+        }
+      }catch(e){}
+      try{
+        var a = document.createElement("textarea");
+        a.value = t; document.body.appendChild(a); a.select();
+        document.execCommand("copy"); a.remove();
+        listo.call(this);
+      }catch(e){}
+    }));
+
+    fila.appendChild(boton("Volver a intentar", false, function(){ location.reload(); }));
+
+    tarjeta.appendChild(titulo);
+    tarjeta.appendChild(texto);
+    tarjeta.appendChild(pre);
+    tarjeta.appendChild(fila);
+    caja.appendChild(tarjeta);
+    (document.body || document.documentElement).appendChild(caja);
+  }
+
+  window.addEventListener("error", function(ev){
+    var m = (ev && ev.message) || (ev && ev.error && ev.error.message) || "error desconocido";
+    var d = m;
+    if (ev && ev.lineno) d += "\nrenglón " + ev.lineno + (ev.colno ? ", columna " + ev.colno : "");
+    if (ev && ev.error && ev.error.stack) d += "\n" + ev.error.stack;
+    avisar(d);
+  });
+
+  window.addEventListener("unhandledrejection", function(ev){
+    var r = ev && ev.reason;
+    avisar("Promesa sin atender: " + ((r && (r.stack || r.message)) || String(r)));
+  });
+})();
+</script>
 </head>
 <body>
 
@@ -824,7 +954,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.06-95";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.06-96";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -916,6 +1046,53 @@ const ESTADOS_CT = {
 
 /** 8% de IVA más 5% de impuesto sobre hospedaje, como en la carta-convenio. */
 const IMPUESTOS_DEF = 13;
+
+const TIPOS_CERT = {
+  spa_facial: {
+    name: "SPA · Facial", corto: "Facial", marca: "SENSES",
+    titulo: "FACIAL EN SENSES SPA\nDE CORTESÍA",
+    condiciones: "Cortesía válida para un facial de 45 min. para una persona. " +
+      "No incluye servicios adicionales, ni propinas. Sujeto a disponibilidad. Previa reservación.",
+    contacto: "spa", imagen: "certificados/spa-facial.jpg"
+  },
+  spa_masaje: {
+    name: "SPA · Masaje", corto: "Masaje", marca: "SENSES",
+    titulo: "MASAJE RELAJANTE\nDE CORTESÍA",
+    condiciones: "Cortesía válida para un masaje relajante de 45 min. para una persona. " +
+      "No incluye servicios adicionales, ni propinas. Sujeto a disponibilidad. Previa reservación.",
+    contacto: "spa", imagen: "certificados/spa-masaje.jpg"
+  },
+  hospedaje: {
+    name: "Hospedaje", corto: "Hospedaje", marca: "QUARTZ",
+    titulo: "1 NOCHE DE HOSPEDAJE\nDE CORTESÍA",
+    condiciones: "Cortesía válida por una noche de hospedaje para dos personas. " +
+      "No incluye servicios adicionales, no incluye desayuno. Sujeto a disponibilidad. " +
+      "Previa reservación.",
+    contacto: "reservaciones", imagen: "certificados/hospedaje.jpg"
+  },
+  restaurante: {
+    name: "Consumo en restaurante", corto: "Restaurante", marca: "BOKA",
+    titulo: "CONSUMO\nEN RESTAURANTE",
+    condiciones: "No incluye bebidas alcohólicas. No incluye propinas. Sujeto a disponibilidad.",
+    contacto: "reservaciones", imagen: "certificados/restaurante.jpg"
+  },
+  temazcal: {
+    name: "Temazcal", corto: "Temazcal", marca: "TLALTEOHUA",
+    titulo: "TEMAZCAL\nDE CORTESÍA",
+    condiciones: "Cortesía válida para una persona. No incluye servicios adicionales, " +
+      "ni propinas. Sujeto a disponibilidad. Previa reservación.",
+    contacto: "spa", imagen: "certificados/temazcal.jpg"
+  }
+};
+
+const infoTipoCert = t => TIPOS_CERT[t] || TIPOS_CERT.hospedaje;
+
+const ESTADOS_CERT = {
+  borrador: { name:"Borrador", bg:"var(--panel-2)", fg:"var(--muted)" },
+  emitido:  { name:"Emitido",  bg:"var(--ok-soft)", fg:"var(--ok)" },
+  usado:    { name:"Usado",    bg:"var(--accent-soft)", fg:"var(--accent)" },
+  cancelado:{ name:"Cancelado",bg:"var(--bad-soft)", fg:"var(--bad)" }
+};
 
 const ESTADOS_CONV = {
   borrador:          { name:"Borrador",              bg:"var(--panel-2)",   fg:"var(--muted)" },
@@ -1957,14 +2134,6 @@ const TOMAS_AV = [
  */
 let huerfanos = new Set();
 
-let state = cargar();
-let filtros = { q:"", ejecutivo:"" };
-let vista = "tablero";
-/* ¿La pantalla de Ajustes ya está dibujada, con lo que alguien esté llenando
-   ahí sin guardar todavía? Mientras lo esté, no se vuelve a dibujar sola. */
-let ajustesEnPantalla = false;
-let arrastrando = null;
-
 const nuevoId = p => (p||"x") + Date.now().toString(36) + "-" + (++idCounter);
 
 /**
@@ -1977,18 +2146,73 @@ const nuevoId = p => (p||"x") + Date.now().toString(36) + "-" + (++idCounter);
  */
 let cargaRota = false;
 
+let state = cargar();
+let filtros = { q:"", ejecutivo:"" };
+let vista = "tablero";
+/* ¿La pantalla de Ajustes ya está dibujada, con lo que alguien esté llenando
+   ahí sin guardar todavía? Mientras lo esté, no se vuelve a dibujar sola. */
+let ajustesEnPantalla = false;
+let arrastrando = null;
+
+/**
+ * La cartera más pelada que puede existir, armada a mano.
+ *
+ * Es el último recurso de `cargar()`: si ni siquiera `sanear({})` se deja
+ * armar —porque falta algo, porque hay un error de programación— la
+ * aplicación TIENE que abrir de todos modos. Abrir con esto y la bandera
+ * `cargaRota` puesta es mucho mejor que no abrir: nadie guarda encima de lo
+ * que quedó, y el seguro del <head> enseña qué fue.
+ *
+ * Cada pieza se pide entre paños: si una revienta, se queda vacía y las demás
+ * siguen.
+ */
+function esqueletoDeEmergencia(){
+  const dame = (f, siNo) => { try{ const v = f(); return v == null ? siNo : v; }catch(e){ return siNo; } };
+  return {
+    clientes: [], actividades: [], convenios: [], prospectos: [], contratos: [],
+    eventos: [], campanas: [], odts: [], certificados: [], huespedes: [],
+    usuarios:     dame(() => USUARIOS_DEF.map(saneaUsuario), []),
+    habitaciones: dame(() => HABS_DEF.map(saneaHab), []),
+    ajustes: {
+      hotel:  Object.assign({ jefes: [] }, dame(() => HOTEL_DEF, {})),
+      textos: Object.assign({}, dame(() => TEXTOS_DEF, {})),
+      grupos: dame(() => saneaGrupos(), []),
+      moneda: "MXN",
+      ladaPais: "52"
+    }
+  };
+}
+
 function cargar(){
   const raw0 = (() => { try{ return localStorage.getItem(STORE); }catch(e){ return null; } })();
+
+  /* Abrir en blanco, sin que ni eso pueda tumbar el arranque. */
+  const enBlanco = () => {
+    try{ return sanear({}); }
+    catch(e){
+      console.error("No se pudo armar ni una cartera vacía:", e);
+      return esqueletoDeEmergencia();
+    }
+  };
+
+  /* Avisar sin que el aviso sea lo que reviente. */
+  const avisarCarga = e => {
+    try{
+      cargaRota = true;
+      console.error("No se pudo leer el almacenamiento local:", e);
+      const detalle = (e && (e.message || e.name)) || String(e);
+      setTimeout(() => alert(
+        "No se pudieron leer los datos guardados en este equipo.\n\n" +
+        "No se borró nada: siguen ahí. Avísale a sistemas y no captures nada todavía, " +
+        "para no escribir encima.\n\nDetalle: " + detalle), 400);
+    }catch(e2){ cargaRota = true; }
+  };
+
   try{
     if (raw0) return sanear(JSON.parse(raw0));
   }catch(e){
-    cargaRota = true;
-    console.error("No se pudo leer el almacenamiento local:", e);
-    setTimeout(() => alert(
-      "No se pudieron leer los datos guardados en este equipo.\n\n" +
-      "No se borró nada: siguen ahí. Avísale a sistemas y no captures nada todavía, " +
-      "para no escribir encima.\n\nDetalle: " + e.message), 400);
-    return sanear({});
+    avisarCarga(e);
+    return enBlanco();
   }
 
   for (const k of VIEJOS){
@@ -2009,7 +2233,14 @@ function cargar(){
       }
     }catch(e){ console.warn("No se pudo migrar " + k + ":", e); }
   }
-  return sanear({ clientes: clientesDemo() });
+  try{
+    return sanear({ clientes: clientesDemo() });
+  }catch(e){
+    /* No había nada guardado, así que no hay cartera que proteger; pero si
+       hasta los clientes de ejemplo revientan, tampoco se escribe nada. */
+    avisarCarga(e);
+    return enBlanco();
+  }
 }
 
 function sanear(s){
@@ -2383,53 +2614,6 @@ function saneaLineaEv(l){
    Todo se puede corregir antes de emitir; después ya no, porque el papel anda
    fuera con su folio impreso.
    ========================================================================== */
-
-const TIPOS_CERT = {
-  spa_facial: {
-    name: "SPA · Facial", corto: "Facial", marca: "SENSES",
-    titulo: "FACIAL EN SENSES SPA\nDE CORTESÍA",
-    condiciones: "Cortesía válida para un facial de 45 min. para una persona. " +
-      "No incluye servicios adicionales, ni propinas. Sujeto a disponibilidad. Previa reservación.",
-    contacto: "spa", imagen: "certificados/spa-facial.jpg"
-  },
-  spa_masaje: {
-    name: "SPA · Masaje", corto: "Masaje", marca: "SENSES",
-    titulo: "MASAJE RELAJANTE\nDE CORTESÍA",
-    condiciones: "Cortesía válida para un masaje relajante de 45 min. para una persona. " +
-      "No incluye servicios adicionales, ni propinas. Sujeto a disponibilidad. Previa reservación.",
-    contacto: "spa", imagen: "certificados/spa-masaje.jpg"
-  },
-  hospedaje: {
-    name: "Hospedaje", corto: "Hospedaje", marca: "QUARTZ",
-    titulo: "1 NOCHE DE HOSPEDAJE\nDE CORTESÍA",
-    condiciones: "Cortesía válida por una noche de hospedaje para dos personas. " +
-      "No incluye servicios adicionales, no incluye desayuno. Sujeto a disponibilidad. " +
-      "Previa reservación.",
-    contacto: "reservaciones", imagen: "certificados/hospedaje.jpg"
-  },
-  restaurante: {
-    name: "Consumo en restaurante", corto: "Restaurante", marca: "BOKA",
-    titulo: "CONSUMO\nEN RESTAURANTE",
-    condiciones: "No incluye bebidas alcohólicas. No incluye propinas. Sujeto a disponibilidad.",
-    contacto: "reservaciones", imagen: "certificados/restaurante.jpg"
-  },
-  temazcal: {
-    name: "Temazcal", corto: "Temazcal", marca: "TLALTEOHUA",
-    titulo: "TEMAZCAL\nDE CORTESÍA",
-    condiciones: "Cortesía válida para una persona. No incluye servicios adicionales, " +
-      "ni propinas. Sujeto a disponibilidad. Previa reservación.",
-    contacto: "spa", imagen: "certificados/temazcal.jpg"
-  }
-};
-
-const infoTipoCert = t => TIPOS_CERT[t] || TIPOS_CERT.hospedaje;
-
-const ESTADOS_CERT = {
-  borrador: { name:"Borrador", bg:"var(--panel-2)", fg:"var(--muted)" },
-  emitido:  { name:"Emitido",  bg:"var(--ok-soft)", fg:"var(--ok)" },
-  usado:    { name:"Usado",    bg:"var(--accent-soft)", fg:"var(--accent)" },
-  cancelado:{ name:"Cancelado",bg:"var(--bad-soft)", fg:"var(--bad)" }
-};
 
 function saneaCertificado(c){
   const o = Object.assign({
@@ -17900,6 +18084,10 @@ else {
     if (!document.getElementById("kiosco")) entrarKiosco(_k.evento || "", _k.quien || "");
   });
 }
+
+/* Arrancó. El seguro del <head> se hace a un lado: de aquí en adelante los
+   errores los atiende la aplicación, no la caja de "CORE no pudo abrir". */
+if (window.CORE_ARRANCO) window.CORE_ARRANCO();
 </script>
 </body>
 </html>

@@ -39,10 +39,19 @@ node pruebas/navegador/copiar-es-enviar.mjs          # copiar el enlace es manda
 node pruebas/navegador/folios-repetidos.mjs          # dos documentos con el mismo folio
 node pruebas/navegador/copiar-el-sql.mjs             # el .sql llega entero
 node pruebas/navegador/certificados.mjs             # el folio no se repite y quién emite
+node pruebas/navegador/arranque.mjs                 # que la aplicación abra
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
 servidor rechaza su firma, no ve letra de técnico ni se le encarga nada.
+
+`arranque.mjs` es la que faltaba. Marco se quedó mirando el logo morado de la entrada y en
+incógnito sí abría: lo que la mataba eran **los datos guardados** de ese navegador. Se le pone
+al navegador un almacenamiento como el suyo —con un certificado guardado, con un renglón sin
+`id`, con el almacenamiento echado a perder— y se exige que la aplicación **abra**, que el logo
+se quite, que el tablero se pinte y que no se escriba encima de la cartera. El último caso es
+el que más importa: se sirve el archivo con una bomba metida a propósito y se exige que **se
+vea qué pasó**, porque lo que de verdad falló fue que hubo un error y nadie lo supo.
 
 `enlace-que-no-sirve.mjs` comprueba lo de antes del enlace: que si al servidor le falta el buzón
 de firmas, al ejecutivo **no se le ofrece el enlace** y se le dice por qué — y que si lo que se
