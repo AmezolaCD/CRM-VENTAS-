@@ -971,7 +971,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.06-98";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.06-99";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -7040,34 +7040,72 @@ const fondosCert = new Map();
    no subo las fotos», que es otra cosa completamente distinta. Guardar el
    motivo convierte un misterio en una foto de pantalla. */
 const motivosCert = new Map();
+/* Cuándo se intentó la última vez que falló. Un fallo NO es para siempre: si
+   las fotos se publican con la pestaña abierta, a los treinta segundos se
+   vuelve a probar en vez de quedarse con el morado hasta que alguien recargue. */
+const reintentoCert = new Map();
+const ESPERA_FONDO_MS = 30000;
+
+/**
+ * Una pasada: pide el archivo y lo convierte a data URL, o explica por qué no.
+ *
+ * `modo` es el trato con el almacén del navegador. Y ahí estaba el defecto que
+ * reportó Marco: esto pedía con `cache:"force-cache"`, que quiere decir «usa lo
+ * que tengas guardado, sin volver a preguntar» —y el navegador guarda TAMBIÉN
+ * las respuestas 404—. Él abrió Certificados cuando la función ya existía pero
+ * las cinco fotos todavía no se publicaban; ese 404 se le quedó guardado y
+ * desde entonces se lo devolvía su propio navegador, sin preguntarle nunca más
+ * al servidor. Ni recargando se componía.
+ */
+async function traerFondo(ruta, modo){
+  try{
+    const r = await fetch(ruta, modo ? { cache: modo } : undefined);
+    if (!r.ok) return { motivo: "el servidor contestó " + r.status };
+    const blob = await r.blob();
+    if (!/^image\//.test(blob.type))
+      return { motivo: "lo que llegó no es una imagen (" + (blob.type || "sin tipo") + ")" };
+    const dato = await new Promise((ok, mal) => {
+      const fr = new FileReader();
+      fr.onload = () => ok(String(fr.result));
+      fr.onerror = () => mal(new Error("no se pudo leer el archivo"));
+      fr.readAsDataURL(blob);
+    });
+    return { dato };
+  }catch(e){ return { motivo: (e && e.message) || "no se pudo pedir el archivo" }; }
+}
 
 async function fondoCertificado(tipo){
   const ruta = infoTipoCert(tipo).imagen;
-  if (fondosCert.has(ruta)) return fondosCert.get(ruta);
-  let dato = null, motivo = "";
-  try{
-    const r = await fetch(ruta, { cache:"force-cache" });
-    if (!r.ok) motivo = "el servidor contestó " + r.status;
-    else {
-      const blob = await r.blob();
-      if (!/^image\//.test(blob.type))
-        motivo = "lo que llegó no es una imagen (" + (blob.type || "sin tipo") + ")";
-      else
-        dato = await new Promise((ok, mal) => {
-          const fr = new FileReader();
-          fr.onload = () => ok(String(fr.result));
-          fr.onerror = () => mal(new Error("no se pudo leer el archivo"));
-          fr.readAsDataURL(blob);
-        });
-    }
-  }catch(e){ motivo = (e && e.message) || "no se pudo pedir el archivo"; }
+  if (fondosCert.get(ruta)) return fondosCert.get(ruta);
+  /* Falló hace poco: no se machaca al servidor en cada repintado. */
+  if (fondosCert.has(ruta) && Date.now() - (reintentoCert.get(ruta) || 0) < ESPERA_FONDO_MS)
+    return null;
+
+  const uno = await traerFondo(ruta, null);
+  /* `null`, nunca `undefined`: «no hay foto» es una respuesta, y quien la
+     recibe la compara. */
+  let dato = uno.dato || null, motivo = uno.motivo;
+  /* Segundo intento SALTÁNDOSE el almacén del navegador. Es lo que cura solo a
+     quien traiga un 404 viejo pegado, sin que tenga que limpiar nada ni
+     enterarse de que esto existe. */
+  if (!dato){
+    const otra = await traerFondo(ruta, "reload");
+    if (otra.dato) dato = otra.dato; else motivo = otra.motivo || motivo;
+  }
+
   fondosCert.set(ruta, dato);
   motivosCert.set(ruta, dato ? "" : (motivo || "no se encontró " + ruta));
+  reintentoCert.set(ruta, dato ? 0 : Date.now());
   return dato;
 }
 
 /** Por qué no se pudo traer la foto de este tipo. Vacío si sí se trajo. */
 const motivoFondoCert = tipo => motivosCert.get(infoTipoCert(tipo).imagen) || "";
+/** La dirección exacta que intentó, para poder abrirla y salir de dudas. */
+const rutaFondoCert = tipo => {
+  try{ return new URL(infoTipoCert(tipo).imagen, location.href).href; }
+  catch(e){ return infoTipoCert(tipo).imagen; }
+};
 
 /**
  * El aviso de lo que le falta a esta hoja para estar completa.
@@ -7081,7 +7119,8 @@ function pendientesCert(tipo){
   const porque = motivoFondoCert(tipo);
   if (porque) faltas.push({ que:"foto",
     texto:"No se pudo traer la imagen de este tipo de certificado: " + porque +
-          ". Mientras tanto sale el fondo del hotel." });
+          ". Mientras tanto sale el fondo del hotel.",
+    liga: rutaFondoCert(tipo) });
   if (!String(state.ajustes.hotel.director || "").trim()) faltas.push({ que:"firma",
     texto:"Falta quién firma: el renglón de la firma va a salir en blanco. " +
           "Se captura una sola vez en Ajustes → Datos del hotel." });
@@ -7093,7 +7132,8 @@ const avisoPendientesCert = (tipo, id) => {
   const f = pendientesCert(tipo);
   if (!f.length) return "";
   return `<div class="note warn" style="margin-top:10px">
-    ${f.map(x => `<div>${esc(x.texto)}</div>`).join("")}
+    ${f.map(x => `<div>${esc(x.texto)}${x.liga
+      ? `<br><a href="${esc(x.liga)}" target="_blank" rel="noopener">${esc(x.liga)}</a>` : ""}</div>`).join("")}
     ${f.some(x => x.que === "firma")
       ? `<button class="btn sm" id="${id}" style="margin-top:8px">Ir a Ajustes</button>` : ""}
   </div>`;

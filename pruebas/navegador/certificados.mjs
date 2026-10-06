@@ -43,12 +43,15 @@ const srv = http.createServer((req, res) => {
     return res.end(fs.readFileSync(APP, 'utf8'));
   }
   if (u.pathname.startsWith('/certificados/')){
+    /* El mismo Cache-Control que pone vercel.json, y TAMBIÉN en el 404: es lo
+       que hace que el navegador lo guarde, que es de lo que trata el bloque 13. */
+    const cache = { 'Cache-Control':'public, max-age=0, must-revalidate' };
     const f = path.join(RAIZ, u.pathname);
     if (!fotos || !f.startsWith(path.join(RAIZ, 'certificados')) || !fs.existsSync(f)){
-      res.writeHead(404, { 'Content-Type':'text/plain' });
+      res.writeHead(404, Object.assign({ 'Content-Type':'text/plain' }, cache));
       return res.end('no');
     }
-    res.writeHead(200, { 'Content-Type':'image/jpeg' });
+    res.writeHead(200, Object.assign({ 'Content-Type':'image/jpeg' }, cache));
     return res.end(fs.readFileSync(f));
   }
   if (u.pathname === '/rest/v1/rpc/crm_aparta_folio'){
@@ -372,7 +375,7 @@ await bloque('11 · si la foto NO llega, se dice por qué', async () => {
      lo que ya bajó y `force-cache` se lo daría aunque el servidor conteste
      404, así que limpiar `fondosCert` no basta para probar esto. */
   const r = await p.evaluate(async () => {
-    fondosCert.clear(); motivosCert.clear();
+    fondosCert.clear(); motivosCert.clear(); reintentoCert.clear();
     const f = await fondoCertificado('restaurante');
     return { fondo:f, motivo: motivoFondoCert('restaurante'),
              avisa: avisoPendientesCert('restaurante', 'x') };
@@ -415,6 +418,56 @@ await bloque('12 · un certificado sin quién firma lo avisa', async () => {
   });
   afirma('el aviso está a la vista en la captura', anchos.avisa);
   afirma('y NO aplasta los campos', anchos.campos > anchos.previa);
+});
+
+/* ---------------------------------------------------------------------------
+   13 · UN 404 NO SE QUEDA PEGADO.
+
+   Esto es lo que de verdad le pasaba a Marco. La foto se pedía con
+   `cache:"force-cache"` —«usa lo que tengas guardado, sin volver a
+   preguntar»—, y el navegador guarda también las respuestas 404. Él abrió
+   Certificados cuando la función ya existía pero las cinco fotos todavía no se
+   publicaban; desde entonces el 404 se lo devolvía su propio navegador. Ni
+   recargando se componía: comprobado, `force-cache` daba 404 mientras el mismo
+   archivo pedido con `reload` daba 200.
+   --------------------------------------------------------------------------- */
+await bloque('13 · publicada la foto, entra sin tener que recargar', async () => {
+  /* `restaurante` a propósito: es el ÚNICO tipo que en toda esta prueba nunca
+     se ha llegado a bajar bien —el bloque 11 lo pidió con el servidor sin
+     fotos—, así que el navegador trae su 404 guardado y nada más. Con
+     cualquier otro, el 200 que quedó de un bloque anterior taparía justo lo
+     que se quiere medir, y la prueba se pasaría sola. */
+  const TIPO = 'restaurante';
+  fotos = false;
+  /* Lo de `typeof` no es adorno: así, contra la versión anterior, esta prueba
+     falla por el COMPORTAMIENTO —el 404 pegado— y no por que le falte una
+     función. Una prueba que se cae con un ReferenceError no demuestra nada. */
+  const antes = await p.evaluate(async t => {
+    fondosCert.clear(); motivosCert.clear();
+    if (typeof reintentoCert !== 'undefined') reintentoCert.clear();
+    return { fondo: await fondoCertificado(t), motivo: motivoFondoCert(t),
+             liga: typeof rutaFondoCert === 'function' ? rutaFondoCert(t) : null,
+             avisa: avisoPendientesCert(t, 'x') };
+  }, TIPO);
+  afirma('mientras no está, se avisa con el motivo', /404/.test(antes.motivo || ''));
+  afirma('y con la dirección exacta que intentó',
+    /\/certificados\/restaurante\.jpg$/.test(antes.liga || ''));
+  afirma('que además sale en el aviso, para abrirla',
+    (antes.avisa || '').includes(antes.liga));
+
+  // Se publican las fotos. NO se recarga nada: es el caso de Marco.
+  fotos = true;
+  const despues = await p.evaluate(async t => {
+    /* Se olvida lo recordado por la aplicación —como si se volviera a abrir la
+       pestaña—, pero el almacén del NAVEGADOR sigue con el 404 adentro. */
+    fondosCert.clear(); motivosCert.clear();
+    if (typeof reintentoCert !== 'undefined') reintentoCert.clear();
+    const f = await fondoCertificado(t);
+    return { hay: !!f, esImagen: /^data:image\//.test(f || ''), motivo: motivoFondoCert(t) };
+  }, TIPO);
+  afirma('en cuanto está, la foto entra', despues.hay);
+  afirma('y es una imagen de verdad', despues.esImagen);
+  afirma('ya no queda ningún motivo que avisar', despues.motivo === '');
 });
 
 await br.close(); srv.close();
