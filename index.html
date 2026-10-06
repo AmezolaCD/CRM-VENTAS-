@@ -590,6 +590,21 @@
 
   .cert-marco{width:816px; transform-origin:top left; border-radius:8px;
     overflow:hidden; box-shadow:var(--shadow)}
+  /* La hoja en chiquito. Encogerla con transform NO encoge el lugar que ocupa
+     —sigue midiendo 816 x 1056 en el acomodo—, así que la ventana se llenaba
+     de hueco en blanco. El marco de afuera sí mide lo encogido y recorta. */
+  .cert-mini{overflow:hidden; border-radius:8px;
+    width:calc(816px * var(--z)); height:calc(1056px * var(--z))}
+  .cert-mini .cert-marco{transform:scale(var(--z)); box-shadow:none; border-radius:0}
+  /* La captura: los campos de un lado, la hoja del otro. La columna de la
+     hoja mide EXACTAMENTE lo que mide la hoja encogida. Dejarla a su aire la
+     ensanchaba el día que abajo salía un aviso largo, y los campos se
+     quedaban en un palmo. */
+  .cert-captura{display:flex; gap:18px; align-items:flex-start}
+  .cert-captura > .cert-campos{flex:1 1 300px; min-width:0}
+  .cert-captura > .cert-previa{flex:0 0 calc(816px * var(--z)); width:calc(816px * var(--z))}
+  .cert-previa .lbl{margin-bottom:6px}
+  .cert-previa .note{font-size:12px}
   .doc-logo{max-height:78px; max-width:76%; display:block; margin:0 auto 6px}
   .doc-mono{width:52px; height:52px; margin:0 auto 5px; display:block}
   .doc-wordmark{width:270px; margin:0 auto 6px}
@@ -662,6 +677,8 @@
   @media (max-width:760px){
     .col{width:80vw; flex-basis:80vw}
     .grid{grid-template-columns:1fr}
+    .cert-captura{flex-direction:column}
+    .cert-captura > .cert-previa{align-self:center}
     #q{min-width:140px}
     .firmas, .doc-cols{flex-direction:column; gap:20px}
     .doc-body{padding:18px}
@@ -954,7 +971,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.06-96";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.06-97";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -6988,27 +7005,69 @@ async function pdfDeHuespedes(gs){
 /* El fondo tiene que ser data URL: dentro del SVG que rasteriza la hoja no se
    resuelven direcciones externas. Se trae una vez por tipo y se recuerda. */
 const fondosCert = new Map();
+/* Y si no se pudo traer, POR QUÉ. Antes el fallo se tragaba en silencio y la
+   hoja salía con el morado del hotel sin decir nada: se veía igual que «todavía
+   no subo las fotos», que es otra cosa completamente distinta. Guardar el
+   motivo convierte un misterio en una foto de pantalla. */
+const motivosCert = new Map();
 
 async function fondoCertificado(tipo){
   const ruta = infoTipoCert(tipo).imagen;
   if (fondosCert.has(ruta)) return fondosCert.get(ruta);
-  let dato = null;
+  let dato = null, motivo = "";
   try{
     const r = await fetch(ruta, { cache:"force-cache" });
-    if (r.ok){
+    if (!r.ok) motivo = "el servidor contestó " + r.status;
+    else {
       const blob = await r.blob();
-      if (/^image\//.test(blob.type))
+      if (!/^image\//.test(blob.type))
+        motivo = "lo que llegó no es una imagen (" + (blob.type || "sin tipo") + ")";
+      else
         dato = await new Promise((ok, mal) => {
           const fr = new FileReader();
           fr.onload = () => ok(String(fr.result));
-          fr.onerror = () => mal(new Error("no se pudo leer"));
+          fr.onerror = () => mal(new Error("no se pudo leer el archivo"));
           fr.readAsDataURL(blob);
         });
     }
-  }catch(e){ /* sin imagen se dibuja el fondo del hotel; no es un error */ }
+  }catch(e){ motivo = (e && e.message) || "no se pudo pedir el archivo"; }
   fondosCert.set(ruta, dato);
+  motivosCert.set(ruta, dato ? "" : (motivo || "no se encontró " + ruta));
   return dato;
 }
+
+/** Por qué no se pudo traer la foto de este tipo. Vacío si sí se trajo. */
+const motivoFondoCert = tipo => motivosCert.get(infoTipoCert(tipo).imagen) || "";
+
+/**
+ * El aviso de lo que le falta a esta hoja para estar completa.
+ *
+ * Son las dos cosas que no se ven hasta que el certificado ya está impreso y
+ * en la mano de un huésped: que la foto no cargó, y que nadie capturó quién
+ * firma —y entonces el renglón de la firma sale en blanco—.
+ */
+function pendientesCert(tipo){
+  const faltas = [];
+  const porque = motivoFondoCert(tipo);
+  if (porque) faltas.push({ que:"foto",
+    texto:"No se pudo traer la imagen de este tipo de certificado: " + porque +
+          ". Mientras tanto sale el fondo del hotel." });
+  if (!String(state.ajustes.hotel.director || "").trim()) faltas.push({ que:"firma",
+    texto:"Falta quién firma: el renglón de la firma va a salir en blanco. " +
+          "Se captura una sola vez en Ajustes → Datos del hotel." });
+  return faltas;
+}
+
+/** El aviso pintado, con su botón a Ajustes. `id` es para enganchar el botón. */
+const avisoPendientesCert = (tipo, id) => {
+  const f = pendientesCert(tipo);
+  if (!f.length) return "";
+  return `<div class="note warn" style="margin-top:10px">
+    ${f.map(x => `<div>${esc(x.texto)}</div>`).join("")}
+    ${f.some(x => x.que === "firma")
+      ? `<button class="btn sm" id="${id}" style="margin-top:8px">Ir a Ajustes</button>` : ""}
+  </div>`;
+};
 
 /**
  * El certificado, listo para rasterizar o para enseñar en pantalla.
@@ -15993,10 +16052,12 @@ function editarCertificado(id){
     `<option value="${k}"${k === c.tipo ? " selected" : ""}>${esc(t.name)}</option>`).join("");
 
   const ov = modal(`
-    <div class="modal">
+    <div class="modal wide">
       <div class="modal-head"><h2>${nuevo ? "Nuevo certificado" : "Certificado " + esc(c.folio || "")}</h2>
         <button class="btn" data-close>✕</button></div>
       <div class="modal-body">
+       <div class="cert-captura">
+        <div class="cert-campos">
         <div class="grid">
           <div><label class="lbl">Tipo de cortesía</label>
             <select class="field" id="ceTipo" style="width:100%">${opc}</select></div>
@@ -16022,6 +16083,14 @@ function editarCertificado(id){
               placeholder="Por qué se dio. No sale impresa."></div>
         </div>
         <div id="ceErr" style="margin-top:10px"></div>
+        </div>
+
+        <div class="cert-previa" style="--z:.42">
+          <label class="lbl">Así va a salir</label>
+          <div class="cert-mini" id="cePrevia"></div>
+          <div id="ceFalta"></div>
+        </div>
+       </div>
       </div>
       <div class="modal-foot">
         ${!nuevo ? `<button class="btn danger" id="ceBorrar">Eliminar</button>` : ""}
@@ -16058,17 +16127,62 @@ function editarCertificado(id){
     tipoAnterior = e.target.value;
   };
 
+  /* Lo tecleado, tal cual, SIN tocar el certificado ni el estado. La vista
+     previa lo necesita a cada rato y un borrador a medias no tiene nada que
+     hacer en la cartera hasta que alguien le pique a Guardar. */
+  const leerCampos = () => ({
+    tipo:        q("#ceTipo").value,
+    paraQuien:   q("#ceQuien").value.trim(),
+    desde:       q("#ceDesde").value,
+    hasta:       q("#ceHasta").value,
+    titulo:      q("#ceTitulo").value.trim(),
+    condiciones: q("#ceCond").value.trim(),
+    notas:       q("#ceNotas").value.trim()
+  });
+
   const recoger = () => {
-    c.tipo = q("#ceTipo").value;
-    c.paraQuien = q("#ceQuien").value.trim();
-    c.desde = q("#ceDesde").value;
-    c.hasta = q("#ceHasta").value;
-    c.titulo = q("#ceTitulo").value.trim();
-    c.condiciones = q("#ceCond").value.trim();
-    c.notas = q("#ceNotas").value.trim();
+    Object.assign(c, leerCampos());
     c.updatedAt = new Date().toISOString();
     if (nuevo && !state.certificados.includes(c)) state.certificados.push(c);
   };
+
+  /* -----------------------------------------------------------------------
+     La hoja, mientras se captura.
+
+     Marco dijo que el certificado «sigue sin insertar la imagen»: la estaba
+     buscando AQUÍ, y aquí no había nada que ver —la foto sólo aparecía
+     después de guardar—. Se pinta con las MISMAS funciones de la hoja de
+     verdad, así que lo que se ve capturando es literalmente lo que se
+     imprime. `fondosCert` guarda la foto por tipo, así que sólo la primera
+     cuesta algo.
+     ----------------------------------------------------------------------- */
+  let turnoPrevia = 0, tiempoPrevia = null;
+
+  async function pintarPrevia(){
+    const mio = ++turnoPrevia;
+    const copia = saneaCertificado(Object.assign({}, c, leerCampos()));
+    const fondo = await fondoCertificado(copia.tipo);
+    if (mio !== turnoPrevia || !ov.isConnected) return;   // llegó tarde: ya hay otra
+    q("#cePrevia").innerHTML =
+      `<div class="cert-marco">${cuerpoCertificado(copia, fondo)}</div>`;
+    q("#ceFalta").innerHTML = avisoPendientesCert(copia.tipo, "ceIrAjustes");
+    const ir = q("#ceIrAjustes");
+    if (ir) ir.onclick = () => {
+      ov.remove();
+      vista = "ajustes"; render();
+      const campo = document.getElementById("hDirector");
+      if (campo){ campo.scrollIntoView({ block:"center", behavior:"smooth" }); campo.focus(); }
+    };
+  }
+
+  /* Antirrebote: tecleando un nombre largo no se vuelve a armar la hoja en
+     cada letra. */
+  const repintar = () => { clearTimeout(tiempoPrevia); tiempoPrevia = setTimeout(pintarPrevia, 120); };
+  ["#ceTipo", "#ceQuien", "#ceDesde", "#ceHasta", "#ceTitulo", "#ceCond"].forEach(sel => {
+    q(sel).addEventListener("input", repintar);
+    q(sel).addEventListener("change", repintar);
+  });
+  pintarPrevia();
 
   q("#ceGuardar").onclick = () => { recoger(); guardar(); render(); ov.remove(); };
 
@@ -16142,12 +16256,18 @@ function verCertificado(id){
   (async () => {
     const caja = ov.querySelector("#ceVista");
     const fondo = await fondoCertificado(c.tipo);
-    // La hoja mide 816 px; se encoge para que quepa en la ventana.
-    caja.innerHTML = `<div class="cert-marco" style="transform:scale(.49)">
-      ${cuerpoCertificado(c, fondo)}</div>`;
-    if (!fondo) caja.insertAdjacentHTML("beforeend",
-      `<p class="hint" style="margin-top:-500px;position:relative">Todavía no está cargada la
-       imagen de este tipo de certificado; mientras tanto sale el fondo del hotel.</p>`);
+    if (!ov.isConnected) return;
+    // La hoja mide 816 px; .cert-mini la encoge Y encoge el lugar que ocupa.
+    caja.innerHTML = `<div class="cert-mini" style="--z:.49">
+      <div class="cert-marco">${cuerpoCertificado(c, fondo)}</div></div>
+      ${avisoPendientesCert(c.tipo, "cvIrAjustes")}`;
+    const ir = caja.querySelector("#cvIrAjustes");
+    if (ir) ir.onclick = () => {
+      ov.remove();
+      vista = "ajustes"; render();
+      const campo = document.getElementById("hDirector");
+      if (campo){ campo.scrollIntoView({ block:"center", behavior:"smooth" }); campo.focus(); }
+    };
   })();
 
   ov.querySelector("#cePdf").onclick = async ev => {

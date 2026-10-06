@@ -16,8 +16,10 @@
 import { chromium } from 'playwright';
 import http from 'node:http';
 import fs from 'node:fs';
+import path from 'node:path';
 
 const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
+const RAIZ   = path.dirname(APP);
 const PUERTO = 8804;
 const CHROME = process.env.CHROME_PATH ||
   '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -25,6 +27,11 @@ const CHROME = process.env.CHROME_PATH ||
 /* El contador del hotel. `vivo` en false es un servidor sin folios.sql. */
 let vivo = true, siguiente = 7;
 const repartidos = [];
+/* Las fotos de los certificados se sirven DE VERDAD, desde el repositorio.
+   Antes la hoja se probaba con `cuerpoCertificado(c, null)` —o sea, la imagen
+   no se probaba nunca—, y Marco acabó reportando que «no se inserta».
+   `fotos` en false es un servidor que no las entrega, para probar el aviso. */
+let fotos = true;
 
 const srv = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
@@ -34,6 +41,15 @@ const srv = http.createServer((req, res) => {
   if (u.pathname === '/app'){
     res.writeHead(200, { 'Content-Type':'text/html; charset=utf-8' });
     return res.end(fs.readFileSync(APP, 'utf8'));
+  }
+  if (u.pathname.startsWith('/certificados/')){
+    const f = path.join(RAIZ, u.pathname);
+    if (!fotos || !f.startsWith(path.join(RAIZ, 'certificados')) || !fs.existsSync(f)){
+      res.writeHead(404, { 'Content-Type':'text/plain' });
+      return res.end('no');
+    }
+    res.writeHead(200, { 'Content-Type':'image/jpeg' });
+    return res.end(fs.readFileSync(f));
   }
   if (u.pathname === '/rest/v1/rpc/crm_aparta_folio'){
     if (!vivo){
@@ -268,6 +284,137 @@ await bloque('8 · escoger el tipo LLENA los dos textos, y se pueden corregir', 
     r.propio.cond === 'Condiciones especiales de este certificado.');
   afirma('y un campo vacío sí se llena con el del tipo nuevo',
     /TEMAZCAL/.test(r.hereda.titulo) && !!r.hereda.cond);
+});
+
+/* ---------------------------------------------------------------------------
+   9 · LA FOTO.
+
+   «sigue sin insertar la imagen», dijo Marco. La estaba buscando en la ventana
+   de captura, donde no había ninguna vista previa: la foto sólo aparecía
+   después de guardar. Estos tres bloques cubren lo que faltaba — que se vea al
+   capturar, que llegue hasta el PDF, y que si NO llega se diga por qué.
+   --------------------------------------------------------------------------- */
+await bloque('9 · al capturar se ve la hoja, con su foto', async () => {
+  fotos = true;
+  await entrarComo('carmen@ejemplo.example', 'ejecutivo', true);
+  const r = await p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    editarCertificado(null);
+    const fondoDe = async () => {
+      for (let i = 0; i < 60; i++){
+        await new Promise(r => setTimeout(r, 100));
+        const f = document.querySelector('#cePrevia .cert-foto');
+        const b = f && f.style.backgroundImage;
+        if (b && /data:image/.test(b)) return b;
+      }
+      const f = document.querySelector('#cePrevia .cert-foto');
+      return f ? f.style.backgroundImage : null;
+    };
+    const sel = document.querySelector('#ceTipo');
+    sel.value = 'spa_facial'; sel.dispatchEvent(new Event('change'));
+    const facial = await fondoDe();
+
+    sel.value = 'temazcal'; sel.dispatchEvent(new Event('change'));
+    await new Promise(r => setTimeout(r, 250));
+    const temazcal = await fondoDe();
+
+    const quien = document.querySelector('#ceQuien');
+    quien.value = 'DÍA DE LAS MADRES';
+    quien.dispatchEvent(new Event('input'));
+    await new Promise(r => setTimeout(r, 400));
+    const hoja = document.querySelector('#cePrevia').innerText;
+
+    return { facial, temazcal, hoja, enCartera: state.certificados.length };
+  });
+  afirma('la hoja se pinta al abrir la captura', !!r.facial);
+  afirma('y su foto es una imagen de verdad, no el morado',
+    /^url\("data:image\//.test(r.facial || ''));
+  afirma('al cambiar de tipo, cambia la foto',
+    !!r.temazcal && /^url\("data:image\//.test(r.temazcal) && r.temazcal !== r.facial);
+  afirma('el título sigue al tipo en la hoja', /TEMAZCAL/.test(r.hoja));
+  afirma('y el cliente tecleado sale en la hoja', r.hoja.includes('DÍA DE LAS MADRES'));
+  /* Lo que se está capturando NO es un certificado todavía: un borrador a
+     medias no tiene nada que hacer en la cartera hasta que le piquen Guardar. */
+  afirma('capturar no mete nada a la cartera', r.enCartera === 0);
+});
+
+await bloque('10 · la foto llega hasta el PDF', async () => {
+  fotos = true;
+  const r = await p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    const c = saneaCertificado({ id:'cf', folio:'CE-2026-030', tipo:'spa_facial',
+      paraQuien:'PRUEBA', desde:'2026-05-10', hasta:'2026-06-30', estado:'emitido' });
+    const caja = document.createElement('div');
+    caja.innerHTML = cuerpoCertificado(c, await fondoCertificado(c.tipo));
+    document.body.appendChild(caja);
+    const jpeg = await rasterizarHoja(caja.firstElementChild, { sangrada:true });
+    const im = new Image(); im.src = jpeg;
+    await new Promise(ok => im.onload = ok);
+    const cv = document.createElement('canvas');
+    cv.width = im.width; cv.height = im.height;
+    const g = cv.getContext('2d');
+    g.drawImage(im, 0, 0);
+    /* La mitad de arriba es la foto. Una foto trae cientos de colores; el
+       morado de respaldo es un degradado de muy pocos. */
+    const d = g.getImageData(0, 0, cv.width, Math.round(cv.height * 0.45)).data;
+    const set = new Set();
+    for (let i = 0; i < d.length; i += 4 * 97) set.add(d[i] + ',' + d[i+1] + ',' + d[i+2]);
+    caja.remove();
+    return { colores: set.size, bytes: jpeg.length };
+  });
+  afirma('la zona de la foto trae una foto, no el degradado', r.colores > 500);
+  afirma('y la hoja se rasterizó completa', r.bytes > 50000);
+});
+
+await bloque('11 · si la foto NO llega, se dice por qué', async () => {
+  fotos = false;                      // el servidor deja de entregar las fotos
+  /* A propósito un tipo que NINGÚN bloque anterior pidió: el navegador guarda
+     lo que ya bajó y `force-cache` se lo daría aunque el servidor conteste
+     404, así que limpiar `fondosCert` no basta para probar esto. */
+  const r = await p.evaluate(async () => {
+    fondosCert.clear(); motivosCert.clear();
+    const f = await fondoCertificado('restaurante');
+    return { fondo:f, motivo: motivoFondoCert('restaurante'),
+             avisa: avisoPendientesCert('restaurante', 'x') };
+  }).catch(e => ({ error:e.message }));
+  if (r.error) console.log('        ↳ ' + r.error);
+  afirma('sin foto no revienta: la hoja sale con el fondo del hotel', r.fondo === null);
+  afirma('y se anota el motivo', /404/.test(r.motivo || ''));
+  afirma('que además se le enseña al ejecutivo', /404/.test(r.avisa || ''));
+  fotos = true;
+});
+
+await bloque('12 · un certificado sin quién firma lo avisa', async () => {
+  const r = await p.evaluate(() => {
+    state.ajustes.hotel.director = '';
+    const sin = avisoPendientesCert('spa_facial', 'x');
+    state.ajustes.hotel.director = 'Nombre De Ejemplo';
+    const con = avisoPendientesCert('spa_facial', 'x');
+    const c = saneaCertificado({ id:'cz', tipo:'spa_facial', paraQuien:'X' });
+    const caja = document.createElement('div');
+    caja.innerHTML = cuerpoCertificado(c, null);
+    return { sin, con, hoja: caja.innerText };
+  });
+  afirma('sin el nombre, avisa que la firma va a salir en blanco', /Falta qui[eé]n firma/.test(r.sin));
+  afirma('y manda a donde se captura', /Ajustes/.test(r.sin));
+  afirma('con el nombre puesto, ya no avisa', !/Falta qui[eé]n firma/.test(r.con));
+  afirma('y el nombre sale impreso en la hoja', r.hoja.includes('Nombre De Ejemplo'));
+
+  /* El aviso es un renglón largo. Si la columna de la hoja se deja a su aire,
+     el aviso la ensancha y los campos se quedan en un palmo: pasó, y así se
+     ve. La columna tiene que medir lo que mide la hoja, no lo que mida el
+     aviso que le toque abajo. */
+  const anchos = await p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    state.ajustes.hotel.director = '';
+    editarCertificado(null);
+    await new Promise(r => setTimeout(r, 700));
+    const an = sel => Math.round(document.querySelector(sel).getBoundingClientRect().width);
+    return { campos:an('.cert-campos'), previa:an('.cert-previa'),
+             avisa: /Falta qui[eé]n firma/.test(document.querySelector('#ceFalta').innerText) };
+  });
+  afirma('el aviso está a la vista en la captura', anchos.avisa);
+  afirma('y NO aplasta los campos', anchos.campos > anchos.previa);
 });
 
 await br.close(); srv.close();
