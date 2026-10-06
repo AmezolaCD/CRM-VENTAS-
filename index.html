@@ -971,7 +971,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.06-97";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.06-98";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -4024,6 +4024,23 @@ function programarSubida(){
   nube.pendiente = setTimeout(() => sincronizar().catch(() => {}), 400);
 }
 
+/**
+ * ¿Hay algo abierto, ahora mismo, que alguien pueda estar llenando?
+ *
+ * Importa porque al aplicar lo que baja la sincronización REEMPLAZA el estado
+ * (`state = estadoDesdeFilas(...)`), y el formulario abierto se queda con el
+ * objeto de antes en la mano: al guardar escribe en un objeto que ya nadie
+ * mira, la pantalla dice «Guardado ✓» y lo tecleado se pierde sin un ruido.
+ *
+ * Esto ya se cuidaba, pero preguntando por `.overlay` —o sea, sólo por las
+ * ventanas—. **Ajustes no es una ventana: es una pantalla entera**, y por ahí
+ * se colaba. Marco lo reportó con el nombre de quien firma los certificados:
+ * lo escribía, decía Guardado, y al rato no estaba. Le pasaba a TODO lo de
+ * esa pantalla —los datos del hotel, el catálogo, la lista de usuarios—.
+ */
+const hayFormularioAbierto = () =>
+  !!document.querySelector(".overlay") || (vista === "ajustes" && ajustesEnPantalla);
+
 let sincronizando = false;
 async function sincronizar(){
   if (!nubeActiva() || sincronizando) return;
@@ -4041,7 +4058,14 @@ async function sincronizar(){
     // Primero lo de los demás, luego lo propio: así una edición local reciente
     // gana sobre una copia remota vieja del mismo registro.
     const remotas = await bajar(nube.ultimo);
-    if (remotas.length){
+    /* Con algo abierto se MIRA pero no se toca, igual que en el sondeo. Y
+       `nube.ultimo` NO se mueve: estas filas no se aplicaron, así que la
+       vuelta de después tiene que volver a pedirlas. Subir sí se sube —lo que
+       esta persona ya guardó no tiene por qué esperar a que cierre—. */
+    if (remotas.length && hayFormularioAbierto()){
+      nube.hayQueBajar = true;
+    } else if (remotas.length){
+      nube.hayQueBajar = false;
       const porId = new Map(filasDeEstado().map(f => [f.id, f]));
       const aplicadas = [];
       for (const r of remotas){
@@ -4279,7 +4303,7 @@ function arrancarSondeo(){
   nube.timer = setInterval(() => {
     /* Con un formulario abierto no se aplica nada —ver mirarSinTocar—, pero sí
        se pregunta: enterarse no mueve nada de su sitio. */
-    if (document.querySelector(".overlay")){ mirarSinTocar().catch(() => {}); return; }
+    if (hayFormularioAbierto()){ mirarSinTocar().catch(() => {}); return; }
     sincronizar().catch(() => {});
   }, SONDEO_MS);
 }
@@ -5525,7 +5549,13 @@ function render(){
      Así que mientras siga ahí, esta pantalla no se vuelve a dibujar sola. Se
      dibuja al entrar, y cuando el propio panel lo pide después de guardar. */
   if (vista === "ajustes"){ if (!ajustesEnPantalla) renderAjustes(); }
-  else ajustesEnPantalla = false;
+  else if (ajustesEnPantalla){
+    /* Se salió de Ajustes. Mientras estuvo ahí no se aplicó nada de lo que
+       bajó —ver `hayFormularioAbierto`—, así que éste es el momento de
+       ponerse al día, igual que al cerrarse la última ventana. */
+    ajustesEnPantalla = false;
+    if (nube.hayQueBajar) setTimeout(() => sincronizar().catch(() => {}), 0);
+  }
 
   // Al final, para que no salga encima de una pantalla a medio dibujar.
   pantallaDepto();
@@ -7479,7 +7509,11 @@ function reasignarEjecutivo(de, a){
 }
 
 function renderAjustes(){
-  const a = state.ajustes, t = a.textos, h = a.hotel;
+  /* `let`, no `const`: la nube puede reemplazar el estado entero mientras
+     esta pantalla sigue abierta, y entonces estas tres referencias apuntarían
+     a un objeto que ya nadie mira. `recogerAjustes` las vuelve a apuntar
+     antes de escribir nada. Ver `hayFormularioAbierto`. */
+  let a = state.ajustes, t = a.textos, h = a.hotel;
   const filaHab = x => `<tr data-id="${x.id}">
       <td><input class="field" data-k="codigo" value="${esc(x.codigo)}" placeholder="STKN"
             style="width:88px;text-transform:uppercase"></td>
@@ -7854,6 +7888,11 @@ function renderAjustes(){
   /** Vuelca el formulario al estado. Se llama también antes de agregar o
       eliminar una fila: si no, al repintar se perdía lo que estuviera escrito. */
   function recogerAjustes(){
+    /* Lo primero, SIEMPRE: volver a apuntar al estado vivo. Si algo lo
+       reemplazó con esta pantalla abierta, escribir en las referencias de
+       cuando se dibujó no guarda nada —y encima dice que sí—. */
+    a = state.ajustes; t = a.textos; h = a.hotel;
+
     h.nombre    = p.querySelector("#hNombre").value.trim() || "Hotel";
     h.direccion = p.querySelector("#hDir").value.trim();
     h.telefono  = p.querySelector("#hTel").value.trim();

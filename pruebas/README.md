@@ -40,6 +40,7 @@ node pruebas/navegador/folios-repetidos.mjs          # dos documentos con el mis
 node pruebas/navegador/copiar-el-sql.mjs             # el .sql llega entero
 node pruebas/navegador/certificados.mjs             # el folio no se repite y quién emite
 node pruebas/navegador/arranque.mjs                 # que la aplicación abra
+node pruebas/navegador/no-se-pierde-lo-escrito.mjs  # guardar guarda de verdad
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
@@ -52,6 +53,14 @@ al navegador un almacenamiento como el suyo —con un certificado guardado, con 
 se quite, que el tablero se pinte y que no se escriba encima de la cartera. El último caso es
 el que más importa: se sirve el archivo con una bomba metida a propósito y se exige que **se
 vea qué pasó**, porque lo que de verdad falló fue que hubo un error y nadie lo supo.
+
+`no-se-pierde-lo-escrito.mjs` levanta un servidor de mentiras y **dos equipos de verdad**. Al
+aplicar lo que baja, la sincronización reemplaza el estado entero; una pantalla abierta se queda
+con las referencias de antes y al guardar escribe en un objeto que ya nadie mira —decía
+«Guardado ✓» y no guardaba nada—. Se cuidaba preguntando por `.overlay`, o sea sólo por las
+ventanas, y **Ajustes no es una ventana**. La prueba exige que lo tecleado sobreviva, que al
+cerrar sí entre lo del otro equipo, y —para que no se pase sola— que la nube de verdad trajera
+algo que aplicar.
 
 `enlace-que-no-sirve.mjs` comprueba lo de antes del enlace: que si al servidor le falta el buzón
 de firmas, al ejecutivo **no se le ofrece el enlace** y se le dice por qué — y que si lo que se
