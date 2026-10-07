@@ -971,7 +971,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.07-100";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.07-101";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -7832,7 +7832,10 @@ function renderAjustes(){
       ${state.serviciosBq.length ? "" : `<p class="hint" style="margin-top:0">
         Todavía no hay ninguno. Mientras esté vacío, en la cotización el servicio se sigue
         escribiendo a mano, como hasta hoy.</p>`}
-      <p><button class="btn" id="bAddSrv">+ Agregar servicio</button></p>
+      <p style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="bAddSrv">+ Agregar servicio</button>
+        <button class="btn" id="bImpSrv">Cargar una lista</button>
+        <button class="btn" id="bExpSrv">Bajar la lista</button></p>
 
       <h3 class="sec">Bloques de la carta</h3>
       <p class="hint" style="margin-top:0">El nombre encabeza la tabla de tarifas (“Deluxe / ${esc(h.nombre)}”)
@@ -8183,6 +8186,107 @@ function renderAjustes(){
     const ultimo = document.querySelector("#tSrv tr:last-child [data-sk='nombre']");
     if (ultimo){ ultimo.scrollIntoView({ block:"center" }); ultimo.focus(); }
   };
+  /* ---------------------------------------------------------------------
+     Cargar la lista de golpe.
+
+     El kit de banquetes del hotel y la lista del proveedor de audiovisual
+     traen más de cien renglones entre los dos, y cambian cada enero. Teclear
+     eso a mano una vez al año no es trabajo de nadie; y escribirlo dentro de
+     la aplicación tampoco, porque este archivo es público y porque entonces
+     actualizar un precio dependería de que alguien publique una versión.
+     Se pega o se escoge un archivo, y ya.
+     --------------------------------------------------------------------- */
+  function cargarServicios(texto, reemplazar){
+    const filas = parseCSV(String(texto || ""));
+    const leidos = [];
+    for (const f of filas){
+      const nombre = String(f[0] || "").trim();
+      if (!nombre) continue;
+      // Un encabezado no es un servicio.
+      if (/^(servicio|nombre|concepto)$/i.test(nombre) && !parseMoney(f[1])) continue;
+      const serv = String(f[2] == null ? "" : f[2]).trim().toLowerCase();
+      leidos.push({ nombre, precio: parseMoney(f[1]),
+        /* Vacío quiere decir «sí»: los alimentos y las bebidas son la mayor
+           parte de la lista y son justo los que lo llevan. */
+        conServicio: serv === "" ? true : /^(s[ií]|si|1|true|x)$/.test(serv) });
+    }
+    if (!leidos.length) return { leidos:0 };
+
+    let nuevos = 0, cambiados = 0;
+    if (reemplazar){
+      state.serviciosBq = leidos.map((x, i) => saneaServicioBq(Object.assign({ orden:i }, x)));
+      nuevos = leidos.length;
+    } else {
+      for (const x of leidos){
+        const ya = state.serviciosBq.find(y => y.nombre.toLowerCase() === x.nombre.toLowerCase());
+        if (ya){
+          if (ya.precio !== x.precio || ya.conServicio !== x.conServicio) cambiados++;
+          ya.precio = x.precio; ya.conServicio = x.conServicio;
+        } else {
+          state.serviciosBq.push(saneaServicioBq(x)); nuevos++;
+        }
+      }
+      state.serviciosBq.forEach((x, i) => { x.orden = i; });
+    }
+    return { leidos: leidos.length, nuevos, cambiados };
+  }
+
+  p.querySelector("#bExpSrv").onclick = () => {
+    recogerAjustes();
+    descargar(`servicios-de-banquetes-${hoyISO()}.csv`,
+      toCSV([["Servicio","Precio","Serv."]].concat(
+        state.serviciosBq.map(x => [x.nombre, x.precio, x.conServicio ? "sí" : "no"]))),
+      "text/csv");
+  };
+
+  p.querySelector("#bImpSrv").onclick = () => {
+    recogerAjustes();
+    const ov = modal(`
+      <div class="modal">
+        <div class="modal-head"><h2>Cargar la lista de servicios</h2>
+          <button class="btn" data-close>✕</button></div>
+        <div class="modal-body">
+          <div class="note">Un servicio por renglón: <b>nombre, precio, serv</b>. En la
+            tercera columna <b>sí</b> o <b>no</b> dice si lleva el cargo por servicio del
+            15% —alimentos y bebidas sí; audiovisual, mobiliario, DJ y pista no—. Si se deja
+            vacía se toma como <b>sí</b>. Sirve pegarlo aquí o escoger un archivo
+            <code>.csv</code>.</div>
+          <p><input type="file" id="srvArch" accept=".csv,text/csv,text/plain"></p>
+          <textarea class="field mono" id="srvTexto" style="width:100%;min-height:180px"
+            placeholder="Cena emplatada, 850, sí&#10;Pista iluminada, 6500, no"></textarea>
+          <p><label style="display:flex;gap:8px;align-items:flex-start">
+            <input type="checkbox" id="srvReemplaza">
+            <span>Reemplazar todo el catálogo. Sin esto, lo que ya esté se le actualiza el
+              precio y lo que falte se agrega; no se borra nada.</span></label></p>
+          <div id="srvErr"></div>
+        </div>
+        <div class="modal-foot"><div class="spacer"></div>
+          <button class="btn" data-close>Cancelar</button>
+          <button class="btn primary" id="srvCargar">Cargar</button></div>
+      </div>`);
+    ov.querySelector("#srvArch").addEventListener("change", e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => { ov.querySelector("#srvTexto").value = String(r.result); };
+      r.readAsText(f, "utf-8");
+    });
+    ov.querySelector("#srvCargar").onclick = () => {
+      const r = cargarServicios(ov.querySelector("#srvTexto").value,
+                                ov.querySelector("#srvReemplaza").checked);
+      if (!r.leidos){
+        ov.querySelector("#srvErr").innerHTML =
+          `<div class="errbox">No se encontró ningún servicio. Revisa que cada renglón traiga
+           el nombre y el precio separados por coma.</div>`;
+        return;
+      }
+      guardar(); ov.remove(); renderAjustes();
+      alert(r.nuevos || r.cambiados
+        ? `Listo: ${r.nuevos} servicio(s) nuevo(s) y ${r.cambiados} con precio actualizado.`
+        : `Se leyeron ${r.leidos} y ninguno cambió: ya estaban igual.`);
+    };
+  };
+
   const moverSrv = (id, paso) => {
     recogerAjustes();
     const i = state.serviciosBq.findIndex(x => x.id === id);

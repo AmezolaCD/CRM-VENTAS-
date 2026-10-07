@@ -360,6 +360,94 @@ await bloque('8 · un servicio sin nombre no se queda en el catálogo', async ()
   afirma('el renglón en blanco se descarta al guardar', r.despues === r.antes);
 });
 
+await bloque('9 · la lista se carga de golpe, pegándola', async () => {
+  /* El kit del hotel y la lista del proveedor de audiovisual traen más de cien
+     renglones entre los dos y cambian cada enero. Teclearlos a mano no es
+     trabajo de nadie, y escribirlos dentro de la aplicación tampoco: este
+     archivo es público. */
+  /* Nombres y precios INVENTADOS: la lista de verdad trae los precios del
+     hotel y los de su proveedor, y este repositorio es público. Lo que se
+     prueba es la forma del archivo, no sus cifras. */
+  const LISTA = [
+    'Servicio,Precio,Serv.',
+    'Cafetería de ejemplo · una pausa,111,sí',
+    '"Menú de ejemplo en 3 tiempos de pollo, cerdo o vegetariano",222,sí',
+    'Barra de ejemplo · hasta 4 horas,333,sí',
+    'Proyector de ejemplo,444,no',
+    'Pista de ejemplo 6 x 8 m,555,no',
+    'Silla de ejemplo,66,no'
+  ].join('\n');
+
+  const r = await admin.p.evaluate(async lista => {
+    state.serviciosBq = [];
+    guardar();
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    vista = 'ajustes'; render();
+    await new Promise(r => setTimeout(r, 300));
+    document.getElementById('bImpSrv').click();
+    await new Promise(r => setTimeout(r, 200));
+    document.getElementById('srvTexto').value = lista;
+    document.getElementById('srvCargar').click();
+    await new Promise(r => setTimeout(r, 400));
+    return state.serviciosBq.map(x => x.nombre + '|' + x.precio + '|' + (x.conServicio ? 'si' : 'no'));
+  }, LISTA);
+  afirma('entraron los seis', r.length === 6);
+  afirma('el encabezado no se coló como servicio', !r.some(x => /^Servicio\|/.test(x)));
+  afirma('un nombre con coma adentro no se parte en dos',
+    r.includes('Menú de ejemplo en 3 tiempos de pollo, cerdo o vegetariano|222|si'));
+  /* Lo que de verdad distingue una lista de otra: los alimentos llevan el 15%
+     y el audiovisual no. Cargarlo mal es cobrar de más en cada cotización. */
+  afirma('los alimentos quedan CON cargo por servicio',
+    r.includes('Cafetería de ejemplo · una pausa|111|si') &&
+    r.includes('Barra de ejemplo · hasta 4 horas|333|si'));
+  afirma('y el audiovisual y el mobiliario SIN él',
+    r.includes('Proyector de ejemplo|444|no') &&
+    r.includes('Pista de ejemplo 6 x 8 m|555|no') &&
+    r.includes('Silla de ejemplo|66|no'));
+});
+
+await bloque('10 · volver a cargarla actualiza precios sin duplicar', async () => {
+  const r = await admin.p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    vista = 'ajustes'; render();
+    await new Promise(r => setTimeout(r, 300));
+    const antes = state.serviciosBq.length;
+    document.getElementById('bImpSrv').click();
+    await new Promise(r => setTimeout(r, 200));
+    // El mismo servicio con otro precio, y uno nuevo.
+    document.getElementById('srvTexto').value =
+      'Cafetería de ejemplo · una pausa,999,sí\nCalentón de ejemplo,777,no';
+    document.getElementById('srvCargar').click();
+    await new Promise(r => setTimeout(r, 400));
+    const cafe = state.serviciosBq.filter(x => /una pausa/.test(x.nombre));
+    return { antes, despues: state.serviciosBq.length,
+             cuantosCafe: cafe.length, precioCafe: cafe[0] && cafe[0].precio,
+             hayCalenton: state.serviciosBq.some(x => x.nombre === 'Calentón de ejemplo') };
+  });
+  afirma('el que ya estaba no se duplicó', r.cuantosCafe === 1);
+  afirma('se le actualizó el precio', r.precioCafe === 999);
+  afirma('el nuevo se agregó', r.hayCalenton);
+  afirma('y no se borró nada de lo demás', r.despues === r.antes + 1);
+});
+
+await bloque('11 · «reemplazar» sí deja sólo lo nuevo', async () => {
+  const r = await admin.p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    vista = 'ajustes'; render();
+    await new Promise(r => setTimeout(r, 300));
+    document.getElementById('bImpSrv').click();
+    await new Promise(r => setTimeout(r, 200));
+    document.getElementById('srvTexto').value = 'Cena emplatada,850,sí\nPista iluminada,6500,no';
+    document.getElementById('srvReemplaza').checked = true;
+    document.getElementById('srvCargar').click();
+    await new Promise(r => setTimeout(r, 400));
+    return state.serviciosBq.map(x => x.nombre);
+  });
+  afirma('quedan nada más los dos', r.length === 2);
+  afirma('y en el orden en que venían',
+    r[0] === 'Cena emplatada' && r[1] === 'Pista iluminada');
+});
+
 await br.close(); srv.close();
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTodo en verde.\n');
 process.exit(fallas ? 1 : 0);

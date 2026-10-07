@@ -105,6 +105,12 @@ Pestaña **Eventos**. Sale del machote que trae el departamento, sección por se
   servicio…**, que abre un campo para escribirlo. Con el catálogo vacío el servicio se sigue
   escribiendo a mano, como antes, y los documentos de antes conservan su renglón tal cual.
   Cambiar un precio en el catálogo **no** toca las cotizaciones ya capturadas.
+  El catálogo se llena de golpe con **Cargar una lista** —se pega o se escoge un `.csv` de
+  `nombre, precio, serv`—, porque entre el kit de banquetes del hotel y la lista del proveedor
+  de audiovisual son más de cien renglones que cambian cada enero. Volver a cargarla actualiza
+  los precios de lo que ya está y agrega lo que falte, sin borrar nada; **Bajar la lista**
+  saca lo que hay hoy en ese mismo formato. Los precios **no** están escritos en `index.html`:
+  el archivo es público y la lista del proveedor no es del hotel.
   Cada renglón lleva su cantidad y su precio. El **IVA del 8%** lo pagan
   todos; el **cargo por servicio del 15%** sólo los que lo lleven, y eso se marca con una
   palomita renglón por renglón — alimentos y bebidas sí, audiovisual, DJ, pista y mobiliario
