@@ -3305,6 +3305,55 @@ const TECHO_LOCALSTORAGE = 5177344 * 2;
 
 const techoDelAlmacen = () => TECHO_LOCALSTORAGE;
 
+/* ==========================================================================
+   LA COPIA DE ESTE NAVEGADOR: UN SOLO CAMINO DE ESCRITURA
+
+   Hasta aquí había CUATRO `localStorage.setItem(STORE, …)` repartidos: el de
+   `guardar()` y los tres que reemplazan el estado de golpe —cerrar sesión,
+   sincronizar y el primer enlace—. Cuatro sitios es donde se olvida uno.
+
+   Ahora todos pasan por `guardarCopiaLocal()`. Por ahora hace exactamente lo
+   de antes; el día que la copia se mude a otro lado, se muda aquí y nada más.
+   ========================================================================== */
+
+/* Lo que pesa la copia, en caracteres, sin volver a serializar el estado.
+   `pesoGuardado()` se llama cuatro veces por cada archivo que se adjunta, y
+   serializar diez megas cuatro veces por adjunto se siente. */
+let ultimoPeso = 0;
+
+/* Para no repetir el mismo aviso en cada tecla: el almacenamiento no se
+   desatasca solo entre una y otra.
+
+   Se declara AQUÍ ARRIBA, junto a quien lo usa, y no más abajo: un `let` no
+   existe hasta la línea que lo declara, y en este archivo una variable
+   declarada después de quien la toca ya dejó la aplicación atorada en la
+   pantalla morada una vez. */
+let avisadoAlmacenLleno = false;
+
+/**
+ * Deja la copia de este navegador al día.
+ *
+ * `avisa` dice si un fallo se le cuenta a quien está capturando. Al guardar
+ * sí —es su trabajo el que no se está guardando—; al reemplazar el estado
+ * desde la nube no, porque ahí el dato bueno ya está en el servidor y el
+ * aviso saldría a destiempo y sin nada que hacer al respecto.
+ *
+ * Devuelve si se pudo.
+ */
+function guardarCopiaLocal(avisa){
+  const texto = JSON.stringify(state);
+  ultimoPeso = texto.length;
+  try{
+    localStorage.setItem(STORE, texto);
+    avisadoAlmacenLleno = false;
+    return true;
+  }catch(e){
+    console.warn("No se pudo guardar la copia de este navegador:", e);
+    if (avisa) avisarAlmacenLleno();
+    return false;
+  }
+}
+
 const enKB = n => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB"
                                : Math.round(n / 1024) + " KB";
 
@@ -3500,10 +3549,6 @@ function ponerLetreroAlmacen(){
   };
 }
 
-/* Para no repetir el mismo aviso en cada tecla: el almacenamiento no se
-   desatasca solo entre una y otra. */
-let avisadoAlmacenLleno = false;
-
 function guardar(){
   sellarTotales();
   anotarLoQueSeFue();
@@ -3512,13 +3557,7 @@ function guardar(){
      equivocada en la pantalla. */
   metaIndice = null;
   guardarTumbas();
-  try{
-    localStorage.setItem(STORE, JSON.stringify(state));
-    avisadoAlmacenLleno = false;
-  }catch(e){
-    console.warn("No se pudo guardar:", e);
-    avisarAlmacenLleno();
-  }
+  guardarCopiaLocal(true);
   programarSubida();   // si hay nube, empuja lo que cambió
 }
 
@@ -4014,7 +4053,7 @@ async function salir(){
   waSync = null; waPidiendo = null;
   metaMetricas = null; metaObjetos = []; metaSync = null;
   metaError = ""; metaFallo = "";
-  try{ localStorage.setItem(STORE, JSON.stringify(state)); }catch(e){}
+  guardarCopiaLocal(false);
   vista = "tablero";
   filtros = { q:"", ejecutivo:"" };
   seleccion = new Set();
@@ -4547,7 +4586,7 @@ async function sincronizar(){
            porque alguien de este equipo lo borrara. No se vuelve a tumbar. */
         alDiaSinTumbar(false);
         olvidarHuerfanos();
-        try{ localStorage.setItem(STORE, JSON.stringify(state)); }catch(e){}
+        guardarCopiaLocal(false);
         // Se dan por sincronizadas SÓLO las filas que acaban de llegar. Marcar
         // todas de golpe daba por subido lo que este equipo aún no manda, y el
         // registro recién capturado se quedaba para siempre en esta máquina.
@@ -4750,7 +4789,7 @@ async function primeraSincronizacion(){
      guardar tumbaría toda la cartera que este equipo tenía y la subiría como
      borrada. */
   alDiaSinTumbar(true);
-  try{ localStorage.setItem(STORE, JSON.stringify(state)); }catch(e){}
+  guardarCopiaLocal(false);
 
   // Se dan por sincronizadas SÓLO las filas que de verdad llegaron. Marcarlo
   // todo dejaba fuera para siempre lo que este equipo puso de su cosecha —el
@@ -14222,7 +14261,11 @@ const TIPOS_EXTERNO = [
 ];
 
 /** Cuánto ocupa hoy la cartera en este navegador, para no pasarnos del tope. */
+/* Lo que pesa la copia, en CARACTERES —la unidad en que corta el navegador—.
+   Sale de lo último que se escribió, no de volver a leer el almacenamiento:
+   esto se consulta cuatro veces por cada archivo que alguien adjunta. */
 function pesoGuardado(){
+  if (ultimoPeso) return ultimoPeso;
   try{ return (localStorage.getItem(STORE) || "").length; }catch(e){ return 0; }
 }
 /* Con almacén en la nube el archivo ni toca el navegador, así que cabe uno de
