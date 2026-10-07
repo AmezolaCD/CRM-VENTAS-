@@ -528,11 +528,73 @@ await bloque('12 · «Guardar ajustes» sí guarda los servicios', async () => {
   // Y lo que de verdad cuenta: que siga ahí después de recargar.
   await admin.p.reload();
   await admin.p.waitForFunction(() => typeof sincronizar === 'function', null, { timeout:15000 });
+  /* La sesión no se guarda en el equipo, así que al recargar queda la pantalla
+     de entrar encima. Se vuelve a entrar para que los bloques de abajo miren
+     la aplicación y no el acceso. */
+  await admin.p.evaluate(c => {
+    nube.sesion = { access_token:'ficticio', user:{ email:c } };
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    render();
+  }, 'admin@ejemplo.example');
   const tras = await admin.p.evaluate(() => {
     const x = state.serviciosBq[0];
     return x && [x.nombre, x.familia, x.precio, x.conServicio].join('|');
   });
   afirma('y sobrevive a recargar la aplicación', tras === ESPERADO);
+});
+
+/* ---------------------------------------------------------------------------
+   13 · «SERVICIOS COTIZADOS» YA NO SE CAPTURA — SIN PERDER LO QUE YA SE ESCRIBIÓ.
+
+   Marco: «lo de servicios cotizados y la propuesta económica se me hace algo
+   que se repite». En la cotización sí: imprimía una sección de texto libre
+   justo encima de la tabla que ya nombra esos mismos servicios. Se quita de la
+   captura y deja de salir en los documentos nuevos.
+
+   Lo que NO puede pasar: que una cotización que ya salió cambie de contenido.
+   Quitar una sección de la pantalla no puede borrarle el texto a un documento
+   que ya lo traía, ni firmado ni en borrador.
+   --------------------------------------------------------------------------- */
+await bloque('13 · se quita de la captura sin borrar lo ya escrito', async () => {
+  const nuevo = await admin.p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    vista = 'eventos'; render();
+    editarEvento(null, null, 'cotizacion');
+    await new Promise(r => setTimeout(r, 300));
+    /* El editor, no cualquier modal: con la pantalla de acceso encima esta
+       comprobación se pasaba sola mirando el formulario equivocado. */
+    const caja = document.querySelector('#tLin') &&
+                 document.querySelector('#tLin').closest('.modal-body');
+    const cuerpo = caja ? caja.innerText : '';
+    return { abrioElEditor: !!caja,
+             hayCampo: !!document.querySelector('#evServicios'),
+             hayTitulo: /Servicios cotizados/i.test(cuerpo),
+             hayPropuesta: /Propuesta econ[oó]mica/i.test(cuerpo) };
+  });
+  afirma('el editor de la cotización sí abrió', nuevo.abrioElEditor);
+  afirma('en uno nuevo ya no sale la sección', !nuevo.hayCampo && !nuevo.hayTitulo);
+  afirma('y la propuesta económica sigue ahí', nuevo.hayPropuesta);
+
+  const viejo = await admin.p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    const TEXTO = 'Jardín de ejemplo\n· Ceremonia de ejemplo';
+    state.eventos = [saneaEvento({ id:'evViejo', tipo:'cotizacion', clienteId:'c1',
+      estado:'borrador', fecha:'2026-10-01', servicios:TEXTO,
+      lineas:[saneaLineaEv({ servicio:'Algo de ejemplo', cantidad:1, precio:100 })] })];
+    guardar(); render();
+    editarEvento('evViejo');
+    await new Promise(r => setTimeout(r, 300));
+    const campo = document.querySelector('#evServicios');
+    const traia = campo ? campo.value : null;
+    // Guardar sin tocar nada: el texto no se puede ir.
+    document.querySelector('#evGuardar') ? document.querySelector('#evGuardar').click()
+      : document.querySelectorAll('.modal-foot .btn')[2].click();
+    await new Promise(r => setTimeout(r, 400));
+    const e = state.eventos.find(x => x.id === 'evViejo');
+    return { traia, quedo: e && e.servicios, TEXTO };
+  });
+  afirma('en uno que ya lo traía, sí se puede ver y corregir', viejo.traia === viejo.TEXTO);
+  afirma('y guardar no se lo borra', viejo.quedo === viejo.TEXTO);
 });
 
 await br.close(); srv.close();

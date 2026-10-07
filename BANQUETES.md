@@ -96,8 +96,11 @@ Pestaña **Eventos**. Sale del machote que trae el departamento, sección por se
 - **Detalles del evento**: un renglón por momento —el cóctel, la cena, el after— con su fecha,
   horario, invitados, montaje y salón. Eso es lo que después aparece en el calendario, así que
   un evento que cruza la medianoche sale en los dos días.
-- **Servicios cotizados**: texto libre, tal cual va en el documento, por espacio y con sus
-  viñetas. Se imprime respetando los renglones.
+- **Servicios cotizados**: ya no se captura. Con el catálogo, la propuesta económica ya dice
+  qué se cotizó y esta sección lo repetía —lo señaló Marco—. Un documento que ya la traía
+  escrita la sigue enseñando y la sigue imprimiendo, para no cambiarle lo que dice a algo que
+  ya salió; una vez vaciada, no vuelve. Lo operativo —qué se monta en cada espacio— va en
+  **Observaciones**, que imprime en la cotización y en el Anexo B del contrato.
 - **Propuesta económica**: el servicio se escoge de una **lista desplegable** —el catálogo que
   se captura en *Ajustes → Catálogo de servicios de banquetes*— y al escogerlo se llenan solos
   el **precio unitario** y la palomita del cargo por servicio; los dos se pueden corregir

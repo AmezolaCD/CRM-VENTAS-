@@ -971,7 +971,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.07-102";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.07-103";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -14614,11 +14614,15 @@ function editarEvento(id, tipoPre, alCerrar){
         <datalist id="listaMontajes">${MONTAJES.map(m => `<option value="${esc(m)}">`).join("")}</datalist>
         <p style="margin:8px 0 0"><button class="btn" id="bAddBloq">+ Agregar momento</button></p>
 
+        ${e.servicios ? `
         <h3 class="sec">Servicios cotizados</h3>
-        <p class="hint" style="margin-top:0">Tal cual va en el documento: por espacio, con sus
-          viñetas. Se imprime respetando los renglones.</p>
+        <div class="note warn">Esta sección ya no se usa: con el catálogo, la propuesta
+          económica de abajo ya dice qué se cotizó, y esto lo repetía. Sigue aquí porque
+          <b>este documento</b> ya la traía escrita, para no cambiarle lo que dice. Se puede
+          corregir o vaciar; una vez vacía, no vuelve a salir. Lo operativo —qué se monta en
+          cada espacio— va en <i>Observaciones</i>.</div>
         <textarea class="field" id="evServicios" style="width:100%;min-height:150px"
-          placeholder="Jardín ZEN&#10;· Ceremonia durante 2 horas previas a la recepción&#10;· Barra de mixología por 1 hora">${esc(e.servicios)}</textarea>
+          >${esc(e.servicios)}</textarea>` : ""}
 
         <h3 class="sec">Propuesta económica</h3>
         <div class="note">La palomita de <b>Serv.</b> marca los renglones que llevan el cargo
@@ -14832,7 +14836,10 @@ function editarEvento(id, tipoPre, alCerrar){
       vigencia: q("#evVig").value,
       iva: pct("#evIva"), cargoServicio: pct("#evServ"),
       bloques, lineas,
-      servicios: q("#evServicios").value.trim(),
+      /* El campo ya no se dibuja en un documento nuevo. Si no está, se conserva
+         lo que el documento traiga: quitar una sección de la captura no puede
+         borrarle el texto a una cotización que ya salió. */
+      servicios: q("#evServicios") ? q("#evServicios").value.trim() : e.servicios,
       observaciones: q("#evObs").value.trim(),
       garantiaPax: q("#evGar") ? q("#evGar").value.trim() : e.garantiaPax,
       anticipo: q("#evAnt") ? (q("#evAnt").value.trim() === "" ? "" : parseMoney(q("#evAnt").value)) : e.anticipo,
