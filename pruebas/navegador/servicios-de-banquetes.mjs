@@ -300,12 +300,12 @@ await bloque('7 · se captura en Ajustes y llega a la cotización', async () => 
     vista = 'ajustes'; render();
     await new Promise(r => setTimeout(r, 300));
 
-    document.getElementById('bAddSrv').click();
+    document.getElementById('bAddSrvS').click();
     await new Promise(r => setTimeout(r, 250));
-    document.getElementById('bAddSrv').click();
+    document.getElementById('bAddSrvS').click();
     await new Promise(r => setTimeout(r, 250));
 
-    const filas = [...document.querySelectorAll('#tSrv tr[data-sb]')];
+    const filas = [...document.querySelectorAll('#tSrvS tr[data-sb]')];
     const pon = (i, nombre, precio, serv) => {
       filas[i].querySelector('[data-sk="nombre"]').value = nombre;
       filas[i].querySelector('[data-sk="precio"]').value = precio;
@@ -508,7 +508,7 @@ await bloque('12 · «Guardar ajustes» sí guarda los servicios', async () => {
     await new Promise(r => setTimeout(r, 200));
     vista = 'ajustes'; render();
     await new Promise(r => setTimeout(r, 300));
-    const tr = document.querySelector('#tSrv tr[data-sb="sbX"]');
+    const tr = document.querySelector('#tSrvS tr[data-sb="sbX"]');
     tr.querySelector('[data-sk="nombre"]').value  = 'Montaje y mantelería de ejemplo';
     tr.querySelector('[data-sk="familia"]').value = 'Mobiliario de ejemplo';
     tr.querySelector('[data-sk="precio"]').value  = '1,234.50';
@@ -941,6 +941,267 @@ await bloque('21 · un servicio sin desglose sigue como siempre', async () => {
   afirma('no le cuelga ningún desglose', r.sinCaja);
   afirma('su precio se teclea, como siempre', r.libre);
   afirma('y las cuentas salen', r.sub.includes('154'));
+});
+
+/* ---------------------------------------------------------------------------
+   UN PAQUETE ES UNA SERIE DE SERVICIOS
+
+   Marco, viendo la propuesta económica: «veo que el paquete sigue siendo un
+   servicio más, sin embargo un paquete ES UNA SERIE DE SERVICIOS… me gustaría
+   que al menos en este apartado se muestre como tal».
+
+   El dato ya estaba —el desglose se publicó en -105—; lo que faltaba era que
+   se LEYERA distinto. Lo que se prueba aquí:
+     · que el renglón de un paquete se marca como tal y el de un suelto no;
+     · que el bloque se titula por sus servicios;
+     · que Ajustes enseña DOS tablas, cada una con los suyos, y que guardar
+       desde cualquiera conserva las dos —que es donde esto se rompe—;
+     · que agregar desde la tabla de paquetes nace paquete, y desde la de
+       sueltos, no;
+     · y que un archivo SIN la columna nueva sigue entrando y deduce bien.
+   --------------------------------------------------------------------------- */
+await bloque('22 · el renglón de un paquete se lee como un paquete', async () => {
+  const r = await admin.p.evaluate(async paq => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    state.serviciosBq = [
+      saneaServicioBq(Object.assign({ orden:0 }, paq)),
+      /* Un paquete SIN desglose: diez de los del libro de Marco todavía no lo
+         tienen, y no por eso dejan de ser paquetes. */
+      saneaServicioBq({ nombre:'Paquete de ejemplo sin desglose', precio:900, orden:1,
+                        familia:'Paquetes de ejemplo', esPaquete:true }),
+      saneaServicioBq({ nombre:'Suelto de ejemplo', precio:60, orden:2, familia:'Sueltos' })];
+    state.eventos = [];
+    guardar();
+    vista = 'eventos'; render();
+    editarEvento(null, null, 'cotizacion');
+    await new Promise(r => setTimeout(r, 300));
+
+    const tr = () => document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
+    const escoge = async v => {
+      const sel = tr().querySelector('.l-srvSel');
+      sel.value = v; sel.dispatchEvent(new Event('change', { bubbles:true }));
+      await new Promise(r => setTimeout(r, 150));
+    };
+    /* La etiqueta se mide por lo que SE VE, no por el atributo: el `display`
+       de `.et-paq` le gana al `[hidden]` del navegador, y con sólo leer el
+       atributo la prueba pasaba mientras en pantalla el letrero seguía
+       puesto en los renglones que no son paquete. */
+    const foto = () => {
+      const et = tr().querySelector('.et-paq');
+      return { marcado: tr().classList.contains('l-paq'),
+               etiqueta: !!et && et.getClientRects().length > 0,
+               texto: et ? et.textContent.trim() : '' };
+    };
+
+    await escoge(paq.nombre);
+    const conDesglose = foto();
+    const tit = document.querySelector('#tLin .l-desglose .desglose .desglose-tit');
+    const titulo = tit ? tit.textContent : '';
+    const nota = (document.querySelector('#tLin .l-desglose .desglose-nota') || {}).textContent || '';
+    /* Pegado al bloque de abajo: sin raya que los separe, para que los dos se
+       lean como una sola cosa. */
+    const sinRaya = getComputedStyle(tr().querySelector('td')).borderBottomWidth;
+
+    await escoge('Paquete de ejemplo sin desglose');
+    const sinDesglose = Object.assign(foto(),
+      { hayCaja: !!document.querySelector('#tLin .l-desglose .desglose') });
+
+    await escoge('Suelto de ejemplo');
+    const suelto = foto();
+
+    return { conDesglose, titulo, nota, sinRaya, sinDesglose, suelto };
+  }, PAQ);
+
+  afirma('el renglón del paquete sale marcado', r.conDesglose.marcado);
+  afirma('con su etiqueta a la vista', r.conDesglose.etiqueta &&
+    /paquete/i.test(r.conDesglose.texto));
+  /* Lo que pidió Marco: que el bloque se lea como la lista de sus servicios y
+     no como un apéndice contable. */
+  afirma('el bloque se titula por los servicios que incluye',
+    /servicios que incluye/i.test(r.titulo));
+  afirma('y sigue diciendo, en chico, que las cifras no se imprimen',
+    /no se imprimen/i.test(r.nota));
+  afirma('el renglón queda pegado a su bloque', r.sinRaya === '0px');
+  /* Un paquete sin desglose SIGUE siendo un paquete: si se marcara sólo por
+     traer desglose, diez de los de su libro se verían como sillas. */
+  afirma('un paquete sin desglose también se marca', r.sinDesglose.marcado &&
+    r.sinDesglose.etiqueta && !r.sinDesglose.hayCaja);
+  afirma('y un servicio suelto NO se marca',
+    !r.suelto.marcado && !r.suelto.etiqueta);
+});
+
+await bloque('23 · Ajustes enseña dos tablas, y guardar conserva las dos', async () => {
+  const r = await admin.p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    state.serviciosBq = [
+      saneaServicioBq({ id:'sbP', nombre:'Paquete de ejemplo Ámbar', precio:1000, orden:0,
+                        familia:'Paquetes de ejemplo', esPaquete:true,
+                        partes:[{ concepto:'Menú de ejemplo', unitario:500, cantidad:2 }] }),
+      saneaServicioBq({ id:'sbS', nombre:'Proyector de ejemplo', precio:1500, orden:1,
+                        familia:'Audiovisual de ejemplo' })];
+    guardar();
+    vista = 'tablero'; render();
+    await new Promise(r => setTimeout(r, 200));
+    vista = 'ajustes'; render();
+    await new Promise(r => setTimeout(r, 350));
+
+    const ids = t => [...document.querySelectorAll(t + ' tr[data-sb]')].map(x => x.dataset.sb);
+    const reparto = { paquetes: ids('#tSrv'), sueltos: ids('#tSrvS') };
+    const incluye = (document.querySelector('#tSrv tr[data-sb="sbP"] td.hint') || {}).textContent;
+
+    /* Se corrige un renglón de CADA tabla y se guarda UNA vez: si al recoger
+       se leyera una sola de las dos, la otra se perdería aquí. */
+    document.querySelector('#tSrv  tr[data-sb="sbP"] [data-sk="precio"]').value = '1,111';
+    document.querySelector('#tSrvS tr[data-sb="sbS"] [data-sk="precio"]').value = '2,222';
+    document.getElementById('bGuardarAj').click();
+    await new Promise(r => setTimeout(r, 400));
+
+    const por = id => state.serviciosBq.find(x => x.id === id);
+    return { reparto, incluye,
+             cuantos: state.serviciosBq.length,
+             paq: por('sbP') && [por('sbP').precio, por('sbP').esPaquete,
+                                 (por('sbP').partes || []).length].join('|'),
+             suelto: por('sbS') && [por('sbS').precio, !!por('sbS').esPaquete].join('|') };
+  });
+  afirma('el paquete sale en la tabla de paquetes',
+    r.reparto.paquetes.join() === 'sbP');
+  afirma('y el suelto en la de servicios sueltos',
+    r.reparto.sueltos.join() === 'sbS');
+  afirma('la tabla de paquetes dice de cuántos servicios se compone',
+    /1 servicio/.test(r.incluye || ''));
+  /* Aquí es donde esto se puede romper: guardar desde una pantalla partida y
+     perder la mitad del catálogo. */
+  afirma('guardar conserva los dos renglones', r.cuantos === 2);
+  afirma('con el precio corregido del paquete, su marca y su desglose',
+    r.paq === '1111|true|1');
+  afirma('y con el del suelto, que sigue sin ser paquete', r.suelto === '2222|false');
+});
+
+await bloque('24 · se agrega en la tabla donde se está parado', async () => {
+  const r = await admin.p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    state.serviciosBq = []; guardar();
+    vista = 'ajustes'; render();
+    await new Promise(r => setTimeout(r, 350));
+
+    document.getElementById('bAddSrv').click();          // en la de paquetes
+    await new Promise(r => setTimeout(r, 300));
+    document.querySelector('#tSrv tr:last-child [data-sk="nombre"]').value =
+      'Paquete de ejemplo nuevo';
+    document.getElementById('bAddSrvS').click();         // en la de sueltos
+    await new Promise(r => setTimeout(r, 300));
+    document.querySelector('#tSrvS tr:last-child [data-sk="nombre"]').value =
+      'Suelto de ejemplo nuevo';
+    document.getElementById('bGuardarAj').click();
+    await new Promise(r => setTimeout(r, 400));
+
+    const antes = state.serviciosBq.map(x => x.nombre + '|' + !!x.esPaquete);
+
+    /* Y palomear «Paquete» pasa el renglón a la otra tabla, a la vista. */
+    const c = document.querySelector('#tSrvS tr[data-sb] [data-sk="esPaquete"]');
+    c.checked = true;
+    c.dispatchEvent(new Event('change', { bubbles:true }));
+    await new Promise(r => setTimeout(r, 400));
+
+    return { antes,
+             enPaquetes: [...document.querySelectorAll('#tSrv tr[data-sb] [data-sk="nombre"]')]
+               .map(i => i.value),
+             enSueltos: document.querySelectorAll('#tSrvS tr[data-sb]').length };
+  });
+  afirma('el de la tabla de paquetes nace paquete',
+    r.antes.includes('Paquete de ejemplo nuevo|true'));
+  afirma('y el de la de sueltos, no',
+    r.antes.includes('Suelto de ejemplo nuevo|false'));
+  afirma('palomear «Paquete» lo pasa a la tabla de paquetes',
+    r.enPaquetes.length === 2 && r.enPaquetes.includes('Suelto de ejemplo nuevo'));
+  afirma('y lo saca de la de sueltos', r.enSueltos === 0);
+});
+
+await bloque('25 · el archivo lleva la columna, y sin ella se deduce', async () => {
+  /* Un archivo de los de ANTES: cinco columnas, sin «Paquete». Debe entrar
+     igual —si no, el que Marco ya tiene en su computadora se vuelve basura— y
+     deducir quién es paquete: el que trae desglose, y el que es de una familia
+     que empieza con «Paquete», que es como entran los diez del libro que
+     todavía no están desglosados. */
+  const VIEJO = [
+    'Servicio,Precio,Serv.,Familia,Desglose',
+    'Paquete de ejemplo Jade,1200,sí,Paquetes de ejemplo,Menú de ejemplo|600|2',
+    'Paquete de ejemplo Ópalo,900,sí,Paquetes de ejemplo,',
+    'Proyector de ejemplo,1500,no,Audiovisual de ejemplo,'
+  ].join('\n');
+
+  const carga = texto => admin.p.evaluate(async t => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    vista = 'ajustes'; render();
+    await new Promise(r => setTimeout(r, 350));
+    document.getElementById('bImpSrv').click();
+    await new Promise(r => setTimeout(r, 200));
+    document.getElementById('srvTexto').value = t;
+    document.getElementById('srvReemplaza').checked = true;   // reemplazar todo
+    document.getElementById('srvCargar').click();
+    await new Promise(r => setTimeout(r, 450));
+    return state.serviciosBq.map(x => x.nombre + '|' + !!x.esPaquete);
+  }, texto);
+
+  const deducido = await carga(VIEJO);
+  afirma('un archivo sin la columna sigue entrando', deducido.length === 3);
+  afirma('el que trae desglose se deduce paquete',
+    deducido.includes('Paquete de ejemplo Jade|true'));
+  afirma('y el que no, por su familia',
+    deducido.includes('Paquete de ejemplo Ópalo|true'));
+  afirma('el proyector se queda suelto',
+    deducido.includes('Proyector de ejemplo|false'));
+
+  /* Y el que se baja hoy sí la trae, para que la vuelta sea redonda. */
+  const bajado = await admin.p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    vista = 'ajustes'; render();
+    await new Promise(r => setTimeout(r, 350));
+    let contenido = null;
+    const orig = window.descargar;
+    window.descargar = (nombre, c) => { contenido = c; };
+    document.getElementById('bExpSrv').click();
+    await new Promise(r => setTimeout(r, 250));
+    window.descargar = orig;
+    return contenido;
+  });
+  afirma('el archivo que se baja trae la columna «Paquete»',
+    /^Servicio,Precio,Serv\.,Familia,Desglose,Paquete/.test(bajado || ''));
+  afirma('con su sí y su no en el renglón de cada uno',
+    /Paquete de ejemplo Jade.*,sí\s*$/m.test(bajado || '') &&
+    /Proyector de ejemplo.*,no\s*$/m.test(bajado || ''));
+
+  /* Se vuelve a cargar lo que se bajó, pero con la marca AL REVÉS: puesta la
+     columna, manda ella y no lo que se deduciría —si no, palomear un paquete
+     en Ajustes no sobreviviría una vuelta por Excel—. */
+  const alReves = await carga(bajado.split(/\r?\n/).filter(Boolean)
+    .map((l, i) => i === 0 ? l : l.replace(/,(sí|no)$/, m => m === ',sí' ? ',no' : ',sí'))
+    .join('\n'));
+  afirma('con la columna puesta manda ella, no lo que se deduciría',
+    alReves.includes('Paquete de ejemplo Jade|false') &&
+    alReves.includes('Proyector de ejemplo|true'));
+});
+
+await bloque('26 · al cliente, el paquete sigue sin una sola cifra', async () => {
+  /* Lo de arriba es pintura y control interno. Esto es lo que no se puede
+     romper por pintar: la hoja del cliente. */
+  const r = await admin.p.evaluate(() => {
+    state.clientes = [saneaCliente({ id:'c1', empresa:'BODA DE EJEMPLO', ejecutivo:'Sistemas' })];
+    const e = saneaEvento({ id:'evP2', tipo:'cotizacion', clienteId:'c1', estado:'borrador',
+      fecha:'2026-10-07', lineas:[saneaLineaEv({
+        servicio:'Paquete de ejemplo Ámbar', cantidad:80, precio:1088,
+        partes:[{ concepto:'Menú de ejemplo 3 tiempos', unitario:650, cantidad:80 },
+                { concepto:'Pirotecnia de ejemplo', unitario:3000, cantidad:1 }] })] });
+    state.eventos = [e]; guardar();
+    const caja = document.createElement('div');
+    caja.innerHTML = cuerpoEvento(e, cliente(e.clienteId));
+    return { todo: caja.innerText, html: caja.innerHTML };
+  });
+  afirma('la hoja trae los servicios del paquete', /Menú de ejemplo 3 tiempos/.test(r.todo) &&
+    /Pirotecnia de ejemplo/.test(r.todo));
+  afirma('ni un unitario del desglose', !/\b650\b/.test(r.todo) && !/\b3,?000\b/.test(r.todo));
+  afirma('ni la etiqueta de la captura, que es de adentro', !/et-paq/.test(r.html));
+  afirma('pero sí el precio por persona', /1,088/.test(r.todo));
 });
 
 await br.close(); srv.close();

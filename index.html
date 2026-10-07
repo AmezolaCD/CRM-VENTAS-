@@ -606,9 +606,24 @@
      arriba», y no como otra línea de la cotización. */
   .desglose{background:var(--panel-2, rgba(128,100,180,.06)); padding:10px 12px 12px;
     border-left:3px solid var(--morado, #5b3fd6)}
-  .desglose-tit{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px}
+  .desglose-tit{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:2px}
+  /* El aviso, abajo y en chico: arriba empujaba los botones a otro renglón. */
+  .desglose-nota{margin:0 0 8px}
   .desglose table{margin:0}
   .desglose .hint{margin:0}
+  /* Un paquete NO es un servicio más: es una serie de servicios. Por eso su
+     renglón se tiñe, se etiqueta, y pierde la línea de abajo para quedar
+     pegado al bloque de lo que incluye: los dos se leen como una sola cosa.
+     El color va en los `td` y no en el `tr` porque el `:hover` de la tabla
+     pinta el renglón y se lo comería. */
+  table.data tr.l-paq > td{background:rgba(91,63,214,.07); border-bottom:0}
+  table.data tr.l-paq > td:first-child{box-shadow:inset 3px 0 0 var(--morado, #5b3fd6)}
+  .et-paq{display:inline-block; margin-bottom:4px; padding:1px 7px; border-radius:999px;
+    background:var(--morado, #5b3fd6); color:#fff; font-size:10px; font-weight:700;
+    letter-spacing:.06em; text-transform:uppercase}
+  /* Y cuando no es paquete, que de verdad no se vea: el `display` de arriba le
+     gana al `[hidden]` del navegador, que es nada más la hoja por omisión. */
+  .et-paq[hidden]{display:none}
 
   /* La captura: los campos de un lado, la hoja del otro. La columna de la
      hoja mide EXACTAMENTE lo que mide la hoja encogida. Dejarla a su aire la
@@ -985,7 +1000,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.07-105";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.07-106";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2691,6 +2706,15 @@ function saneaServicioBq(s){
   o.familia = String(o.familia || "").trim();
   o.precio = Number(o.precio) || 0;
   o.conServicio = !!o.conServicio;
+  /* ¿Paquete o servicio suelto? Un paquete es una SERIE de servicios —lo dijo
+     Marco— y por eso se captura, se enseña y se lee distinto.
+     No se adivina al vuelo: ni por la familia, que se puede renombrar, ni por
+     traer desglose, que diez paquetes de su libro todavía no tienen. Es un
+     dato. Lo único que se deduce es el valor inicial, UNA vez, para no
+     obligar a palomear cincuenta y nueve renglones a mano. */
+  if (o.esPaquete === undefined)
+    o.esPaquete = o.partes.length > 0 || /^paquete/i.test(o.familia);
+  o.esPaquete = !!o.esPaquete;
   /* El lugar que ocupa en la lista, igual que en el catálogo de habitaciones:
      sin esto, mover un renglón no cambia ningún dato y no hay nada que subir. */
   if (o.orden !== undefined){
@@ -7726,15 +7750,24 @@ function renderAjustes(){
         <button class="btn sm" data-baja="${x.id}" title="Bajar un lugar" aria-label="Bajar un lugar">↓</button>
         <button class="btn sm danger" data-del="${x.id}">Eliminar</button></td></tr>`;
 
-  const filaSrv = x => `<tr data-sb="${x.id}">
+  /* Un renglón del catálogo. `esPaq` dice en cuál de las dos tablas va a salir:
+     la de paquetes enseña además de qué se compone cada uno, que en la de
+     servicios sueltos sería una columna de guiones. La palomita de «Paquete»
+     va en las dos, porque es con lo que un renglón se pasa de una a la otra. */
+  const filaSrv = (x, esPaq) => `<tr data-sb="${x.id}">
       <td><input class="field" data-sk="nombre" value="${esc(x.nombre)}"
-            placeholder="Cena emplatada" style="width:100%"></td>
+            placeholder="${esPaq ? "Paquete Zafiro" : "Cena emplatada"}" style="width:100%"></td>
       <td><input class="field" data-sk="familia" value="${esc(x.familia)}"
             list="listaFamiliasSrv" placeholder="Sin agrupar" style="width:100%"></td>
       <td><input class="field" data-sk="precio" inputmode="decimal"
             value="${x.precio || ""}" style="width:120px;text-align:right"></td>
       <td class="selcell"><input type="checkbox" data-sk="conServicio"${
             x.conServicio ? " checked" : ""} title="¿Lleva el cargo por servicio del 15%?"></td>
+      <td class="selcell"><input type="checkbox" data-sk="esPaquete"${
+            x.esPaquete ? " checked" : ""}
+            title="Un paquete es una serie de servicios. Al palomearlo, el renglón se pasa a la tabla de paquetes."></td>
+      ${esPaq ? `<td class="hint">${(x.partes || []).length
+            ? `${(x.partes || []).length} servicio(s)` : "sin desglose"}</td>` : ""}
       <td class="nowrap">
         <button class="btn sm" data-sbsube="${x.id}" title="Subir un lugar" aria-label="Subir un lugar">↑</button>
         <button class="btn sm" data-sbbaja="${x.id}" title="Bajar un lugar" aria-label="Bajar un lugar">↓</button>
@@ -7744,6 +7777,13 @@ function renderAjustes(){
     <div class="full"><label class="lbl">${esc(label)}</label>
       ${ayuda ? `<div class="hint" style="margin:-2px 0 5px">${ayuda}</div>` : ""}
       <textarea class="field mono" data-t="${k}" style="width:100%;min-height:${alto}px">${esc(t[k])}</textarea></div>`;
+
+  /* El catálogo se enseña partido en dos —paquetes y servicios sueltos— pero
+     por dentro sigue siendo UNA sola lista, `state.serviciosBq`: la nube, el
+     archivo y la lista desplegable de la cotización no cambian en nada. Se
+     parte al dibujar y se vuelve a juntar al recoger. */
+  const paquetesAj = state.serviciosBq.filter(x => x.esPaquete);
+  const sueltosAj  = state.serviciosBq.filter(x => !x.esPaquete);
 
   ajustesEnPantalla = true;
   document.getElementById("panelAjustes").innerHTML = `
@@ -7913,26 +7953,48 @@ function renderAjustes(){
       </tr></thead><tbody id="tHab">${state.habitaciones.map(filaHab).join("")}</tbody></table>
       <p><button class="btn" id="bAddHab">+ Agregar tipo de habitación</button></p>
 
-      <h3 class="sec">Catálogo de servicios de banquetes</h3>
-      <div class="note">De aquí sale la lista que se escoge en la <b>propuesta económica</b> de
-        una cotización o un contrato de evento: al escoger el servicio se llenan solos su
-        precio y la palomita del cargo por servicio, y los dos se pueden corregir renglón por
-        renglón. Un documento ya emitido conserva lo que tenía: cambiar un precio aquí
-        <b>no</b> toca las cotizaciones de antes.</div>
+      <h3 class="sec">Catálogo de paquetes de evento</h3>
+      <div class="note">Un <b>paquete</b> no es un servicio más: es una <b>serie de
+        servicios</b> que se cotiza con un solo precio por persona. De aquí sale la lista que
+        se escoge en la <b>propuesta económica</b>, y al escoger un paquete baja con él la
+        lista de lo que incluye. Un documento ya emitido conserva lo que tenía: cambiar algo
+        aquí <b>no</b> toca las cotizaciones de antes.</div>
       <datalist id="listaFamiliasSrv">${
         [...new Set(state.serviciosBq.map(x => x.familia).filter(Boolean))]
           .map(f => `<option value="${esc(f)}">`).join("")}</datalist>
       <table class="data"><thead><tr>
-        <th>Servicio</th><th style="width:200px">Familia</th>
-        <th class="num" style="width:130px">Precio unitario</th>
-        <th style="width:60px" title="¿Lleva el cargo por servicio del 15%?">Serv.</th>
+        <th style="min-width:230px">Paquete</th><th style="width:170px">Familia</th>
+        <th class="num" style="width:120px">Precio por persona</th>
+        <th style="width:52px" title="¿Lleva el cargo por servicio del 15%?">Serv.</th>
+        <th style="width:62px" title="Un paquete es una serie de servicios">Paquete</th>
+        <th style="width:100px">Incluye</th>
         <th style="width:190px"></th>
-      </tr></thead><tbody id="tSrv">${state.serviciosBq.map(filaSrv).join("")}</tbody></table>
-      ${state.serviciosBq.length ? "" : `<p class="hint" style="margin-top:0">
+      </tr></thead><tbody id="tSrv">${
+        paquetesAj.map(x => filaSrv(x, true)).join("")}</tbody></table>
+      ${paquetesAj.length ? "" : `<p class="hint" style="margin-top:0">
+        Todavía no hay ninguno.</p>`}
+      <p><button class="btn" id="bAddSrv">+ Agregar paquete</button></p>
+
+      <h3 class="sec">Catálogo de servicios sueltos</h3>
+      <div class="note">Lo que se cotiza por su cuenta y no forma parte de un paquete: una
+        cena, una pista, un proyector. Al escogerlo en la propuesta económica se llenan solos
+        su precio y la palomita del cargo por servicio, y los dos se pueden corregir renglón
+        por renglón.</div>
+      <table class="data"><thead><tr>
+        <th style="min-width:230px">Servicio</th><th style="width:170px">Familia</th>
+        <th class="num" style="width:120px">Precio unitario</th>
+        <th style="width:52px" title="¿Lleva el cargo por servicio del 15%?">Serv.</th>
+        <th style="width:62px" title="Un paquete es una serie de servicios">Paquete</th>
+        <th style="width:190px"></th>
+      </tr></thead><tbody id="tSrvS">${
+        sueltosAj.map(x => filaSrv(x, false)).join("")}</tbody></table>
+      ${sueltosAj.length ? "" : `<p class="hint" style="margin-top:0">
         Todavía no hay ninguno. Mientras esté vacío, en la cotización el servicio se sigue
         escribiendo a mano, como hasta hoy.</p>`}
+      <p><button class="btn" id="bAddSrvS">+ Agregar servicio</button></p>
+      <p class="hint" style="margin-top:0">Es un solo archivo: trae los paquetes y los
+        sueltos, con su columna de «Paquete» para decir cuál es cuál.</p>
       <p style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn" id="bAddSrv">+ Agregar servicio</button>
         <button class="btn" id="bImpSrv">Cargar una lista</button>
         <button class="btn" id="bExpSrv">Bajar la lista</button></p>
 
@@ -8173,7 +8235,10 @@ function renderAjustes(){
       jefe:  tr.querySelector('[data-jk="jefe"]').value
     })));
 
-    p.querySelectorAll("#tSrv tr[data-sb]").forEach((tr, i) => {
+    /* Las DOS tablas del catálogo, en el orden en que salen en pantalla: un
+       solo selector las recorre en orden del documento —primero los paquetes,
+       luego los sueltos— y de ahí sale el `orden` de toda la lista. */
+    p.querySelectorAll("#tSrv tr[data-sb], #tSrvS tr[data-sb]").forEach((tr, i) => {
       const x = state.serviciosBq.find(y => y.id === tr.dataset.sb);
       if (!x) return;
       x.orden       = i;
@@ -8181,6 +8246,7 @@ function renderAjustes(){
       x.familia     = tr.querySelector('[data-sk="familia"]').value.trim();
       x.precio      = parseMoney(tr.querySelector('[data-sk="precio"]').value);
       x.conServicio = tr.querySelector('[data-sk="conServicio"]').checked;
+      x.esPaquete   = tr.querySelector('[data-sk="esPaquete"]').checked;
     });
     /* OJO: aquí NO se tiran los que todavía no tienen nombre. `recogerAjustes`
        corre también al agregar, al mover y al eliminar otro renglón, y
@@ -8279,13 +8345,19 @@ function renderAjustes(){
 
   /* El catálogo de servicios de banquetes: mismo trato que el de habitaciones
      —recoger antes de repintar, o se le borra a quien esté capturando—. */
-  p.querySelector("#bAddSrv").onclick = () => {
+  const agregarSrv = (esPaquete, tabla) => {
     recogerAjustes();
-    state.serviciosBq.push(saneaServicioBq({ nombre:"", precio:0 }));
+    state.serviciosBq.push(saneaServicioBq({ nombre:"", precio:0, esPaquete }));
     guardar(); renderAjustes();
-    const ultimo = document.querySelector("#tSrv tr:last-child [data-sk='nombre']");
+    const ultimo = document.querySelector(`${tabla} tr:last-child [data-sk='nombre']`);
     if (ultimo){ ultimo.scrollIntoView({ block:"center" }); ultimo.focus(); }
   };
+  p.querySelector("#bAddSrv").onclick  = () => agregarSrv(true,  "#tSrv");
+  p.querySelector("#bAddSrvS").onclick = () => agregarSrv(false, "#tSrvS");
+  /* Palomear «Paquete» pasa el renglón a la otra tabla, y hay que verlo pasar:
+     sin repintar, la palomita quedaría puesta en la tabla equivocada. */
+  p.querySelectorAll('#tSrv [data-sk="esPaquete"], #tSrvS [data-sk="esPaquete"]')
+    .forEach(c => c.onchange = () => { recogerAjustes(); guardar(); renderAjustes(); });
   /* ---------------------------------------------------------------------
      Cargar la lista de golpe.
 
@@ -8305,6 +8377,7 @@ function renderAjustes(){
       // Un encabezado no es un servicio.
       if (/^(servicio|nombre|concepto)$/i.test(nombre) && !parseMoney(f[1])) continue;
       const serv = String(f[2] == null ? "" : f[2]).trim().toLowerCase();
+      const paq  = String(f[5] == null ? "" : f[5]).trim().toLowerCase();
       leidos.push({ nombre, precio: parseMoney(f[1]),
         /* Vacío quiere decir «sí»: los alimentos y las bebidas son la mayor
            parte de la lista y son justo los que lo llevan. */
@@ -8321,7 +8394,13 @@ function renderAjustes(){
           .map(t => t.split("|"))
           .filter(t => (t[0] || "").trim())
           .map(t => ({ concepto:t[0].trim(), unitario:parseMoney(t[1]),
-                       cantidad:Number(String(t[2] || "").trim()) || 0 })) });
+                       cantidad:Number(String(t[2] || "").trim()) || 0 })),
+        /* La sexta columna dice si es un paquete, y va al final justamente
+           para que un archivo de los de antes —de tres, cuatro o cinco
+           columnas— siga entrando igual. Cuando no viene, `esPaquete` se queda
+           sin decidir y lo deduce `saneaServicioBq`: es paquete si trae
+           desglose o si su familia empieza con «Paquete». */
+        esPaquete: paq === "" ? undefined : /^(s[ií]|si|1|true|x|paquete)$/.test(paq) });
     }
     if (!leidos.length) return { leidos:0 };
 
@@ -8335,8 +8414,11 @@ function renderAjustes(){
         if (ya){
           if (ya.precio !== x.precio || ya.conServicio !== x.conServicio ||
               (x.familia && ya.familia !== x.familia) ||
+              (x.esPaquete !== undefined && !!ya.esPaquete !== x.esPaquete) ||
               (x.partes.length && JSON.stringify(ya.partes) !== JSON.stringify(x.partes))) cambiados++;
           ya.precio = x.precio; ya.conServicio = x.conServicio;
+          // Sin la columna, el archivo no opina: se queda como estaba puesto.
+          if (x.esPaquete !== undefined) ya.esPaquete = x.esPaquete;
           // Una familia vacía en el archivo no borra la que ya tenía puesta.
           if (x.familia) ya.familia = x.familia;
           // Un desglose vacío tampoco: para quitarlo se vacía en la pantalla.
@@ -8353,9 +8435,10 @@ function renderAjustes(){
   p.querySelector("#bExpSrv").onclick = () => {
     recogerAjustes();
     descargar(`servicios-de-banquetes-${hoyISO()}.csv`,
-      toCSV([["Servicio","Precio","Serv.","Familia","Desglose"]].concat(
+      toCSV([["Servicio","Precio","Serv.","Familia","Desglose","Paquete"]].concat(
         state.serviciosBq.map(x => [x.nombre, x.precio, x.conServicio ? "sí" : "no", x.familia,
-          (x.partes || []).map(d => `${d.concepto}|${d.unitario}|${d.cantidad}`).join(";")]))),
+          (x.partes || []).map(d => `${d.concepto}|${d.unitario}|${d.cantidad}`).join(";"),
+          x.esPaquete ? "sí" : "no"]))),
       "text/csv");
   };
 
@@ -8367,14 +8450,17 @@ function renderAjustes(){
           <button class="btn" data-close>✕</button></div>
         <div class="modal-body">
           <div class="note">Un servicio por renglón:
-            <b>nombre, precio, serv, familia, desglose</b>. En la tercera columna <b>sí</b> o <b>no</b>
+            <b>nombre, precio, serv, familia, desglose, paquete</b>. En la tercera columna <b>sí</b> o <b>no</b>
             dice si lleva el cargo por servicio del 15% —alimentos y bebidas sí; audiovisual,
             mobiliario, DJ y pista no—; vacía se toma como <b>sí</b>. La cuarta es con qué
             título se agrupa en la lista desplegable y se puede dejar vacía. Sirve pegarlo
             aquí o escoger un archivo <code>.csv</code>. La quinta, el desglose del
             paquete, también es opcional: sus renglones van separados por
-            <code>;</code> y cada uno es <code>concepto|unitario|cantidad</code>. Lo más
-            fácil es bajar la lista, corregirla en Excel y volverla a cargar.</div>
+            <code>;</code> y cada uno es <code>concepto|unitario|cantidad</code>. La sexta,
+            <b>sí</b> o <b>no</b>, dice si el renglón es un <b>paquete</b> —una serie de
+            servicios— o un servicio suelto; si no viene, se toma como paquete cuando trae
+            desglose o cuando su familia empieza con «Paquete». Lo más fácil es bajar la
+            lista, corregirla en Excel y volverla a cargar.</div>
           <p><input type="file" id="srvArch" accept=".csv,text/csv,text/plain"></p>
           <textarea class="field mono" id="srvTexto" style="width:100%;min-height:180px"
             placeholder="Cena emplatada, 850, sí, Alimentos&#10;Pista iluminada, 6500, no, Iluminación"></textarea>
@@ -8413,10 +8499,16 @@ function renderAjustes(){
 
   const moverSrv = (id, paso) => {
     recogerAjustes();
-    const i = state.serviciosBq.findIndex(x => x.id === id);
-    const j = i + paso;
-    if (i < 0 || j < 0 || j >= state.serviciosBq.length) return;
     const a = state.serviciosBq;
+    const i = a.findIndex(x => x.id === id);
+    if (i < 0) return;
+    /* Se mueve dentro de SU tabla. Con el catálogo partido en dos, el vecino
+       en la lista de adentro puede estar en la otra tabla, y entonces subir un
+       renglón no movía nada en pantalla: hay que buscar al vecino de su mismo
+       lado y cambiarse con ése. */
+    let j = i + paso;
+    while (j >= 0 && j < a.length && !!a[j].esPaquete !== !!a[i].esPaquete) j += paso;
+    if (j < 0 || j >= a.length) return;
     [a[i], a[j]] = [a[j], a[i]];
     a.forEach((x, k) => { x.orden = k; });
     guardar(); renderAjustes();
@@ -14694,12 +14786,26 @@ function editarEvento(id, tipoPre, alCerrar){
   /* Con el catálogo vacío no se enseña una lista de un solo renglón: se deja
      el campo de siempre, para que nada se sienta peor que antes mientras
      alguien lo captura. */
+  /**
+   * ¿Este renglón es un paquete?
+   *
+   * Lo es si trae desglose, y también si el servicio que escogió está
+   * palomeado como paquete en el catálogo: diez de los paquetes del libro de
+   * Marco todavía no traen desglose y no por eso dejan de ser paquetes.
+   */
+  const esLineaPaquete = l => {
+    if (l.partes && l.partes.length) return true;
+    const x = servicioBqPorNombre(l.servicio);
+    return !!(x && x.esPaquete);
+  };
+
   const celdaServicio = l => {
     const cat = catalogoVivo();
     if (!cat.length)
       return `<input class="field l-servicio" value="${esc(l.servicio)}"
                 placeholder="Cena emplatada" style="width:100%">`;
-    return `${cat.length >= CON_BUSCADOR
+    return `<span class="et-paq"${esLineaPaquete(l) ? "" : " hidden"}>Paquete</span>
+      ${cat.length >= CON_BUSCADOR
         ? `<input class="field busca-srv" type="search" placeholder="Buscar…"
              autocomplete="off" style="width:100%;margin-bottom:4px">` : ""}
       <select class="field l-srvSel" title="${esc(l.servicio)}" style="width:100%"
@@ -14710,7 +14816,7 @@ function editarEvento(id, tipoPre, alCerrar){
       <div class="hint srv-cuenta" style="margin-top:2px"></div>`;
   };
 
-  const filaL = l => `<tr data-srv-antes="${esc(
+  const filaL = l => `<tr class="${esLineaPaquete(l) ? "l-paq" : ""}" data-srv-antes="${esc(
       state.serviciosBq.some(x => x.nombre === l.servicio) ? l.servicio : "")}">
     <td><input class="field l-fecha" type="date" value="${esc(l.fecha)}" style="width:100%"></td>
     <td>${celdaServicio(l)}</td>
@@ -14724,11 +14830,12 @@ function editarEvento(id, tipoPre, alCerrar){
     <tr class="l-desglose"><td colspan="8" style="padding:0">${cajaDesglose(l)}</td></tr>`;
 
   /* --------------------------------------------------------------------
-     El desglose del paquete.
+     Lo que incluye el paquete.
 
-     Es CONTROL INTERNO: aquí se ve de qué se compone y cuánto cuesta cada
-     cosa, y de aquí sale el precio por persona. En la cotización del cliente
-     se imprimen los conceptos SIN una sola cifra —ver `conceptosDeLinea`—.
+     Se lee como la lista de sus servicios —que es lo que un paquete es— y las
+     cifras van a la derecha: son CONTROL INTERNO, de aquí sale el precio por
+     persona, y en la cotización del cliente se imprimen los conceptos SIN
+     una sola cifra —ver `conceptosDeLinea`—.
      -------------------------------------------------------------------- */
   const filaParte = d => `<tr>
       <td><input class="field d-concepto" value="${esc(d.concepto)}" style="width:100%"
@@ -14743,16 +14850,16 @@ function editarEvento(id, tipoPre, alCerrar){
   const cajaDesglose = l => !(l.partes && l.partes.length) ? "" : `
     <div class="desglose">
       <div class="desglose-tit">
-        <b>Desglose del paquete</b>
-        <span class="hint">Control interno: NO se imprime en la cotización del cliente.
-          De aquí sale el precio por persona.</span>
+        <b>Servicios que incluye</b>
         <div class="spacer"></div>
-        <button class="btn sm" data-addparte>+ Concepto</button>
+        <button class="btn sm" data-addparte>+ Servicio</button>
         <button class="btn sm" data-sindesglose
           title="Vuelve a ser un renglón normal, con su precio a mano">Quitar el desglose</button>
       </div>
+      <div class="hint desglose-nota">Las cifras son control interno: NO se imprimen en la
+        cotización del cliente. De aquí sale el precio por persona.</div>
       <table class="data"><thead><tr>
-        <th>Concepto</th><th class="num" style="width:110px">Unitario</th>
+        <th>Servicio incluido</th><th class="num" style="width:110px">Unitario</th>
         <th class="num" style="width:90px">Cant.</th>
         <th class="num" style="width:120px">Subtotal</th><th style="width:44px"></th>
       </tr></thead><tbody>${l.partes.map(filaParte).join("")}</tbody>
@@ -14965,6 +15072,7 @@ function editarEvento(id, tipoPre, alCerrar){
       // Venía de la lista: se limpia para que no parezca que ya está escrito.
       if (servicioBqPorNombre(txt.value)) txt.value = "";
       tr.dataset.srvAntes = "";
+      marcarPaquete(tr);
       txt.focus();
       recalcular();
       return;
@@ -14991,11 +15099,28 @@ function editarEvento(id, tipoPre, alCerrar){
     recalcular();
   }
 
+  /**
+   * Volver a marcar —o desmarcar— el renglón como paquete.
+   *
+   * Se vuelve a preguntar con lo que hay EN PANTALLA, no con lo que se dibujó,
+   * porque entre una cosa y otra pudo cambiar de servicio o quedarse sin
+   * desglose.
+   */
+  function marcarPaquete(tr){
+    const txt = tr.querySelector(".l-servicio");
+    const es = esLineaPaquete({ servicio: txt ? txt.value : "",
+                                partes: desgloseDe(tr) ? [1] : [] });
+    tr.classList.toggle("l-paq", es);
+    const et = tr.querySelector(".et-paq");
+    if (et) et.hidden = !es;
+  }
+
   /** Cuelga (o quita) el desglose de una línea y lo vuelve a dibujar. */
   function ponerDesglose(tr, partes){
     const sig = tr.nextElementSibling;
     if (!sig || !sig.classList.contains("l-desglose")) return;
     sig.children[0].innerHTML = cajaDesglose({ partes: (partes || []).map(saneaParteBq) });
+    marcarPaquete(tr);
   }
 
   /**
