@@ -1000,7 +1000,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.07-106";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.07-107";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3276,6 +3276,221 @@ function anotarLoQueSeFue(){
   idsGuardados = ahora;
 }
 
+/* ==========================================================================
+   CUÁNTO PESA LA COPIA DE ESTE NAVEGADOR
+
+   El navegador le da a cada sitio unos 5 MB de `localStorage`, y ahí cabe
+   todo menos las imágenes. Una firma trazada en un teléfono se guardaba como
+   un PNG del lienzo COMPLETO a la resolución de la pantalla: 115 KB cada una,
+   dos por documento. A los veintitantos documentos firmados el navegador
+   dejaba de aceptar nada y la aplicación ya no podía guardar.
+
+   Lo que sigue sirve para verlo —y para poder decir qué es lo que pesa, en
+   vez de un «almacenamiento lleno» que no le dice nada a nadie—.
+   ========================================================================== */
+
+/** Lo que ocupa un texto en el navegador: cuenta en UTF-16, que es como mide él. */
+const pesoTexto = t => (String(t || "").length * 2);
+
+const enKB = n => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB"
+                               : Math.round(n / 1024) + " KB";
+
+/**
+ * De qué se compone el peso de la copia local, de lo más pesado a lo menos.
+ *
+ * Las firmas se cuentan aparte de su documento: son la mitad del problema y
+ * esconderlas dentro de «convenios» no ayudaría a nadie a entenderlo.
+ */
+function queLlenaElAlmacen(){
+  let firmas = 0, nFirmas = 0;
+  const mira = o => {
+    if (!o || typeof o !== "object") return;
+    if (Array.isArray(o)) return o.forEach(mira);
+    for (const [k, v] of Object.entries(o)){
+      if (/^firma/.test(k) && v && v.img){ firmas += pesoTexto(v.img); nFirmas++; }
+      else mira(v);
+    }
+  };
+  mira(state);
+
+  /* Las partes son los conjuntos de arriba —clientes, convenios, contratos—.
+     Las firmas NO se listan aquí: viven dentro de sus documentos y sumarlas
+     aparte contaría dos veces lo mismo. Van por su cuenta, porque son la
+     mitad del problema y hay que poder nombrarlas. */
+  const partes = Object.keys(state)
+    .map(k => ({ que: NOMBRE_TIPO[k] || k, peso: pesoTexto(JSON.stringify(state[k])) }))
+    .filter(x => x.peso > 1024)
+    .sort((a, b) => b.peso - a.peso);
+
+  /* Los escaneados incrustados son la otra mitad del problema, y para ésos ya
+     existe el botón de mudarlos al almacén. Se cuentan aparte para poder
+     mandar a quien lea esto al botón que lo arregla. */
+  let escaneos = 0, nEscaneos = 0;
+  try{
+    for (const x of escaneosIncrustados()){ escaneos += pesoTexto(x.m.pdf); nEscaneos++; }
+  }catch(e){}
+
+  return { total: pesoTexto(JSON.stringify(state)),
+           firmas, nFirmas, escaneos, nEscaneos, partes };
+}
+
+/**
+ * Lo que pesa la copia de este navegador, dicho antes de que estorbe.
+ *
+ * El navegador no avisa: acepta todo hasta que un día deja de aceptar, y para
+ * entonces ya no se puede guardar nada. Unos 5 MB es el techo que dan casi
+ * todos, así que a partir de 3.5 se dice en rojo y se explica qué hacer.
+ */
+function renglonDelPeso(){
+  let d;
+  try{ d = queLlenaElAlmacen(); }catch(e){ return ""; }
+  const TECHO = 5 * 1024 * 1024;
+  const apretado = d.total > TECHO * 0.7;
+  return `<div style="margin-top:6px">La copia de este equipo pesa
+    <b${apretado ? ' style="color:var(--bad)"' : ""}>${enKB(d.total)}</b>` +
+    (d.nFirmas ? ` · ${enKB(d.firmas)} en ${d.nFirmas} firma(s) trazada(s)` : "") +
+    (d.nEscaneos ? ` · ${enKB(d.escaneos)} en ${d.nEscaneos} escaneado(s) ` +
+                   "todavía incrustado(s)" : "") +
+    (apretado
+      ? `. <b style="color:var(--bad)">Se está acercando al tope del navegador
+         (unos 5&nbsp;MB), y al llegar deja de poder guardar.</b>
+         Baja un respaldo y usa los botones de abajo:
+         ${d.nEscaneos ? "«Mover los escaneados al almacén» y " : ""}
+         «Compactar las firmas guardadas».`
+      : ".") + `</div>`;
+}
+
+/**
+ * Vuelve a guardar una firma ya almacenada, pero sin el papel que le sobra.
+ *
+ * Las firmas trazadas antes de octubre de 2026 se guardaron como el lienzo
+ * ENTERO a la resolución de la pantalla: en un teléfono, 115 KB de los
+ * cuales casi todo es blanco. Esto las recorta a lo trazado y las baja a
+ * `ANCHO_FIRMA`, que es lo mismo que hace hoy `padAPng` al firmar.
+ *
+ * No redibuja ni retoca nada: lo que se quita es blanco. Si algo no se puede
+ * leer, se devuelve la de antes —una firma grande es mejor que ninguna—.
+ */
+function compactarUnaFirma(dataURL){
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onerror = () => resolve(null);
+    img.onload = () => {
+      try{
+        const cv = document.createElement("canvas");
+        cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+        const c = cv.getContext("2d");
+        c.drawImage(img, 0, 0);
+        const d = c.getImageData(0, 0, cv.width, cv.height).data;
+        /* Aquí el fondo YA es blanco —se lo puso `padAPng` al guardarla—, así
+           que el trazo se busca por lo que no es blanco, no por el alfa. */
+        let x1 = cv.width, y1 = cv.height, x2 = -1, y2 = -1;
+        for (let y = 0; y < cv.height; y++)
+          for (let x = 0; x < cv.width; x++){
+            const i = (y * cv.width + x) * 4;
+            if (d[i + 3] > 8 && (d[i] < 236 || d[i + 1] < 236 || d[i + 2] < 236)){
+              if (x < x1) x1 = x;
+              if (x > x2) x2 = x;
+              if (y < y1) y1 = y;
+              if (y > y2) y2 = y;
+            }
+          }
+        if (x2 < 0) return resolve(null);            // en blanco: no se toca
+        const aire = Math.round(cv.height * 0.06) + 4;
+        x1 = Math.max(0, x1 - aire); y1 = Math.max(0, y1 - aire);
+        x2 = Math.min(cv.width - 1, x2 + aire); y2 = Math.min(cv.height - 1, y2 + aire);
+        const w = x2 - x1 + 1, h = y2 - y1 + 1;
+        const esc = escalaFirma(w, h);
+        const out = document.createElement("canvas");
+        out.width  = Math.max(1, Math.round(w * esc));
+        out.height = Math.max(1, Math.round(h * esc));
+        const o = out.getContext("2d");
+        o.fillStyle = "#fff"; o.fillRect(0, 0, out.width, out.height);
+        o.imageSmoothingQuality = "high";
+        o.drawImage(img, x1, y1, w, h, 0, 0, out.width, out.height);
+        pocosTonos(o, out.width, out.height);
+        const nueva = out.toDataURL("image/png");
+        // Si no adelgaza, se queda la de antes: no se toca por tocar.
+        resolve(nueva.length < dataURL.length * 0.95 ? nueva : null);
+      }catch(e){ resolve(null); }
+    };
+    img.src = dataURL;
+  });
+}
+
+/** Todas las firmas del estado, con cómo volver a ponerlas en su sitio. */
+function firmasDelEstado(){
+  const out = [];
+  const mira = o => {
+    if (!o || typeof o !== "object") return;
+    if (Array.isArray(o)) return o.forEach(mira);
+    for (const [k, v] of Object.entries(o)){
+      if (/^firma/.test(k) && v && typeof v === "object" && v.img) out.push(v);
+      else mira(v);
+    }
+  };
+  mira(state);
+  return out;
+}
+
+/** El respaldo completo, tal cual, a un archivo. */
+function respaldoJSON(){
+  descargar(`crm-respaldo-${hoyISO()}.json`, JSON.stringify(state, null, 2),
+            "application/json");
+}
+
+/**
+ * El aviso de que el navegador ya no acepta nada.
+ *
+ * Una sola vez, y con el porqué: un «almacenamiento lleno» a secas deja a
+ * cualquiera sin saber qué hacer. Además queda un letrero fijo arriba, porque
+ * a partir de aquí lo que se escriba NO se está guardando en este equipo y
+ * eso no se puede enterar nadie por una ventanita que ya cerró.
+ */
+function avisarAlmacenLleno(){
+  ponerLetreroAlmacen();
+  if (avisadoAlmacenLleno) return;
+  avisadoAlmacenLleno = true;
+  const d = queLlenaElAlmacen();
+  const grande = d.partes[0];
+  alert("Este navegador ya no deja guardar más: se llenó su espacio.\n\n" +
+    `La copia de este equipo pesa ${enKB(d.total)}` +
+    (d.nFirmas ? `, y ${enKB(d.firmas)} son las ${d.nFirmas} firmas trazadas` : "") +
+    (grande ? `. Lo más pesado: ${grande.que} (${enKB(grande.peso)})` : "") + ".\n\n" +
+    "Haz AHORA «Exportar → Respaldo completo (JSON)» y guarda ese archivo.\n\n" +
+    "Lo que escribas a partir de ahora sigue en pantalla y se sube a la nube " +
+    "si hay enlace, pero NO se está guardando en este navegador: si cierras " +
+    "la pestaña sin respaldo, se pierde.");
+}
+
+/** El letrero fijo. Mientras no se pueda guardar, no se quita. */
+function ponerLetreroAlmacen(){
+  if (document.getElementById("avisoAlmacen")) return;
+  const d = document.createElement("div");
+  d.id = "avisoAlmacen";
+  d.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:99998;background:#7a1020;" +
+    "color:#fff;padding:8px 14px;font-size:13px;display:flex;gap:12px;align-items:center;" +
+    "flex-wrap:wrap;box-shadow:0 2px 10px rgba(0,0,0,.3)";
+  d.innerHTML = `<b>Este navegador ya no puede guardar: se llenó.</b>
+    <span>Lo que escribas no se está guardando en este equipo.</span>
+    <span style="flex:1"></span>
+    <button class="btn sm" id="avisoAlmacenResp">Bajar el respaldo</button>
+    <button class="btn sm" id="avisoAlmacenVer">¿Qué lo llenó?</button>`;
+  document.body.appendChild(d);
+  d.querySelector("#avisoAlmacenResp").onclick = () => respaldoJSON();
+  d.querySelector("#avisoAlmacenVer").onclick = () => {
+    const x = queLlenaElAlmacen();
+    alert(`La copia de este equipo pesa ${enKB(x.total)}.\n\n` +
+      x.partes.slice(0, 6).map(t => `· ${t.que}: ${enKB(t.peso)}`).join("\n") +
+      (x.nFirmas ? `\n\nDe todo eso, ${enKB(x.firmas)} son las ${x.nFirmas} ` +
+                   "firmas trazadas (imágenes)." : ""));
+  };
+}
+
+/* Para no repetir el mismo aviso en cada tecla: el almacenamiento no se
+   desatasca solo entre una y otra. */
+let avisadoAlmacenLleno = false;
+
 function guardar(){
   sellarTotales();
   anotarLoQueSeFue();
@@ -3284,11 +3499,12 @@ function guardar(){
      equivocada en la pantalla. */
   metaIndice = null;
   guardarTumbas();
-  try{ localStorage.setItem(STORE, JSON.stringify(state)); }
-  catch(e){
+  try{
+    localStorage.setItem(STORE, JSON.stringify(state));
+    avisadoAlmacenLleno = false;
+  }catch(e){
     console.warn("No se pudo guardar:", e);
-    alert("No se pudo guardar en este navegador (almacenamiento lleno o bloqueado).\n\n" +
-          "Exporta un respaldo JSON antes de seguir trabajando.");
+    avisarAlmacenLleno();
   }
   programarSubida();   // si hay nube, empuja lo que cambió
 }
@@ -7812,6 +8028,7 @@ function renderAjustes(){
         <button class="btn" id="bNbLiga">Copiar liga para otro equipo</button>
         <button class="btn" id="bNbTodo">Volver a subir todo</button>
         <button class="btn" id="bNbArchivos">Mover los escaneados al almacén</button>
+        <button class="btn" id="bCompFirmas">Compactar las firmas guardadas</button>
         <button class="btn" id="bNbEntrar">Entrar con otra cuenta</button>
         <button class="btn danger" id="bNbSalir">Cerrar sesión</button>
         <button class="btn danger" id="bNbQuitar">Desconectar este equipo</button></p>
@@ -8591,7 +8808,7 @@ function renderAjustes(){
         (faltan ? ` <b style="color:var(--bad)">Faltan ${faltan} por subir.</b>`
                 : ` <b>Todo subido</b>${nube.sincronizadoEn
                      ? " · última vez " + esc(fechaHora(nube.sincronizadoEn)) : ""}.`) +
-        `</div>`;
+        `</div>` + renglonDelPeso();
     }
     est.innerHTML = `<div class="note" style="border-left:3px solid ${linea[1]}">${esc(linea[0])}${detalle}</div>`;
     p.querySelector("#bNbEntrar").style.display = (nube.url && nube.anon) ? "" : "none";
@@ -8684,6 +8901,53 @@ function renderAjustes(){
      * máquina. Los documentos no cambian; lo único que cambia es dónde vive el
      * archivo.
      */
+    /**
+     * Compactar las firmas ya guardadas.
+     *
+     * Lo que se quita es blanco: la firma se ve igual, nada más sin el papel
+     * que le sobraba alrededor. Aun así NO se hace solo ni en silencio —son
+     * las firmas de documentos ya firmados—: se pide el respaldo primero, se
+     * dice cuántas son y se pregunta.
+     */
+    p.querySelector("#bCompFirmas").onclick = async e => {
+      const firmas = firmasDelEstado();
+      if (!firmas.length){ alert("No hay ninguna firma trazada todavía."); return; }
+      const antes = firmas.reduce((a, f) => a + pesoTexto(f.img), 0);
+      if (!confirm(`Hay ${firmas.length} firma(s) trazada(s) y ocupan ${enKB(antes)} ` +
+        "en este navegador.\n\nCompactarlas recorta el blanco que les sobra alrededor " +
+        "y baja la resolución a la que se imprimen. La firma se ve igual; lo que se " +
+        "quita es papel en blanco.\n\nPrimero se baja un respaldo completo. ¿Continuar?"))
+        return;
+
+      respaldoJSON();
+      const b = e.currentTarget, texto = b.textContent;
+      b.disabled = true;
+      let cambiadas = 0, despues = 0;
+      try{
+        for (let i = 0; i < firmas.length; i++){
+          b.textContent = `Compactando ${i + 1} de ${firmas.length}…`;
+          const nueva = await compactarUnaFirma(firmas[i].img);
+          if (nueva){ firmas[i].img = nueva; cambiadas++; }
+          despues += pesoTexto(firmas[i].img);
+        }
+        alert(cambiadas
+          ? `Listo: ${cambiadas} firma(s) compactada(s).\n\n` +
+            `Antes ocupaban ${enKB(antes)} y ahora ${enKB(despues)}: ` +
+            `se liberaron ${enKB(antes - despues)}.`
+          : "Ninguna se pudo achicar: ya estaban al tamaño bueno.");
+      }catch(err){
+        /* Cada firma se compacta por su cuenta, así que cortarse a la mitad
+           deja unas chicas y otras como estaban: ninguna a medias. Por eso se
+           guarda lo que alcanzó —en el `finally`— en vez de tirarlo. */
+        alert("Se interrumpió a la mitad: " + ((err && err.message) || err) +
+              `\n\nSe compactaron ${cambiadas} y las demás quedaron como estaban. ` +
+              "Puedes volver a darle.");
+      }finally{
+        b.disabled = false; b.textContent = texto;
+        if (cambiadas){ guardar(); renderAjustes(); }
+      }
+    };
+
     p.querySelector("#bNbArchivos").onclick = async e => {
       if (!nubeActiva()){ alert("Primero hay que entrar a la nube."); return; }
       const pend = escaneosIncrustados();
@@ -18679,14 +18943,116 @@ function prepararPad(cv){
   return () => { ctx.clearRect(0, 0, cv.width, cv.height); cv.dataset.trazado = ""; };
 }
 
-/** La firma como PNG con fondo blanco: uno transparente se ve mal al imprimir. */
+/* El tamaño máximo al que se guarda una firma, en píxeles.
+
+   En el documento la firma se imprime en una caja de 60 px de alto —véase
+   `.firma .cv img`—, que son 1.6 cm de papel. A 300 puntos por pulgada eso
+   son 190 px de alto: con 220 va sobrada. El lienzo de un teléfono llega a
+   480 px de alto por puro `devicePixelRatio`, y esa diferencia no la ve
+   nadie pero sí se paga, en un almacenamiento que se llena.
+
+   El tope de ancho es para una firma muy larga y muy baja, que si no se
+   iría a dos mil píxeles conservando la proporción. */
+const ALTO_FIRMA  = 180;
+const ANCHO_FIRMA = 700;
+
+/** Cuánto hay que encoger un recorte de w x h para que quepa en los topes. */
+const escalaFirma = (w, h) =>
+  Math.min(1, ANCHO_FIRMA / Math.max(1, w), ALTO_FIRMA / Math.max(1, h));
+
+/* Cuántos tonos de tinta se guardan, contando el blanco.
+
+   Una firma es una línea de UN color sobre papel blanco, pero al encogerla el
+   navegador la suaviza y deja miles de morados distintos en los bordes. El
+   PNG paga cada uno de esos tonos y no se ve ninguno: a 4 pesa la mitad y, al
+   tamaño en que se imprime, es la misma firma. Con 2 se vería dura de cerca;
+   con 4 no. */
+const TONOS_FIRMA = 4;
+
+/**
+ * Deja la imagen con pocos tonos del color de la tinta sobre blanco.
+ *
+ * Trabaja sobre lo que ya está pintado en el contexto —que viene con fondo
+ * blanco—: de cada píxel saca cuánta tinta tiene, la redondea a uno de los
+ * `TONOS_FIRMA` escalones y lo vuelve a pintar con ESE color, no con uno
+ * parecido. Así el morado del hotel sigue siendo el morado del hotel.
+ */
+function pocosTonos(ctx, w, h){
+  const INK = [0x39, 0x10, 0x4e];
+  let d;
+  try{ d = ctx.getImageData(0, 0, w, h); }catch(e){ return; }
+  const a = d.data;
+  // Qué tan oscuro es el color de la tinta: es el 100% de cobertura.
+  const lumInk = INK[0] * 0.299 + INK[1] * 0.587 + INK[2] * 0.114;
+  const rango = Math.max(1, 255 - lumInk);
+  const pasos = TONOS_FIRMA - 1;
+  for (let i = 0; i < a.length; i += 4){
+    const lum = a[i] * 0.299 + a[i + 1] * 0.587 + a[i + 2] * 0.114;
+    let cob = (255 - lum) / rango;                 // 0 = papel, 1 = tinta
+    cob = Math.min(1, Math.max(0, cob));
+    cob = Math.round(cob * pasos) / pasos;
+    for (let k = 0; k < 3; k++) a[i + k] = Math.round(255 + (INK[k] - 255) * cob);
+    a[i + 3] = 255;
+  }
+  ctx.putImageData(d, 0, 0);
+}
+
+/**
+ * La firma como PNG con fondo blanco: uno transparente se ve mal al imprimir.
+ *
+ * Se recorta a lo trazado y se baja a un ancho razonable, y por eso esta
+ * función es la diferencia entre una firma de 115 KB y una de 15. El lienzo
+ * ocupa el ancho de la pantalla y la firma vive en una franja del centro: sin
+ * recortar, lo que se guarda es, sobre todo, blanco. Veinte documentos
+ * firmados desde un teléfono llenaban el almacenamiento del navegador, y
+ * entonces la aplicación deja de poder guardar NADA.
+ *
+ * Lo que se recorta es blanco: la firma se ve igual, nada más sin el papel
+ * que le sobraba alrededor.
+ */
 function padAPng(cv){
+  const caja = cajaDeLoTrazado(cv);
+  const esc = escalaFirma(caja.w, caja.h);
   const out = document.createElement("canvas");
-  out.width = cv.width; out.height = cv.height;
+  out.width  = Math.max(1, Math.round(caja.w * esc));
+  out.height = Math.max(1, Math.round(caja.h * esc));
   const o = out.getContext("2d");
   o.fillStyle = "#fff"; o.fillRect(0, 0, out.width, out.height);
-  o.drawImage(cv, 0, 0);
+  o.imageSmoothingQuality = "high";
+  o.drawImage(cv, caja.x, caja.y, caja.w, caja.h, 0, 0, out.width, out.height);
+  pocosTonos(o, out.width, out.height);
   return out.toDataURL("image/png");
+}
+
+/**
+ * El rectángulo que de verdad ocupa el trazo, con un margen de aire.
+ *
+ * Si algo sale mal —un lienzo que el navegador no deja leer, o uno en
+ * blanco— devuelve el lienzo entero: más vale una firma grande que ninguna.
+ */
+function cajaDeLoTrazado(cv){
+  const todo = { x:0, y:0, w:cv.width, h:cv.height };
+  let d;
+  try{ d = cv.getContext("2d").getImageData(0, 0, cv.width, cv.height).data; }
+  catch(e){ return todo; }
+  let x1 = cv.width, y1 = cv.height, x2 = -1, y2 = -1;
+  for (let y = 0; y < cv.height; y++){
+    for (let x = 0; x < cv.width; x++){
+      // El lienzo es transparente donde no se trazó; el blanco lo pone el PNG.
+      if (d[(y * cv.width + x) * 4 + 3] > 8){
+        if (x < x1) x1 = x;
+        if (x > x2) x2 = x;
+        if (y < y1) y1 = y;
+        if (y > y2) y2 = y;
+      }
+    }
+  }
+  if (x2 < 0) return todo;                       // no se trazó nada
+  const aire = Math.round(cv.height * 0.06) + 4;
+  x1 = Math.max(0, x1 - aire);  y1 = Math.max(0, y1 - aire);
+  x2 = Math.min(cv.width  - 1, x2 + aire);
+  y2 = Math.min(cv.height - 1, y2 + aire);
+  return { x:x1, y:y1, w:x2 - x1 + 1, h:y2 - y1 + 1 };
 }
 
 /* ==========================================================================
@@ -18984,8 +19350,7 @@ function abrirExportar(){
     }
     descargar(`convenios-${hoy}.csv`, toCSV(fs), "text/csv");
   };
-  ov.querySelector("#eJson").onclick = () =>
-    descargar(`crm-respaldo-${hoy}.json`, JSON.stringify(state, null, 2), "application/json");
+  ov.querySelector("#eJson").onclick = () => respaldoJSON();
   ov.querySelector("#eTpl").onclick = () =>
     descargar("plantilla-clientes.csv", toCSV([CAMPOS_CLIENTE.map(f => f.label)]), "text/csv");
 

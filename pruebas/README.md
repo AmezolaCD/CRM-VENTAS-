@@ -42,6 +42,7 @@ node pruebas/navegador/certificados.mjs             # el folio no se repite y qu
 node pruebas/navegador/arranque.mjs                 # que la aplicación abra
 node pruebas/navegador/no-se-pierde-lo-escrito.mjs  # guardar guarda de verdad
 node pruebas/navegador/servicios-de-banquetes.mjs   # la propuesta sale del catálogo
+node pruebas/navegador/firmas-que-no-llenan.mjs     # una firma no llena el navegador
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
