@@ -104,6 +104,12 @@ async function equipo(nombre, correo){
     nube.url = u; nube.anon = 'llave-de-mentiras';
     nube.sesion = { access_token:'ficticio', user:{ email:c } };
     nube.ultimo = '';
+    /* Enlazado, como un equipo que ya lleva tiempo trabajando con la nube. Sin
+       esto, cualquier puesta al día entra por `primeraSincronizacion` —la que
+       pregunta si se adoptan los datos del servidor— y adopta la nube encima
+       de lo que este equipo acaba de capturar. Que es lo correcto para un
+       primer enlace, y justo lo que NO se está probando aquí. */
+    nube.enlazado = true;
     guardar();
   }, [`http://127.0.0.1:${PUERTO}`, correo]);
   return { p, sinc: () => p.evaluate(() => sincronizar()) };
@@ -114,7 +120,19 @@ const dos = await equipo('dos', 'admin2@ejemplo.example');
 await uno.sinc(); await dos.sinc();
 
 await bloque('1 · lo tecleado en Ajustes sobrevive a lo que baja', async () => {
-  // El otro equipo mueve algo: desde ahora el primero tiene qué bajar.
+  /* El orden importa y ya me tropecé con él: PRIMERO se abre Ajustes y hasta
+     DESPUÉS el otro equipo mueve algo. Al revés, cualquier guardado del primer
+     equipo dispara una subida con retardo que se puede llevar lo pendiente
+     antes de que la pantalla esté abierta, y entonces no queda nada por bajar
+     —la prueba se pone verde sin haber probado nada—. */
+  await uno.p.evaluate(async () => {
+    vista = 'ajustes'; render();
+    /* 900 ms, no 400: cada `guardar()` deja programada una subida a los 400, y
+       si se cuela a media prueba el escenario deja de ser el que se quería
+       medir. Se le da tiempo de pasar ANTES de que el otro equipo mueva nada. */
+    await new Promise(r => setTimeout(r, 900));
+  });
+
   await dos.p.evaluate(() => {
     state.ajustes.hotel.ciudad = 'OTRA CIUDAD';
     state.clientes.push(saneaCliente({ id:'cx', empresa:'LLEGA DEL OTRO EQUIPO' }));
@@ -124,8 +142,6 @@ await bloque('1 · lo tecleado en Ajustes sobrevive a lo que baja', async () => 
 
   // Y aquí, alguien está llenando Ajustes.
   const r = await uno.p.evaluate(async () => {
-    vista = 'ajustes'; render();
-    await new Promise(r => setTimeout(r, 300));
     document.getElementById('hDirector').value = 'Antonio Rico';
     document.getElementById('hPuestoDir').value = 'Dirección General';
     /* Justo lo que pasaba: la nube trae algo mientras la pantalla está
@@ -184,7 +200,9 @@ await bloque('4 · con una ventana abierta pasa lo mismo', async () => {
       paraQuien:'ANTES', estado:'borrador' })];
     guardar();
     editarCertificado('ce1');
-    await new Promise(r => setTimeout(r, 400));
+    // Igual que arriba: se deja pasar la subida programada por ese `guardar()`.
+    window.__vig = { estado: state, fila: state.certificados[0] };
+    await new Promise(r => setTimeout(r, 900));
   });
   // …y DESPUÉS el otro equipo mueve algo, para que haya qué bajar seguro.
   await dos.p.evaluate(async () => {
@@ -199,7 +217,8 @@ await bloque('4 · con una ventana abierta pasa lo mismo', async () => {
     await new Promise(r => setTimeout(r, 300));
     let enDisco = null;
     try{ enDisco = (JSON.parse(localStorage.getItem('crm-hotel-v3')).certificados[0] || {}).paraQuien; }catch(e){}
-    return { enEstado: (state.certificados[0] || {}).paraQuien, enDisco, traia };
+    return { enEstado: (state.certificados[0] || {}).paraQuien, enDisco, traia,
+             seReemplazo: state !== window.__vig.estado };
   });
   afirma('la nube de verdad traía algo que aplicar', r.traia === true);
   afirma('lo que se corrigió en la ventana quedó', r.enEstado === 'DESPUÉS');
@@ -213,8 +232,72 @@ await bloque('4 · con una ventana abierta pasa lo mismo', async () => {
     return { cliente: state.clientes.some(c => c.id === 'cy'),
              certificado: (state.certificados[0] || {}).paraQuien };
   });
+  /* El estado NO se puede haber reemplazado con la ventana abierta: ésa es la
+     causa de que se pierda lo tecleado, y de ahí salió el defecto que esta
+     prueba destapó —`primeraSincronizacion` lo hacía sin preguntar—. */
+  afirma('el estado no se reemplazó con la ventana abierta', r.seReemplazo === false);
+
   afirma('al cerrarla, lo del otro equipo entra', d.cliente);
   afirma('sin deshacer lo que se acababa de corregir', d.certificado === 'DESPUÉS');
+});
+
+/* ---------------------------------------------------------------------------
+   5 · EL PRIMER ENLACE TAMPOCO PUEDE PISAR UNA CAPTURA ABIERTA.
+
+   Lo destapó esta misma prueba, poniéndose roja de vez en cuando. El guardián
+   estaba en `sincronizar()`, pero su hermana —`primeraSincronizacion`, la que
+   corre la primera vez que un equipo se conecta y al volver a entrar— también
+   REEMPLAZA el estado entero, y ésa no lo tenía.
+
+   No es un caso de laboratorio: se vence la sesión con una cotización abierta,
+   la persona vuelve a entrar, y al guardar lo que llevaba escrito se pierde.
+
+   Lo difícil es que el guardián no puede ser el mismo: el primer enlace se
+   hace desde Ajustes, y al entrar hay una pantalla de acceso encima. Si se
+   contaran esas dos, el equipo no se enlazaría NUNCA. Eso también se prueba.
+   --------------------------------------------------------------------------- */
+await bloque('5 · el primer enlace espera a que se cierre la captura', async () => {
+  const tres = await equipo('tres', 'admin1@ejemplo.example');
+  // Un equipo que todavía NO está enlazado, como recién configurado.
+  await tres.p.evaluate(() => {
+    nube.enlazado = false;
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+  });
+
+  const conVentana = await tres.p.evaluate(async () => {
+    state.certificados = [saneaCertificado({ id:'cx1', tipo:'spa_facial',
+      paraQuien:'LO QUE SE ESTABA ESCRIBIENDO', estado:'borrador' })];
+    guardar();
+    vista = 'certificados'; render();
+    editarCertificado('cx1');
+    await new Promise(r => setTimeout(r, 300));
+    const antes = state;
+    await primeraSincronizacion();
+    return { seReemplazo: state !== antes, enlazado: nube.enlazado,
+             pendiente: nube.hayQueBajar,
+             sigueAbierta: !!document.querySelector('#ceQuien') };
+  });
+  afirma('con la ventana abierta NO se reemplaza el estado', conVentana.seReemplazo === false);
+  afirma('y el enlace se queda pendiente', conVentana.enlazado === false && conVentana.pendiente);
+  afirma('la ventana sigue ahí, con lo suyo', conVentana.sigueAbierta);
+
+  /* Y la otra mitad: con la pantalla de acceso encima —que es un `.overlay`
+     también— el enlace SÍ tiene que ocurrir, o nadie podría entrar. */
+  const conAcceso = await tres.p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    pantallaEntrada();
+    await new Promise(r => setTimeout(r, 200));
+    const hayAcceso = !!document.getElementById('entrada');
+    const antes = state;
+    await primeraSincronizacion();
+    const r = { hayAcceso, seReemplazo: state !== antes, enlazado: nube.enlazado };
+    cerrarEntrada();
+    return r;
+  });
+  afirma('la pantalla de acceso sí estaba encima', conAcceso.hayAcceso);
+  afirma('y aun así el equipo se enlaza', conAcceso.enlazado === true);
+
+  await tres.p.context().close();
 });
 
 await br.close(); srv.close();

@@ -98,6 +98,12 @@ async function equipo(nombre, correo, rol){
     nube.url = u; nube.anon = 'llave-de-mentiras';
     nube.sesion = { access_token:'ficticio', user:{ email:c } };
     nube.ultimo = '';
+    /* Enlazado, como un equipo que ya lleva tiempo trabajando con la nube. Sin
+       esto, cualquier puesta al día entra por `primeraSincronizacion` —la que
+       pregunta si se adoptan los datos del servidor— y adopta la nube encima
+       de lo que este equipo acaba de capturar. Que es lo correcto para un
+       primer enlace, y justo lo que NO se está probando aquí. */
+    nube.enlazado = true;
     guardar();
   }, [`http://127.0.0.1:${PUERTO}`, correo, rol]);
   return { p, sinc: () => p.evaluate(() => sincronizar()) };
@@ -595,6 +601,120 @@ await bloque('13 · se quita de la captura sin borrar lo ya escrito', async () =
   });
   afirma('en uno que ya lo traía, sí se puede ver y corregir', viejo.traia === viejo.TEXTO);
   afirma('y guardar no se lo borra', viejo.quedo === viejo.TEXTO);
+});
+
+/* ---------------------------------------------------------------------------
+   14 · EL BUSCADOR DE LA LISTA.
+
+   «ponme un buscador en la lista desplegable de servicios ya que al ser tantos
+   es dificil localizarlos». Con 180 renglones entre el kit del hotel, la lista
+   del proveedor y los paquetes, bajar la lista a mano no se puede.
+   --------------------------------------------------------------------------- */
+await bloque('14 · se busca dentro de la lista', async () => {
+  /* Un catálogo largo de mentiras: el buscador sólo sale cuando hace falta. */
+  const CAT = [];
+  for (let i = 1; i <= 18; i++)
+    CAT.push({ nombre:'Relleno de ejemplo ' + i, precio:100 + i, conServicio:true,
+               familia:'Relleno de ejemplo' });
+  CAT.push({ nombre:'Pista de ejemplo 6 x 8 m', precio:555, conServicio:false,
+             familia:'Escenarios de ejemplo' });
+  CAT.push({ nombre:'Tarima de ejemplo', precio:444, conServicio:false,
+             familia:'Escenarios de ejemplo' });
+  CAT.push({ nombre:'Cafetería de ejemplo', precio:111, conServicio:true,
+             familia:'Alimentos de ejemplo' });
+
+  const r = await admin.p.evaluate(async cat => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    state.serviciosBq = cat.map((x, i) => saneaServicioBq(Object.assign({ orden:i }, x)));
+    guardar();
+    vista = 'eventos'; render();
+    editarEvento(null, null, 'cotizacion');
+    await new Promise(r => setTimeout(r, 300));
+
+    const tr = () => document.querySelector('#tLin tbody tr');
+    const campo = tr().querySelector('.busca-srv');
+    const sel = () => tr().querySelector('.l-srvSel');
+    const teclear = async t => {
+      campo.value = t;
+      campo.dispatchEvent(new Event('input', { bubbles:true }));
+      await new Promise(r => setTimeout(r, 120));
+    };
+    const estado = () => ({
+      opciones: [...sel().options].filter(o => o.value && o.value !== '::otro::').map(o => o.value),
+      escogido: sel().value,
+      precio: tr().querySelector('.l-precio').value,
+      serv: tr().querySelector('.l-serv').checked,
+      cuenta: tr().querySelector('.srv-cuenta').textContent
+    });
+
+    const hayBuscador = !!campo;
+    const alAbrir = estado();
+
+    // 1 · por nombre, y queda uno: se escoge solo y se llena
+    await teclear('pista');
+    const unaSola = estado();
+
+    // 2 · por familia
+    await teclear('escenarios');
+    const porFamilia = estado();
+
+    // 3 · sin acentos ni mayúsculas
+    await teclear('CAFETERIA');
+    const sinAcentos = estado();
+
+    // 4 · algo que no existe
+    await teclear('xyz que no existe');
+    const nada = estado();
+
+    // 5 · se borra la búsqueda: vuelven todos
+    await teclear('');
+    const vuelven = estado();
+    return { hayBuscador, alAbrir, unaSola, porFamilia, sinAcentos, nada, vuelven };
+  }, CAT);
+
+  afirma('con un catálogo largo sale el buscador', r.hayBuscador);
+  afirma('al abrir están todos', r.alAbrir.opciones.length === 21);
+
+  afirma('buscar por nombre deja uno solo', r.unaSola.opciones.length === 1);
+  /* Lo que de verdad ahorra el buscador: queda uno, se escoge solo, y se
+     llenan su precio y su palomita sin picarle a nada más. */
+  afirma('y se escoge solo', r.unaSola.escogido === 'Pista de ejemplo 6 x 8 m');
+  afirma('con su precio', r.unaSola.precio === '555');
+  afirma('y su palomita, que esta no lleva cargo', r.unaSola.serv === false);
+  afirma('y lo dice', /uno solo/i.test(r.unaSola.cuenta));
+
+  afirma('también se busca por familia', r.porFamilia.opciones.length === 2 &&
+    r.porFamilia.opciones.includes('Tarima de ejemplo'));
+  afirma('y dice cuántos coinciden', /2 coinciden/.test(r.porFamilia.cuenta));
+
+  afirma('no importan acentos ni mayúsculas',
+    r.sinAcentos.opciones.join('') === 'Cafetería de ejemplo');
+
+  /* Buscar es mirar, no deshacer: una palabra que no empata no puede borrarle
+     a nadie el servicio que ya tenía escogido. */
+  afirma('lo que no empata no borra lo ya escogido',
+    r.nada.escogido === 'Cafetería de ejemplo');
+  afirma('y avisa que no hay coincidencias', /ninguno coincide/i.test(r.nada.cuenta));
+
+  afirma('al borrar la búsqueda vuelven todos', r.vuelven.opciones.length === 21);
+  afirma('sin perder lo escogido', r.vuelven.escogido === 'Cafetería de ejemplo');
+});
+
+await bloque('15 · con pocos servicios el buscador no estorba', async () => {
+  const r = await admin.p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    state.serviciosBq = [
+      saneaServicioBq({ nombre:'Uno de ejemplo', precio:10, orden:0 }),
+      saneaServicioBq({ nombre:'Dos de ejemplo', precio:20, orden:1 })];
+    guardar();
+    vista = 'eventos'; render();
+    editarEvento(null, null, 'cotizacion');
+    await new Promise(r => setTimeout(r, 300));
+    const tr = document.querySelector('#tLin tbody tr');
+    return { buscador: !!tr.querySelector('.busca-srv'), lista: !!tr.querySelector('.l-srvSel') };
+  });
+  afirma('con dos servicios no sale el buscador', !r.buscador);
+  afirma('pero la lista sí', r.lista);
 });
 
 await br.close(); srv.close();

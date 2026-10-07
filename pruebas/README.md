@@ -63,6 +63,12 @@ ventanas, y **Ajustes no es una ventana**. La prueba exige que lo tecleado sobre
 cerrar sí entre lo del otro equipo, y —para que no se pase sola— que la nube de verdad trajera
 algo que aplicar.
 
+También atrapó, poniéndose roja de vez en cuando, que el guardián estaba en `sincronizar()`
+pero no en `primeraSincronizacion` —la que corre al enlazar un equipo y al volver a entrar—,
+que también reemplaza el estado entero. Se vence la sesión con una cotización abierta, la
+persona vuelve a entrar y lo que llevaba escrito se pierde al guardar. Una prueba que falla una
+de cada seis veces no es una prueba flaky: es un defecto que aparece una de cada seis veces.
+
 `enlace-que-no-sirve.mjs` comprueba lo de antes del enlace: que si al servidor le falta el buzón
 de firmas, al ejecutivo **no se le ofrece el enlace** y se le dice por qué — y que si lo que se
 cayó fue la red, no se le estorba.

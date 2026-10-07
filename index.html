@@ -971,7 +971,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.07-103";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.07-104";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -4112,6 +4112,31 @@ function programarSubida(){
 const hayFormularioAbierto = () =>
   !!document.querySelector(".overlay") || (vista === "ajustes" && ajustesEnPantalla);
 
+/**
+ * Una captura de VERDAD abierta. Es el guardián del PRIMER enlace, y tiene
+ * que ser más angosto que el de arriba por dos razones concretas:
+ *
+ *   · el primer enlace se hace desde Ajustes —la persona está justo ahí,
+ *     queriéndolo—, y el botón recoge el formulario antes de enlazar;
+ *   · y se hace otra vez al entrar, con la pantalla de acceso encima, que es
+ *     un `.overlay` ella misma.
+ *
+ * Contando esas dos, el equipo no se enlazaría nunca. Lo que sí tiene que
+ * detenerlo es una cotización o un certificado a medio llenar.
+ */
+const hayCapturaAbierta = () =>
+  [...document.querySelectorAll(".overlay")].some(o => o.id !== "entrada");
+
+/**
+ * Ponerse al día por el camino que toque.
+ *
+ * Antes de enlazar hay que pasar por `primeraSincronizacion` —es la que
+ * pregunta si se adoptan los datos de la nube—; después, por la de siempre.
+ * Existe porque el primer enlace ahora se puede posponer, y quien lo reintente
+ * no tiene por qué saber cuál de las dos le toca.
+ */
+const ponerseAlDia = () => nube.enlazado ? sincronizar() : primeraSincronizacion();
+
 let sincronizando = false;
 async function sincronizar(){
   if (!nubeActiva() || sincronizando) return;
@@ -4375,7 +4400,7 @@ function arrancarSondeo(){
     /* Con un formulario abierto no se aplica nada —ver mirarSinTocar—, pero sí
        se pregunta: enterarse no mueve nada de su sitio. */
     if (hayFormularioAbierto()){ mirarSinTocar().catch(() => {}); return; }
-    sincronizar().catch(() => {});
+    ponerseAlDia().catch(() => {});
   }, SONDEO_MS);
 }
 function detenerSondeo(){ clearInterval(nube.timer); nube.timer = null; }
@@ -4383,6 +4408,14 @@ function detenerSondeo(){ clearInterval(nube.timer); nube.timer = null; }
 /* ----- Primer enlace: el momento delicado ----- */
 
 async function primeraSincronizacion(){
+  /* Con una captura abierta, el primer enlace ESPERA.
+     Adoptar la nube reemplaza el estado entero, y el formulario abierto se
+     queda con el objeto de antes en la mano: al guardar, lo tecleado se
+     perdería sin decir nada. Pasa de verdad cuando se vence la sesión con una
+     cotización abierta y hay que volver a entrar. Se reintenta solo al
+     cerrarse el formulario, igual que la sincronización de siempre. */
+  if (hayCapturaAbierta()){ nube.hayQueBajar = true; return; }
+
   const remotas = (await bajar()).filter(f => !f.borrado);
   const hayLocal = state.clientes.length || state.convenios.length || state.huespedes.length;
 
@@ -5008,7 +5041,7 @@ async function arrancarNube(){
   // vez que este equipo se conecta: después ya son los mismos datos, y volver
   // a preguntarlo en cada arranque es un estorbo diario que además no dice
   // nada. De la segunda vez en adelante se sincroniza y ya.
-  (nube.enlazado ? sincronizar() : primeraSincronizacion())
+  ponerseAlDia()
     .then(() => { nube.estado = "listo"; pintarNube(); arrancarSondeo(); })
     .catch(e => {
       nube.estado = "error"; nube.error = e.message; pintarNube();
@@ -5627,7 +5660,7 @@ function render(){
        bajó —ver `hayFormularioAbierto`—, así que éste es el momento de
        ponerse al día, igual que al cerrarse la última ventana. */
     ajustesEnPantalla = false;
-    if (nube.hayQueBajar) setTimeout(() => sincronizar().catch(() => {}), 0);
+    if (nube.hayQueBajar) setTimeout(() => ponerseAlDia().catch(() => {}), 0);
   }
 
   // Al final, para que no salga encima de una pantalla a medio dibujar.
@@ -8588,7 +8621,7 @@ function modal(html){
     obs.disconnect();
     if (!document.querySelector(".overlay")){
       tarifasCambiadas = null;
-      sincronizar().catch(() => {});
+      ponerseAlDia().catch(() => {});
     }
   }).observe(document.body, { childList: true });
   return ov;
@@ -14530,13 +14563,32 @@ function editarEvento(id, tipoPre, alCerrar){
    * puede cotizar con «Otro servicio…» sin ir a Ajustes a media captura.
    * De paso, el renglón se sigue leyendo de `.l-servicio` igual que siempre. */
   const OTRO_SRV = "::otro::";
-  const opcionesSrv = sel => {
-    const cat = state.serviciosBq.filter(x => x.nombre);
-    const conocido = cat.some(x => x.nombre === sel);
+  const catalogoVivo = () => state.serviciosBq.filter(x => x.nombre);
+
+  /** Los que coinciden con lo tecleado, por nombre o por familia. */
+  const srvQueCoinciden = q => {
+    const b = mismoNombre(q);
+    if (!b) return catalogoVivo();
+    return catalogoVivo().filter(x =>
+      mismoNombre(x.nombre).includes(b) || mismoNombre(x.familia).includes(b));
+  };
+
+  /**
+   * Las opciones de la lista, agrupadas por familia.
+   *
+   * `cat` es lo que se va a enseñar —todo, o nada más lo que coincidió con la
+   * búsqueda—. Se vuelve a armar la lista en vez de esconder opciones con CSS,
+   * por lo mismo que el buscador de clientes: esconder un `<option>` no
+   * funciona igual en todos los navegadores, y aquí también se trabaja desde
+   * el celular.
+   */
+  const opcionesSrv = (sel, cat) => {
+    cat = cat || catalogoVivo();
+    const conocido = catalogoVivo().some(x => x.nombre === sel);
     const una = x => `<option value="${esc(x.nombre)}"${
       x.nombre === sel ? " selected" : ""}>${esc(x.nombre)}</option>`;
     /* Por familias, en el orden en que aparecen en el catálogo. Las que no
-       tienen se van al final, sueltas: con 130 servicios de dos listas
+       tienen se van al final, sueltas: con 180 servicios de dos listas
        distintas, una sola tira corrida no se puede usar. */
     const familias = [];
     for (const x of cat) if (x.familia && !familias.includes(x.familia)) familias.push(x.familia);
@@ -14547,16 +14599,30 @@ function editarEvento(id, tipoPre, alCerrar){
       sueltos.map(una).join("") +
       `<option value="${OTRO_SRV}"${sel && !conocido ? " selected" : ""}>Otro servicio…</option>`;
   };
+
+  /* El buscador sólo aparece cuando de verdad hace falta. Con ocho servicios
+     capturados estorba; con 180 —que es lo que hay entre el kit del hotel, la
+     lista del proveedor y los paquetes— bajar la lista a mano no se puede. */
+  const CON_BUSCADOR = 15;
+
   /* Con el catálogo vacío no se enseña una lista de un solo renglón: se deja
      el campo de siempre, para que nada se sienta peor que antes mientras
      alguien lo captura. */
-  const celdaServicio = l => state.serviciosBq.some(x => x.nombre)
-    ? `<select class="field l-srvSel" title="${esc(l.servicio)}" style="width:100%"
-         >${opcionesSrv(l.servicio)}</select>
-       <input class="field l-servicio" value="${esc(l.servicio)}" placeholder="Escríbelo"
-         style="width:100%;margin-top:4px${
-           l.servicio && !state.serviciosBq.some(x => x.nombre === l.servicio) ? "" : ";display:none"}">`
-    : `<input class="field l-servicio" value="${esc(l.servicio)}" placeholder="Cena emplatada" style="width:100%">`;
+  const celdaServicio = l => {
+    const cat = catalogoVivo();
+    if (!cat.length)
+      return `<input class="field l-servicio" value="${esc(l.servicio)}"
+                placeholder="Cena emplatada" style="width:100%">`;
+    return `${cat.length >= CON_BUSCADOR
+        ? `<input class="field busca-srv" type="search" placeholder="Buscar…"
+             autocomplete="off" style="width:100%;margin-bottom:4px">` : ""}
+      <select class="field l-srvSel" title="${esc(l.servicio)}" style="width:100%"
+        >${opcionesSrv(l.servicio)}</select>
+      <input class="field l-servicio" value="${esc(l.servicio)}" placeholder="Escríbelo"
+        style="width:100%;margin-top:4px${
+          cat.some(x => x.nombre === l.servicio) || !l.servicio ? ";display:none" : ""}">
+      <div class="hint srv-cuenta" style="margin-top:2px"></div>`;
+  };
 
   const filaL = l => `<tr data-srv-antes="${esc(
       state.serviciosBq.some(x => x.nombre === l.servicio) ? l.servicio : "")}">
@@ -14737,6 +14803,49 @@ function editarEvento(id, tipoPre, alCerrar){
     recalcular();
   }
 
+  /**
+   * Escribir en el buscador vuelve a armar la lista de ESE renglón.
+   *
+   * Busca por nombre y también por familia: escribir «pista» saca las pistas,
+   * y escribir «audio» saca todo lo de audio aunque el nombre no traiga la
+   * palabra. Si queda uno solo se escoge solo —que es a lo que va quien está
+   * buscando— y de paso se le llenan el precio y la palomita.
+   */
+  function buscarServicio(campo){
+    const tr = campo.closest("tr");
+    const sel = tr.querySelector(".l-srvSel");
+    const cuenta = tr.querySelector(".srv-cuenta");
+    if (!sel) return;
+    const q = campo.value;
+    const hallados = srvQueCoinciden(q);
+    const antes = sel.value;
+    /* Qué queda escogido después de teclear, en este orden:
+         1. si quedó UNO solo, ése —a eso va quien busca—;
+         2. si lo que ya estaba sigue entre los hallados, se queda;
+         3. si ya estaba escogido algo del catálogo y la búsqueda no lo
+            alcanza, TAMBIÉN se queda. Buscar es mirar, no deshacer: teclear
+            una palabra que no empata no tiene por qué borrarle a nadie el
+            servicio que ya había puesto.
+       Ese tercer caso obliga a dejarlo en la lista aunque no coincida; si no,
+       el `<select>` se quedaría apuntando a una opción que no existe. */
+    const guardado = servicioBqPorNombre(antes);
+    const sigue = hallados.length === 1 ? hallados[0].nombre
+                : hallados.some(x => x.nombre === antes) ? antes
+                : guardado ? antes : "";
+    const paraLista = (sigue && !hallados.some(x => x.nombre === sigue))
+      ? hallados.concat([servicioBqPorNombre(sigue)]) : hallados;
+    sel.innerHTML = opcionesSrv(sigue, paraLista);
+    sel.value = sigue || (antes === OTRO_SRV ? OTRO_SRV : "");
+    if (sel.value !== antes) escogerServicio(sel);
+    if (cuenta) cuenta.textContent = !mismoNombre(q) ? ""
+      : hallados.length === 1 ? "Uno solo: ya quedó escogido."
+      : hallados.length ? `${hallados.length} coinciden.`
+      : "Ninguno coincide. Borra la búsqueda para ver todos.";
+  }
+
+  ov.addEventListener("input", ev => {
+    if (ev.target.classList.contains("busca-srv")) buscarServicio(ev.target);
+  });
   ov.addEventListener("change", ev => {
     if (ev.target.classList.contains("l-serv")) recalcular();
     if (ev.target.classList.contains("l-srvSel")) escogerServicio(ev.target);
