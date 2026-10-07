@@ -3330,6 +3330,151 @@ let ultimoPeso = 0;
    pantalla morada una vez. */
 let avisadoAlmacenLleno = false;
 
+/* --------------------------------------------------------------------------
+   LA BODEGA GRANDE · IndexedDB
+
+   `localStorage` da unos 5.2 millones de caracteres y se acabó: no hay opción
+   que subirlo, ni para él ni para nadie. El MISMO navegador ofrece IndexedDB,
+   y ahí la cuota se mide en cientos de megas —medido en Chromium:
+   `navigator.storage.estimate()` reportó 953 MB—. Es la misma máquina y el
+   mismo sitio; nada más es la puerta de al lado.
+
+   Lo que sigue es sólo la puerta. Quién la usa y cuándo viene después.
+   -------------------------------------------------------------------------- */
+
+const BODEGA = "crm-hotel";      // la base
+const ANAQUEL = "copia";         // el almacén dentro de ella
+
+/* La versión del esquema se queda en 1 PARA SIEMPRE.
+
+   Subirla hace que una pestaña vieja que tenga la base abierta BLOQUEE el
+   `open()` de la nueva, y la nueva se queda colgada esperando a que la otra
+   se cierre —que puede no pasar nunca—. Si algún día cambia la forma de lo
+   guardado, se distingue por el `v` de adentro del propio registro, no por la
+   versión de la base. */
+const BODEGA_V = 1;
+
+let laBodega = null;             // la conexión, una sola, reusada
+let bodegaRota = false;          // ya se intentó y no se pudo: no insistir
+
+/** ¿Este navegador tiene IndexedDB a la mano? En modo privado puede no. */
+function hayBodega(){
+  if (bodegaRota) return false;
+  try{ return !!window.indexedDB; }catch(e){ return false; }   // Firefox privado lanza
+}
+
+/**
+ * Abre la bodega —una sola vez— y devuelve la conexión.
+ *
+ * Nunca se queda colgada: si el navegador no contesta en `ESPERA_BODEGA`, se
+ * da por perdida. Un `open()` que no responde es justo lo que dejaría la
+ * aplicación atorada en la pantalla de entrada.
+ */
+const ESPERA_BODEGA = 2000;
+
+function abrirBodega(){
+  if (laBodega) return Promise.resolve(laBodega);
+  if (!hayBodega()) return Promise.resolve(null);
+  return new Promise(resolve => {
+    let listo = false;
+    const rendirse = motivo => {
+      if (listo) return;
+      listo = true;
+      console.warn("No se pudo abrir la bodega:", motivo);
+      bodegaRota = true;
+      resolve(null);
+    };
+    const reloj = setTimeout(() => rendirse("tardó demasiado"), ESPERA_BODEGA);
+    let q;
+    try{ q = indexedDB.open(BODEGA, BODEGA_V); }
+    catch(e){ clearTimeout(reloj); return rendirse(e); }
+
+    q.onupgradeneeded = () => {
+      const db = q.result;
+      if (!db.objectStoreNames.contains(ANAQUEL)) db.createObjectStore(ANAQUEL);
+    };
+    /* Otra pestaña la tiene abierta con otra versión. No se espera: se sigue
+       con `localStorage`, que es mejor que no abrir. */
+    q.onblocked = () => { clearTimeout(reloj); rendirse("otra pestaña la tiene tomada"); };
+    q.onerror   = () => { clearTimeout(reloj); rendirse(q.error); };
+    q.onsuccess = () => {
+      clearTimeout(reloj);
+      if (listo){ try{ q.result.close(); }catch(e){} return; }   // ya se había rendido
+      listo = true;
+      laBodega = q.result;
+      /* Si otra pestaña quiere subir la versión, hay que soltarla o la
+         dejamos colgada a ella. No debería pasar nunca —la versión se queda
+         en 1— pero el día que pase, que no sea un plantón. */
+      laBodega.onversionchange = () => {
+        try{ laBodega.close(); }catch(e){}
+        laBodega = null; bodegaRota = true;
+      };
+      laBodega.onclose = () => { laBodega = null; };
+      resolve(laBodega);
+    };
+  });
+}
+
+/** Lee lo guardado bajo esa llave. `null` si no hay, o si no se pudo. */
+async function leerDeBodega(llave){
+  const db = await abrirBodega();
+  if (!db) return null;
+  return new Promise(resolve => {
+    let q;
+    try{ q = db.transaction(ANAQUEL, "readonly").objectStore(ANAQUEL).get(llave); }
+    catch(e){ console.warn("No se pudo leer de la bodega:", e); return resolve(null); }
+    q.onsuccess = () => resolve(q.result === undefined ? null : q.result);
+    q.onerror   = () => { console.warn("No se pudo leer de la bodega:", q.error);
+                          resolve(null); };
+  });
+}
+
+/** Guarda bajo esa llave. Devuelve si se pudo —y por qué no, en la consola—. */
+async function escribirEnBodega(llave, valor){
+  const db = await abrirBodega();
+  if (!db) return false;
+  return new Promise(resolve => {
+    let tx;
+    try{ tx = db.transaction(ANAQUEL, "readwrite"); }
+    catch(e){ console.warn("No se pudo escribir en la bodega:", e); return resolve(false); }
+    /* Se espera al `complete` de la TRANSACCIÓN, no al `success` del `put`:
+       el `put` dice «lo recibí», la transacción dice «quedó en el disco». La
+       diferencia es justo lo que se pierde si el navegador se cierra. */
+    tx.oncomplete = () => resolve(true);
+    tx.onabort = tx.onerror = () => {
+      console.warn("No se pudo escribir en la bodega:", tx.error);
+      resolve(false);
+    };
+    try{ tx.objectStore(ANAQUEL).put(valor, llave); }
+    catch(e){ console.warn("No se pudo escribir en la bodega:", e); resolve(false); }
+  });
+}
+
+/**
+ * Pedirle al navegador que no tire lo guardado.
+ *
+ * Sin esto, lo que vive en la bodega es desalojable: si al equipo le falta
+ * espacio, el navegador puede tirarlo sin preguntar. Con una cartera de
+ * trabajo adentro eso no es aceptable. Se pide una sola vez y en silencio:
+ * si el navegador dice que no, se sigue igual, nada más sin la garantía.
+ */
+async function pedirQueNoLoTiren(){
+  try{
+    if (navigator.storage && navigator.storage.persist &&
+        !(await navigator.storage.persisted()))
+      await navigator.storage.persist();
+  }catch(e){}
+}
+
+/** Lo que el navegador dice que le queda, para poder enseñarlo. */
+async function cuotaDelNavegador(){
+  try{
+    if (!navigator.storage || !navigator.storage.estimate) return null;
+    const e = await navigator.storage.estimate();
+    return { total: e.quota || 0, usado: e.usage || 0 };
+  }catch(e){ return null; }
+}
+
 /**
  * Deja la copia de este navegador al día.
  *
@@ -3540,12 +3685,20 @@ function ponerLetreroAlmacen(){
     <button class="btn sm" id="avisoAlmacenVer">¿Qué lo llenó?</button>`;
   document.body.appendChild(d);
   d.querySelector("#avisoAlmacenResp").onclick = () => respaldoJSON();
-  d.querySelector("#avisoAlmacenVer").onclick = () => {
+  d.querySelector("#avisoAlmacenVer").onclick = async () => {
     const x = queLlenaElAlmacen();
+    /* Lo que el navegador dice que le queda. No es el mismo tope: el de
+       `localStorage` son ~10 MB y no se puede subir, pero por la otra puerta
+       —IndexedDB— el mismo navegador ofrece cientos. Decirlo aquí es lo que
+       permite entender por qué se está trabajando en mudarse. */
+    const c = await cuotaDelNavegador();
     alert(`La copia de este equipo pesa ${enKB(x.total)}.\n\n` +
       x.partes.slice(0, 6).map(t => `· ${t.que}: ${enKB(t.peso)}`).join("\n") +
       (x.nFirmas ? `\n\nDe todo eso, ${enKB(x.firmas)} son las ${x.nFirmas} ` +
-                   "firmas trazadas (imágenes)." : ""));
+                   "firmas trazadas (imágenes)." : "") +
+      (c ? `\n\nEl tope de esta gaveta del navegador es ${enKB(techoDelAlmacen())} ` +
+           `y no se puede subir. En total, este navegador tiene ${enKB(c.total)} ` +
+           "para este sitio." : ""));
   };
 }
 
