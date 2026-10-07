@@ -237,14 +237,19 @@ await bloque('6 · se puede ver qué está llenando el navegador', async () => {
     r.kb === '300 KB' && r.mb === '2.0 MB');
 });
 
-await bloque('7 · cuando el navegador se llena, se entera y no se repite', async () => {
+await bloque('7 · cuando ya no queda DÓNDE, se entera y no se repite', async () => {
   const r = await p.evaluate(async () => {
     const avisos = [];
     const orig = window.alert;
     window.alert = m => avisos.push(String(m));
-    /* Se simula el navegador lleno: `setItem` truena como truena de verdad,
-       con una QuotaExceededError. Llenarlo a mano con megabytes de basura
-       tarda y deja el equipo de pruebas sucio para los bloques de abajo. */
+    /* Desde que la copia se guarda también en IndexedDB, que se llene la
+       gaveta chica ya NO es una desgracia —eso lo prueba `copia-local.mjs`,
+       bloque 3—. El aviso se gana el derecho a salir sólo cuando no queda
+       ningún lado: aquí se tapan los dos. */
+    bodegaRota = true;
+    /* Y el navegador lleno: `setItem` truena como truena de verdad, con una
+       QuotaExceededError. Llenarlo a mano con megabytes de basura tarda y
+       deja el equipo de pruebas sucio para los bloques de abajo. */
     const real = Storage.prototype.setItem;
     Storage.prototype.setItem = function(k){
       if (k === STORE){ const e = new Error('lleno'); e.name = 'QuotaExceededError'; throw e; }
@@ -257,6 +262,7 @@ await bloque('7 · cuando el navegador se llena, se entera y no se repite', asyn
     } finally {
       Storage.prototype.setItem = real;
       window.alert = orig;
+      bodegaRota = false;
     }
     const letrero = document.getElementById('avisoAlmacen');
     const r = { avisos, texto: avisos[0] || '',

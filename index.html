@@ -1000,7 +1000,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.07-108";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.07-109";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3330,6 +3330,25 @@ let ultimoPeso = 0;
    pantalla morada una vez. */
 let avisadoAlmacenLleno = false;
 
+/* El sello de lo último que se escribió, en la gaveta chica, que es síncrona.
+
+   Sirve para una sola cosa, pero importante: la escritura a la bodega no
+   espera, así que si el navegador muere en ese instante se pierde el último
+   cambio. Al arrancar se compara este sello contra el de la copia; si éste es
+   más nuevo, se le dice. Vale más un aviso honesto que un dato que
+   desapareció sin que nadie se enterara.
+
+   Va declarado aquí, antes de quien lo usa, por la misma razón que lo de
+   arriba. */
+const SELLO_LOCAL = STORE + ":sello";
+
+/* Una escritura a la bodega a la vez. Si llega otra mientras ésa va en
+   camino, no se encola: se marca que hay algo más nuevo y al terminar se
+   vuelve a escribir con lo último. Así un bucle que llama a `guardar()`
+   doscientas veces —importar, por ejemplo— escribe dos veces, no doscientas. */
+let bodegaEnVuelo = false;
+let bodegaPendiente = null;
+
 /* --------------------------------------------------------------------------
    LA BODEGA GRANDE · IndexedDB
 
@@ -3488,16 +3507,69 @@ async function cuotaDelNavegador(){
 function guardarCopiaLocal(avisa){
   const texto = JSON.stringify(state);
   ultimoPeso = texto.length;
+  const sello = Date.now();
+
+  /* A la bodega SIEMPRE, y sin esperarla: `guardar()` es síncrona y la llaman
+     noventa y tantos sitios; volverla asíncrona sería tocar el archivo
+     entero. La ventana de pérdida es UNA escritura, no un intervalo. */
+  guardarEnLaBodega(texto, sello);
+
+  /* Y a la gaveta chica también, mientras dure la mudanza. Cuesta 5 MB de los
+     mil que hay y compra dos cosas que valen más: que una pestaña con la
+     versión vieja siga trabajando, y que revertir una publicación no deje a
+     nadie sin datos. */
   try{
     localStorage.setItem(STORE, texto);
+    localStorage.setItem(SELLO_LOCAL, String(sello));
     avisadoAlmacenLleno = false;
     return true;
   }catch(e){
-    console.warn("No se pudo guardar la copia de este navegador:", e);
-    if (avisa) avisarAlmacenLleno();
+    /* Que la gaveta chica esté llena ya NO es una desgracia: la copia buena
+       se fue a la bodega. Sólo se avisa si la bodega tampoco está. */
+    console.warn("No cupo en la gaveta chica del navegador:", e);
+    if (avisa && !hayBodega()) avisarAlmacenLleno();
     return false;
   }
 }
+
+function guardarEnLaBodega(texto, sello){
+  if (!hayBodega()) return;
+  bodegaPendiente = { v:1, t:sello, json:texto };
+  if (bodegaEnVuelo) return;
+  bodegaEnVuelo = true;
+  (async () => {
+    try{
+      while (bodegaPendiente){
+        const lote = bodegaPendiente;
+        bodegaPendiente = null;
+        const bien = await escribirEnBodega("copia", lote);
+        if (!bien){
+          /* La bodega dijo que no. Si la gaveta chica tampoco puede, no queda
+             dónde: eso sí hay que decirlo. */
+          let cupo = false;
+          try{ cupo = localStorage.getItem(STORE) != null; }catch(e){}
+          if (!cupo) avisarAlmacenLleno();
+          return;
+        }
+      }
+    } finally { bodegaEnVuelo = false; }
+  })();
+}
+
+/* Antes de que la pestaña se vaya, terminar de escribir lo que quedó.
+
+   `visibilitychange` es el que de verdad llega en el teléfono; `pagehide`
+   cubre el caso de la caché de ida y vuelta. Ninguno de los dos es garantía
+   si el proceso muere de golpe —por eso existe el sello de arriba—, pero
+   cierran la ventana en todos los casos normales. */
+addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && bodegaPendiente && !bodegaEnVuelo)
+    guardarEnLaBodega(bodegaPendiente.json, bodegaPendiente.t);
+});
+addEventListener("pagehide", () => {
+  if (bodegaPendiente && !bodegaEnVuelo)
+    guardarEnLaBodega(bodegaPendiente.json, bodegaPendiente.t);
+});
 
 const enKB = n => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB"
                                : Math.round(n / 1024) + " KB";
