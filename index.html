@@ -971,7 +971,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.06-99";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.07-100";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1046,6 +1046,21 @@ const MONTAJES = ["Banquete","Cóctel","Auditorio","Escuela","Herradura","Imperi
 
 /** Lo que el 15% de servicio sí toca: alimentos y bebidas. */
 const CON_SERVICIO_DEF = true;
+
+/**
+ * El catálogo de servicios de banquetes, con su precio de lista.
+ *
+ * Antes la propuesta económica era texto libre renglón por renglón, y eso
+ * significaba teclear «Cena emplatada» y su precio en cada cotización: tres
+ * ejecutivos, tres redacciones y tres precios para el mismo platillo. Es el
+ * mismo problema que tenían los certificados en el PowerPoint.
+ *
+ * Nace VACÍO a propósito, por dos razones. Los precios del hotel no se
+ * escriben en el código —este archivo es público—, y además cambian cada año:
+ * puestos aquí habría que pedirle a alguien que los publique. Se capturan una
+ * vez en Ajustes, viajan por la nube y de ahí los toma la cotización.
+ */
+const SERVICIOS_BQ_DEF = [];
 
 const TIPOS_CONTRATO = [
   { id:"cotizacion", name:"Cotización", titulo:"COTIZACIÓN",
@@ -2187,7 +2202,7 @@ function esqueletoDeEmergencia(){
   const dame = (f, siNo) => { try{ const v = f(); return v == null ? siNo : v; }catch(e){ return siNo; } };
   return {
     clientes: [], actividades: [], convenios: [], prospectos: [], contratos: [],
-    eventos: [], campanas: [], odts: [], certificados: [], huespedes: [],
+    eventos: [], campanas: [], odts: [], certificados: [], huespedes: [], serviciosBq: [],
     usuarios:     dame(() => USUARIOS_DEF.map(saneaUsuario), []),
     habitaciones: dame(() => HABS_DEF.map(saneaHab), []),
     ajustes: {
@@ -2273,6 +2288,7 @@ function sanear(s){
     odts:         Array.isArray(s.odts) ? s.odts.map(saneaOdt) : [],
     certificados: Array.isArray(s.certificados) ? s.certificados.map(saneaCertificado) : [],
     huespedes:    Array.isArray(s.huespedes) ? s.huespedes.map(saneaHuesped) : [],
+    serviciosBq:  catalogoServiciosBq(s.serviciosBq),
     usuarios:     Array.isArray(s.usuarios) ? s.usuarios.map(saneaUsuario) : USUARIOS_DEF.map(saneaUsuario),
     habitaciones: catalogo(s.habitaciones),
     ajustes: {
@@ -2604,6 +2620,44 @@ function saneaBloqueEv(b){
   o.pax = String(o.pax || "").trim();
   return o;
 }
+
+/**
+ * Un servicio del catálogo de banquetes.
+ *
+ * `conServicio` viaja con el servicio porque es una propiedad del servicio, no
+ * del renglón: la cena lleva el 15% y la pista no, siempre. Escogerlo en la
+ * cotización pone la palomita sola, y aun así se puede corregir —hay bodas
+ * que negocian el cargo—.
+ */
+function saneaServicioBq(s){
+  const o = Object.assign({ id:"", nombre:"", precio:0, conServicio:CON_SERVICIO_DEF }, s || {});
+  o.id = o.id || nuevoId("sb");
+  o.nombre = String(o.nombre || "").trim();
+  o.precio = Number(o.precio) || 0;
+  o.conServicio = !!o.conServicio;
+  /* El lugar que ocupa en la lista, igual que en el catálogo de habitaciones:
+     sin esto, mover un renglón no cambia ningún dato y no hay nada que subir. */
+  if (o.orden !== undefined){
+    o.orden = Number(o.orden);
+    if (!Number.isFinite(o.orden)) delete o.orden;
+  }
+  return o;
+}
+
+/** El catálogo, en el orden que dejó Ajustes. Uno sin orden se va al final. */
+function catalogoServiciosBq(guardados){
+  const lista = (Array.isArray(guardados) ? guardados : SERVICIOS_BQ_DEF).map(saneaServicioBq);
+  const pos = x => Number.isFinite(x.orden) ? x.orden : Infinity;
+  return lista.map((x, i) => [x, i])
+    .sort((a, b) => pos(a[0]) - pos(b[0]) || a[1] - b[1])
+    .map(par => par[0]);
+}
+
+/** El servicio del catálogo que se llama así, o null. */
+const servicioBqPorNombre = nombre => {
+  const n = String(nombre || "").trim();
+  return n ? (state.serviciosBq.find(x => x.nombre === n) || null) : null;
+};
 
 function saneaLineaEv(l){
   const o = Object.assign({ fecha:"", servicio:"", cantidad:"", precio:"",
@@ -3710,9 +3764,19 @@ function menuSesion(){
 /* ----- Traducción entre el estado y las filas de la tabla ----- */
 
 const COLECCIONES = ["clientes","actividades","convenios","contratos","eventos","prospectos",
-                     "campanas","odts","huespedes","habitaciones","usuarios","certificados"];
-/** Lo que roles.sql sólo deja escribir al administrador. */
-const SOLO_ADMIN = ["ajustes","usuarios","habitaciones"];
+                     "campanas","odts","huespedes","habitaciones","usuarios","certificados",
+                     "serviciosBq"];
+/**
+ * Lo que roles.sql sólo deja escribir al administrador.
+ *
+ * `serviciosBq` está aquí aunque el servidor no lo exija —un tipo nuevo cae en
+ * el `else true` de las reglas—, y es a propósito: sólo la administración ve
+ * la pantalla de Ajustes, así que nadie más lo edita, y estar en esta lista es
+ * lo que hace que en los demás equipos la copia del servidor gane en vez de
+ * quedarse congelada con la de antes. Es el mismo trato que el catálogo de
+ * habitaciones.
+ */
+const SOLO_ADMIN = ["ajustes","usuarios","habitaciones","serviciosBq"];
 
 function filasDeEstado(){
   const filas = [];
@@ -3729,7 +3793,7 @@ function estadoDesdeFilas(filas){
      perder datos —nadie se entera hasta que alguien pregunta por lo suyo—. */
   const bruto = { clientes:[], actividades:[], convenios:[], contratos:[], eventos:[],
                   prospectos:[], campanas:[], odts:[], huespedes:[], habitaciones:[],
-                  usuarios:[], certificados:[], ajustes:null };
+                  usuarios:[], certificados:[], serviciosBq:[], ajustes:null };
   for (const f of filas){
     if (f.tipo === "ajustes") bruto.ajustes = f.datos;
     else if (bruto[f.tipo]) bruto[f.tipo].push(f.datos);
@@ -4418,7 +4482,8 @@ async function bajarTodo(){
 
 const NOMBRE_TIPO = { clientes:"clientes", actividades:"actividades", convenios:"convenios",
   prospectos:"prospectos", huespedes:"huéspedes", habitaciones:"tipos de habitación",
-  usuarios:"usuarios", ajustes:"ajustes", odts:"órdenes de trabajo" };
+  usuarios:"usuarios", ajustes:"ajustes", odts:"órdenes de trabajo",
+  certificados:"certificados", serviciosBq:"servicios de banquetes" };
 
 function pantallaPermisos(){
   const ov = modal(`
@@ -4649,7 +4714,8 @@ const tipoLegible = t => ({
   clientes:"Un cliente", convenios:"Un convenio", contratos:"Un contrato",
   eventos:"Un evento", actividades:"Una actividad", huespedes:"Un huésped",
   prospectos:"Un prospecto", campanas:"Una campaña", odts:"Una orden de trabajo",
-  ajustes:"Los ajustes", usuarios:"La lista de usuarios", habitaciones:"El catálogo"
+  ajustes:"Los ajustes", usuarios:"La lista de usuarios", habitaciones:"El catálogo",
+  certificados:"Un certificado", serviciosBq:"El catálogo de servicios"
 }[t] || "Un registro");
 
 /** Lo que hay que hacer cuando este aparato no está hablando con el hotel. */
@@ -7567,6 +7633,18 @@ function renderAjustes(){
         <button class="btn sm" data-baja="${x.id}" title="Bajar un lugar" aria-label="Bajar un lugar">↓</button>
         <button class="btn sm danger" data-del="${x.id}">Eliminar</button></td></tr>`;
 
+  const filaSrv = x => `<tr data-sb="${x.id}">
+      <td><input class="field" data-sk="nombre" value="${esc(x.nombre)}"
+            placeholder="Cena emplatada" style="width:100%"></td>
+      <td><input class="field" data-sk="precio" inputmode="decimal"
+            value="${x.precio || ""}" style="width:120px;text-align:right"></td>
+      <td class="selcell"><input type="checkbox" data-sk="conServicio"${
+            x.conServicio ? " checked" : ""} title="¿Lleva el cargo por servicio del 15%?"></td>
+      <td class="nowrap">
+        <button class="btn sm" data-sbsube="${x.id}" title="Subir un lugar" aria-label="Subir un lugar">↑</button>
+        <button class="btn sm" data-sbbaja="${x.id}" title="Bajar un lugar" aria-label="Bajar un lugar">↓</button>
+        <button class="btn sm danger" data-sbdel="${x.id}">Eliminar</button></td></tr>`;
+
   const areaTexto = (k, label, alto, ayuda) => `
     <div class="full"><label class="lbl">${esc(label)}</label>
       ${ayuda ? `<div class="hint" style="margin:-2px 0 5px">${ayuda}</div>` : ""}
@@ -7739,6 +7817,22 @@ function renderAjustes(){
         <th style="width:140px">Tarifa pública</th><th style="width:190px"></th>
       </tr></thead><tbody id="tHab">${state.habitaciones.map(filaHab).join("")}</tbody></table>
       <p><button class="btn" id="bAddHab">+ Agregar tipo de habitación</button></p>
+
+      <h3 class="sec">Catálogo de servicios de banquetes</h3>
+      <div class="note">De aquí sale la lista que se escoge en la <b>propuesta económica</b> de
+        una cotización o un contrato de evento: al escoger el servicio se llenan solos su
+        precio y la palomita del cargo por servicio, y los dos se pueden corregir renglón por
+        renglón. Un documento ya emitido conserva lo que tenía: cambiar un precio aquí
+        <b>no</b> toca las cotizaciones de antes.</div>
+      <table class="data"><thead><tr>
+        <th>Servicio</th><th class="num" style="width:130px">Precio unitario</th>
+        <th style="width:60px" title="¿Lleva el cargo por servicio del 15%?">Serv.</th>
+        <th style="width:190px"></th>
+      </tr></thead><tbody id="tSrv">${state.serviciosBq.map(filaSrv).join("")}</tbody></table>
+      ${state.serviciosBq.length ? "" : `<p class="hint" style="margin-top:0">
+        Todavía no hay ninguno. Mientras esté vacío, en la cotización el servicio se sigue
+        escribiendo a mano, como hasta hoy.</p>`}
+      <p><button class="btn" id="bAddSrv">+ Agregar servicio</button></p>
 
       <h3 class="sec">Bloques de la carta</h3>
       <p class="hint" style="margin-top:0">El nombre encabeza la tabla de tarifas (“Deluxe / ${esc(h.nombre)}”)
@@ -7977,6 +8071,20 @@ function renderAjustes(){
       jefe:  tr.querySelector('[data-jk="jefe"]').value
     })));
 
+    p.querySelectorAll("#tSrv tr[data-sb]").forEach((tr, i) => {
+      const x = state.serviciosBq.find(y => y.id === tr.dataset.sb);
+      if (!x) return;
+      x.orden       = i;
+      x.nombre      = tr.querySelector('[data-sk="nombre"]').value.trim();
+      x.precio      = parseMoney(tr.querySelector('[data-sk="precio"]').value);
+      x.conServicio = tr.querySelector('[data-sk="conServicio"]').checked;
+    });
+    /* OJO: aquí NO se tiran los que todavía no tienen nombre. `recogerAjustes`
+       corre también al agregar, al mover y al eliminar otro renglón, y
+       tirarlos aquí hacía que agregar dos servicios seguidos borrara el
+       primero antes de poder escribirle nada. Se tiran al guardar, que es
+       cuando alguien dice que terminó —ver #bGuardarAj—. */
+
     p.querySelectorAll("#tHab tr[data-id]").forEach((tr, i) => {
       const x = state.habitaciones.find(y => y.id === tr.dataset.id);
       if (!x) return;
@@ -8065,6 +8173,42 @@ function renderAjustes(){
     state.habitaciones.push(saneaHab({ nombre:"Nuevo tipo", grupo:"deluxe", publica:null }));
     guardar(); renderAjustes();
   };
+
+  /* El catálogo de servicios de banquetes: mismo trato que el de habitaciones
+     —recoger antes de repintar, o se le borra a quien esté capturando—. */
+  p.querySelector("#bAddSrv").onclick = () => {
+    recogerAjustes();
+    state.serviciosBq.push(saneaServicioBq({ nombre:"", precio:0 }));
+    guardar(); renderAjustes();
+    const ultimo = document.querySelector("#tSrv tr:last-child [data-sk='nombre']");
+    if (ultimo){ ultimo.scrollIntoView({ block:"center" }); ultimo.focus(); }
+  };
+  const moverSrv = (id, paso) => {
+    recogerAjustes();
+    const i = state.serviciosBq.findIndex(x => x.id === id);
+    const j = i + paso;
+    if (i < 0 || j < 0 || j >= state.serviciosBq.length) return;
+    const a = state.serviciosBq;
+    [a[i], a[j]] = [a[j], a[i]];
+    a.forEach((x, k) => { x.orden = k; });
+    guardar(); renderAjustes();
+  };
+  p.querySelectorAll("[data-sbsube]").forEach(b => b.onclick = () => moverSrv(b.dataset.sbsube, -1));
+  p.querySelectorAll("[data-sbbaja]").forEach(b => b.onclick = () => moverSrv(b.dataset.sbbaja,  1));
+  p.querySelectorAll("[data-sbdel]").forEach(b => b.onclick = () => {
+    const id = b.dataset.sbdel;
+    const x = state.serviciosBq.find(y => y.id === id);
+    /* Los documentos ya capturados guardan el NOMBRE del servicio, no su
+       identificador: quitarlo del catálogo no los toca, pero conviene decirlo
+       en vez de dejar a alguien con la duda. */
+    const usos = x ? state.eventos.filter(e =>
+      (e.lineas || []).some(l => l.servicio === x.nombre)).length : 0;
+    if (usos && !confirm(`«${x.nombre}» aparece en ${usos} documento(s) de evento. ` +
+      `Esos conservan su renglón y su precio; sólo deja de salir en la lista. ¿Eliminarlo?`)) return;
+    recogerAjustes();
+    state.serviciosBq = state.serviciosBq.filter(y => y.id !== id);
+    guardar(); renderAjustes();
+  });
   /* Mover un renglón de lugar.
    *
    * Primero se recoge lo que haya tecleado en la pantalla y luego se mueve:
@@ -8268,6 +8412,10 @@ function renderAjustes(){
 
   p.querySelector("#bGuardarAj").onclick = () => {
     recogerAjustes();
+    /* Un servicio sin nombre en la lista desplegable es un renglón en blanco
+       que nadie entiende. Agregar uno y arrepentirse es normal: se descarta
+       aquí, al guardar, y no antes. */
+    state.serviciosBq = state.serviciosBq.filter(x => x.nombre);
     guardar(); renderAjustes();
     const ok = document.getElementById("ajOk");
     if (ok){ ok.textContent = "Guardado ✓"; setTimeout(() => { if (ok) ok.textContent = ""; }, 2500); }
@@ -14248,9 +14396,37 @@ function editarEvento(id, tipoPre, alCerrar){
     <td><input class="field b-renta" value="${esc(b.renta)}" placeholder="En cortesía por consumo" style="width:100%"></td>
     <td><button class="btn sm danger" data-quita>✕</button></td></tr>`;
 
-  const filaL = l => `<tr>
+  /* El catálogo manda la lista, pero NO manda el renglón.
+   *
+   * La celda tiene las dos cosas: la lista para escoger y un campo de texto
+   * que es el que de verdad guarda el valor. Así un documento viejo —y los
+   * hay, la propuesta era texto libre— sigue abriendo con lo suyo aunque ese
+   * servicio no esté en el catálogo, y una boda que pidió algo especial se
+   * puede cotizar con «Otro servicio…» sin ir a Ajustes a media captura.
+   * De paso, el renglón se sigue leyendo de `.l-servicio` igual que siempre. */
+  const OTRO_SRV = "::otro::";
+  const opcionesSrv = sel => {
+    const cat = state.serviciosBq.filter(x => x.nombre);
+    const conocido = cat.some(x => x.nombre === sel);
+    return `<option value=""${!sel ? " selected" : ""}>— Escoge —</option>` +
+      cat.map(x => `<option value="${esc(x.nombre)}"${
+        x.nombre === sel ? " selected" : ""}>${esc(x.nombre)}</option>`).join("") +
+      `<option value="${OTRO_SRV}"${sel && !conocido ? " selected" : ""}>Otro servicio…</option>`;
+  };
+  /* Con el catálogo vacío no se enseña una lista de un solo renglón: se deja
+     el campo de siempre, para que nada se sienta peor que antes mientras
+     alguien lo captura. */
+  const celdaServicio = l => state.serviciosBq.some(x => x.nombre)
+    ? `<select class="field l-srvSel" style="width:100%">${opcionesSrv(l.servicio)}</select>
+       <input class="field l-servicio" value="${esc(l.servicio)}" placeholder="Escríbelo"
+         style="width:100%;margin-top:4px${
+           l.servicio && !state.serviciosBq.some(x => x.nombre === l.servicio) ? "" : ";display:none"}">`
+    : `<input class="field l-servicio" value="${esc(l.servicio)}" placeholder="Cena emplatada" style="width:100%">`;
+
+  const filaL = l => `<tr data-srv-antes="${esc(
+      state.serviciosBq.some(x => x.nombre === l.servicio) ? l.servicio : "")}">
     <td><input class="field l-fecha" type="date" value="${esc(l.fecha)}" style="width:100%"></td>
-    <td><input class="field l-servicio" value="${esc(l.servicio)}" placeholder="Cena emplatada" style="width:100%"></td>
+    <td>${celdaServicio(l)}</td>
     <td><input class="field l-cant num" inputmode="numeric" value="${l.cantidad || ""}" style="width:100%;text-align:right"></td>
     <td><input class="field l-precio num" inputmode="decimal" value="${l.precio || ""}" style="width:100%;text-align:right"></td>
     <td class="selcell"><input type="checkbox" class="l-serv"${l.conServicio ? " checked" : ""}
@@ -14311,7 +14487,14 @@ function editarEvento(id, tipoPre, alCerrar){
 
         <h3 class="sec">Propuesta económica</h3>
         <div class="note">La palomita de <b>Serv.</b> marca los renglones que llevan el cargo
-          por servicio: alimentos y bebidas sí, audiovisual y mobiliario no.</div>
+          por servicio: alimentos y bebidas sí, audiovisual y mobiliario no.
+          ${state.serviciosBq.some(x => x.nombre)
+            ? `Al escoger el servicio se llenan solos el precio y la palomita, y los dos se
+               pueden corregir aquí sin tocar el catálogo.`
+            : `<br><b>El catálogo de servicios está vacío</b>, así que por ahora el servicio se
+               escribe a mano. Con los servicios y sus precios capturados en
+               <i>Ajustes → Catálogo de servicios de banquetes</i>, aquí sale una lista para
+               escoger y el precio se llena solo.`}</div>
         <div style="overflow:auto"><table class="data" id="tLin">
           <thead><tr><th style="width:150px">Fecha</th><th>Servicio</th>
             <th class="num" style="width:80px">Cant.</th><th class="num" style="width:110px">P. unitario</th>
@@ -14376,8 +14559,46 @@ function editarEvento(id, tipoPre, alCerrar){
     if (ev.target.closest("#tLin") || ev.target.id === "evIva" || ev.target.id === "evServ")
       recalcular();
   });
+  /**
+   * Escoger un servicio llena el renglón: su precio y su palomita.
+   *
+   * Lo que se cuida es no pisar lo tecleado a mano. Sólo se reescribe lo que
+   * esté vacío o lo que siga siendo, al centavo, lo del servicio anterior —el
+   * mismo trato que los textos del certificado—. Así, cambiar de servicio por
+   * equivocación no borra el precio que alguien negoció con el cliente.
+   */
+  function escogerServicio(sel){
+    const tr = sel.closest("tr");
+    const txt = tr.querySelector(".l-servicio");
+    const precio = tr.querySelector(".l-precio");
+    const palomita = tr.querySelector(".l-serv");
+
+    if (sel.value === OTRO_SRV){
+      txt.style.display = "";
+      // Venía de la lista: se limpia para que no parezca que ya está escrito.
+      if (servicioBqPorNombre(txt.value)) txt.value = "";
+      tr.dataset.srvAntes = "";
+      txt.focus();
+      recalcular();
+      return;
+    }
+
+    txt.style.display = "none";
+    txt.value = sel.value;
+    const x = servicioBqPorNombre(sel.value);
+    if (x){
+      const antes = servicioBqPorNombre(tr.dataset.srvAntes || "");
+      const puesto = parseMoney(precio.value);
+      if (!puesto || (antes && puesto === antes.precio)) precio.value = x.precio || "";
+      if (!antes || palomita.checked === antes.conServicio) palomita.checked = x.conServicio;
+    }
+    tr.dataset.srvAntes = sel.value;
+    recalcular();
+  }
+
   ov.addEventListener("change", ev => {
     if (ev.target.classList.contains("l-serv")) recalcular();
+    if (ev.target.classList.contains("l-srvSel")) escogerServicio(ev.target);
   });
   ov.addEventListener("click", ev => {
     const b = ev.target.closest("[data-quita]");
@@ -18149,7 +18370,8 @@ function abrirExportar(){
   ov.querySelector("#wipe").onclick = () => {
     if (!confirm("Se borrarán TODOS los clientes, actividades y convenios de este navegador. ¿Continuar?")) return;
     if (!confirm("Confirma otra vez: esta acción no se puede deshacer.")) return;
-    state = sanear({ habitaciones: state.habitaciones, ajustes: state.ajustes });
+    state = sanear({ habitaciones: state.habitaciones, serviciosBq: state.serviciosBq,
+                     ajustes: state.ajustes });
     guardar(); render(); ov.remove();
   };
 }

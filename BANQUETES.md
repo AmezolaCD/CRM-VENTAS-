@@ -98,7 +98,14 @@ Pestaña **Eventos**. Sale del machote que trae el departamento, sección por se
   un evento que cruza la medianoche sale en los dos días.
 - **Servicios cotizados**: texto libre, tal cual va en el documento, por espacio y con sus
   viñetas. Se imprime respetando los renglones.
-- **Propuesta económica**: cada renglón con su cantidad y su precio. El **IVA del 8%** lo pagan
+- **Propuesta económica**: el servicio se escoge de una **lista desplegable** —el catálogo que
+  se captura en *Ajustes → Catálogo de servicios de banquetes*— y al escogerlo se llenan solos
+  el **precio unitario** y la palomita del cargo por servicio; los dos se pueden corregir
+  renglón por renglón sin tocar el catálogo. Lo que no esté en la lista se cotiza con **Otro
+  servicio…**, que abre un campo para escribirlo. Con el catálogo vacío el servicio se sigue
+  escribiendo a mano, como antes, y los documentos de antes conservan su renglón tal cual.
+  Cambiar un precio en el catálogo **no** toca las cotizaciones ya capturadas.
+  Cada renglón lleva su cantidad y su precio. El **IVA del 8%** lo pagan
   todos; el **cargo por servicio del 15%** sólo los que lo lleven, y eso se marca con una
   palomita renglón por renglón — alimentos y bebidas sí, audiovisual, DJ, pista y mobiliario
   no. Así es como lo cobra el hotel y así cuadran las cuentas con las cotizaciones que ya

@@ -41,6 +41,7 @@ node pruebas/navegador/copiar-el-sql.mjs             # el .sql llega entero
 node pruebas/navegador/certificados.mjs             # el folio no se repite y quién emite
 node pruebas/navegador/arranque.mjs                 # que la aplicación abra
 node pruebas/navegador/no-se-pierde-lo-escrito.mjs  # guardar guarda de verdad
+node pruebas/navegador/servicios-de-banquetes.mjs   # la propuesta sale del catálogo
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
