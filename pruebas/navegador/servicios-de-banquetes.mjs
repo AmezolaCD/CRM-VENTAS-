@@ -369,12 +369,12 @@ await bloque('9 · la lista se carga de golpe, pegándola', async () => {
      hotel y los de su proveedor, y este repositorio es público. Lo que se
      prueba es la forma del archivo, no sus cifras. */
   const LISTA = [
-    'Servicio,Precio,Serv.',
-    'Cafetería de ejemplo · una pausa,111,sí',
-    '"Menú de ejemplo en 3 tiempos de pollo, cerdo o vegetariano",222,sí',
-    'Barra de ejemplo · hasta 4 horas,333,sí',
-    'Proyector de ejemplo,444,no',
-    'Pista de ejemplo 6 x 8 m,555,no',
+    'Servicio,Precio,Serv.,Familia',
+    'Cafetería de ejemplo · una pausa,111,sí,Alimentos de ejemplo',
+    '"Menú de ejemplo en 3 tiempos de pollo, cerdo o vegetariano",222,sí,Alimentos de ejemplo',
+    'Barra de ejemplo · hasta 4 horas,333,sí,Bebidas de ejemplo',
+    'Proyector de ejemplo,444,no,Audiovisual de ejemplo',
+    'Pista de ejemplo 6 x 8 m,555,no,Audiovisual de ejemplo',
     'Silla de ejemplo,66,no'
   ].join('\n');
 
@@ -404,6 +404,32 @@ await bloque('9 · la lista se carga de golpe, pegándola', async () => {
     r.includes('Proyector de ejemplo|444|no') &&
     r.includes('Pista de ejemplo 6 x 8 m|555|no') &&
     r.includes('Silla de ejemplo|66|no'));
+
+  /* Con 130 servicios de dos listas, la lista desplegable tiene que venir
+     partida por familias o no se puede usar. */
+  const g = await admin.p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    vista = 'eventos'; render();
+    editarEvento(null, null, 'cotizacion');
+    await new Promise(r => setTimeout(r, 300));
+    const sel = document.querySelector('#tLin tbody tr .l-srvSel');
+    return {
+      grupos: [...sel.querySelectorAll('optgroup')].map(o => o.label),
+      enAlimentos: [...sel.querySelectorAll('optgroup[label="Alimentos de ejemplo"] option')]
+        .map(o => o.value),
+      sueltos: [...sel.children].filter(e => e.tagName === 'OPTION' && e.value &&
+        e.value !== '::otro::').map(o => o.value),
+      cuantos: sel.querySelectorAll('option').length
+    };
+  });
+  afirma('la lista viene partida por familias, en el orden del catálogo',
+    g.grupos.join(' · ') === 'Alimentos de ejemplo · Bebidas de ejemplo · Audiovisual de ejemplo');
+  afirma('cada servicio bajo la suya', g.enAlimentos.length === 2 &&
+    g.enAlimentos.some(v => /Cafetería/.test(v)) && g.enAlimentos.some(v => /Menú/.test(v)));
+  /* Uno sin familia no se pierde: sale suelto al final, no desaparece. */
+  afirma('el que no trae familia sale suelto, no se pierde',
+    g.sueltos.join('') === 'Silla de ejemplo');
+  afirma('y están los seis, más «Escoge» y «Otro»', g.cuantos === 8);
 });
 
 await bloque('10 · volver a cargarla actualiza precios sin duplicar', async () => {
@@ -415,6 +441,8 @@ await bloque('10 · volver a cargarla actualiza precios sin duplicar', async () 
     document.getElementById('bImpSrv').click();
     await new Promise(r => setTimeout(r, 200));
     // El mismo servicio con otro precio, y uno nuevo.
+    /* Sin cuarta columna a propósito: un archivo viejo de tres columnas tiene
+       que seguir entrando, y no debe borrar la familia que ya estaba puesta. */
     document.getElementById('srvTexto').value =
       'Cafetería de ejemplo · una pausa,999,sí\nCalentón de ejemplo,777,no';
     document.getElementById('srvCargar').click();
@@ -422,12 +450,15 @@ await bloque('10 · volver a cargarla actualiza precios sin duplicar', async () 
     const cafe = state.serviciosBq.filter(x => /una pausa/.test(x.nombre));
     return { antes, despues: state.serviciosBq.length,
              cuantosCafe: cafe.length, precioCafe: cafe[0] && cafe[0].precio,
-             hayCalenton: state.serviciosBq.some(x => x.nombre === 'Calentón de ejemplo') };
+             hayCalenton: state.serviciosBq.some(x => x.nombre === 'Calentón de ejemplo'),
+             familiaCafe: cafe[0] && cafe[0].familia };
   });
   afirma('el que ya estaba no se duplicó', r.cuantosCafe === 1);
   afirma('se le actualizó el precio', r.precioCafe === 999);
   afirma('el nuevo se agregó', r.hayCalenton);
   afirma('y no se borró nada de lo demás', r.despues === r.antes + 1);
+  afirma('un archivo de tres columnas no le borra la familia que ya tenía',
+    r.familiaCafe === 'Alimentos de ejemplo');
 });
 
 await bloque('11 · «reemplazar» sí deja sólo lo nuevo', async () => {
@@ -446,6 +477,62 @@ await bloque('11 · «reemplazar» sí deja sólo lo nuevo', async () => {
   afirma('quedan nada más los dos', r.length === 2);
   afirma('y en el orden en que venían',
     r[0] === 'Cena emplatada' && r[1] === 'Pista iluminada');
+});
+
+/* ---------------------------------------------------------------------------
+   12 · «GUARDAR AJUSTES» GUARDA LOS SERVICIOS.
+
+   Marco lo preguntó con razón, porque ya le pasó: cada vez que se agrega algo
+   a la pantalla de Ajustes hay que acordarse de recogerlo al guardar, y si se
+   olvida, el botón dice «Guardado ✓» y no guarda ese campo. Pasó con quién
+   firma los certificados. Esto lo prueba haciendo lo mismo que haría él: con
+   el ratón, campo por campo, y comprobando los CUATRO —nombre, familia,
+   precio y la palomita— en el estado, en el disco y después de recargar.
+   --------------------------------------------------------------------------- */
+await bloque('12 · «Guardar ajustes» sí guarda los servicios', async () => {
+  const puesto = await admin.p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    state.serviciosBq = [saneaServicioBq({ id:'sbX', nombre:'Antes', familia:'Antes',
+                                           precio:1, conServicio:true })];
+    guardar();
+    /* Salir y volver a entrar, como lo haría una persona: estando ya en
+       Ajustes la pantalla NO se repinta sola —es a propósito, si no se le
+       borraría a quien esté capturando—. */
+    vista = 'tablero'; render();
+    await new Promise(r => setTimeout(r, 200));
+    vista = 'ajustes'; render();
+    await new Promise(r => setTimeout(r, 300));
+    const tr = document.querySelector('#tSrv tr[data-sb="sbX"]');
+    tr.querySelector('[data-sk="nombre"]').value  = 'Montaje y mantelería de ejemplo';
+    tr.querySelector('[data-sk="familia"]').value = 'Mobiliario de ejemplo';
+    tr.querySelector('[data-sk="precio"]').value  = '1,234.50';
+    tr.querySelector('[data-sk="conServicio"]').checked = false;
+    document.getElementById('bGuardarAj').click();
+    await new Promise(r => setTimeout(r, 400));
+    const x = state.serviciosBq[0];
+    let d = null;
+    try{ d = (JSON.parse(localStorage.getItem('crm-hotel-v3')).serviciosBq || [])[0]; }catch(e){}
+    return { estado: x && [x.nombre, x.familia, x.precio, x.conServicio].join('|'),
+             disco:  d && [d.nombre, d.familia, d.precio, d.conServicio].join('|'),
+             dijo: (document.getElementById('ajOk') || {}).textContent };
+  });
+  const ESPERADO = 'Montaje y mantelería de ejemplo|Mobiliario de ejemplo|1234.5|false';
+  afirma('los cuatro campos quedan en el estado', puesto.estado === ESPERADO);
+  afirma('y escritos en el equipo', puesto.disco === ESPERADO);
+  /* El precio con coma y centavos no se puede perder: «1,234.50» son mil
+     doscientos treinta y cuatro con cincuenta, no uno. */
+  afirma('el precio se entiende con coma de miles y centavos',
+    /\|1234\.5\|/.test(puesto.estado || ''));
+  afirma('y la pantalla dice que guardó', /Guardado/.test(puesto.dijo || ''));
+
+  // Y lo que de verdad cuenta: que siga ahí después de recargar.
+  await admin.p.reload();
+  await admin.p.waitForFunction(() => typeof sincronizar === 'function', null, { timeout:15000 });
+  const tras = await admin.p.evaluate(() => {
+    const x = state.serviciosBq[0];
+    return x && [x.nombre, x.familia, x.precio, x.conServicio].join('|');
+  });
+  afirma('y sobrevive a recargar la aplicación', tras === ESPERADO);
 });
 
 await br.close(); srv.close();

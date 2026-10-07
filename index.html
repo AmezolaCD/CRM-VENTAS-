@@ -971,7 +971,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.07-101";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.07-102";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2630,9 +2630,16 @@ function saneaBloqueEv(b){
  * que negocian el cargo—.
  */
 function saneaServicioBq(s){
-  const o = Object.assign({ id:"", nombre:"", precio:0, conServicio:CON_SERVICIO_DEF }, s || {});
+  const o = Object.assign({ id:"", nombre:"", precio:0, familia:"",
+                            conServicio:CON_SERVICIO_DEF }, s || {});
   o.id = o.id || nuevoId("sb");
   o.nombre = String(o.nombre || "").trim();
+  /* De qué es: alimentos, audiovisual, mobiliario… Es texto libre a propósito,
+     porque la lista de un hotel no se parece a la de otro y el día que entre
+     una familia nueva nadie tiene que pedirme nada. Sirve para una sola cosa:
+     partir la lista desplegable, que con 130 renglones corridos no se puede
+     usar. Vacía quiere decir «sin agrupar», y ésas salen al final. */
+  o.familia = String(o.familia || "").trim();
   o.precio = Number(o.precio) || 0;
   o.conServicio = !!o.conServicio;
   /* El lugar que ocupa en la lista, igual que en el catálogo de habitaciones:
@@ -7636,6 +7643,8 @@ function renderAjustes(){
   const filaSrv = x => `<tr data-sb="${x.id}">
       <td><input class="field" data-sk="nombre" value="${esc(x.nombre)}"
             placeholder="Cena emplatada" style="width:100%"></td>
+      <td><input class="field" data-sk="familia" value="${esc(x.familia)}"
+            list="listaFamiliasSrv" placeholder="Sin agrupar" style="width:100%"></td>
       <td><input class="field" data-sk="precio" inputmode="decimal"
             value="${x.precio || ""}" style="width:120px;text-align:right"></td>
       <td class="selcell"><input type="checkbox" data-sk="conServicio"${
@@ -7824,8 +7833,12 @@ function renderAjustes(){
         precio y la palomita del cargo por servicio, y los dos se pueden corregir renglón por
         renglón. Un documento ya emitido conserva lo que tenía: cambiar un precio aquí
         <b>no</b> toca las cotizaciones de antes.</div>
+      <datalist id="listaFamiliasSrv">${
+        [...new Set(state.serviciosBq.map(x => x.familia).filter(Boolean))]
+          .map(f => `<option value="${esc(f)}">`).join("")}</datalist>
       <table class="data"><thead><tr>
-        <th>Servicio</th><th class="num" style="width:130px">Precio unitario</th>
+        <th>Servicio</th><th style="width:200px">Familia</th>
+        <th class="num" style="width:130px">Precio unitario</th>
         <th style="width:60px" title="¿Lleva el cargo por servicio del 15%?">Serv.</th>
         <th style="width:190px"></th>
       </tr></thead><tbody id="tSrv">${state.serviciosBq.map(filaSrv).join("")}</tbody></table>
@@ -8079,6 +8092,7 @@ function renderAjustes(){
       if (!x) return;
       x.orden       = i;
       x.nombre      = tr.querySelector('[data-sk="nombre"]').value.trim();
+      x.familia     = tr.querySelector('[data-sk="familia"]').value.trim();
       x.precio      = parseMoney(tr.querySelector('[data-sk="precio"]').value);
       x.conServicio = tr.querySelector('[data-sk="conServicio"]').checked;
     });
@@ -8208,7 +8222,10 @@ function renderAjustes(){
       leidos.push({ nombre, precio: parseMoney(f[1]),
         /* Vacío quiere decir «sí»: los alimentos y las bebidas son la mayor
            parte de la lista y son justo los que lo llevan. */
-        conServicio: serv === "" ? true : /^(s[ií]|si|1|true|x)$/.test(serv) });
+        conServicio: serv === "" ? true : /^(s[ií]|si|1|true|x)$/.test(serv),
+        /* La cuarta columna es opcional: un archivo de tres columnas —los que
+           ya se hayan cargado— sigue entrando igual, nada más sin agrupar. */
+        familia: String(f[3] == null ? "" : f[3]).trim() });
     }
     if (!leidos.length) return { leidos:0 };
 
@@ -8220,8 +8237,11 @@ function renderAjustes(){
       for (const x of leidos){
         const ya = state.serviciosBq.find(y => y.nombre.toLowerCase() === x.nombre.toLowerCase());
         if (ya){
-          if (ya.precio !== x.precio || ya.conServicio !== x.conServicio) cambiados++;
+          if (ya.precio !== x.precio || ya.conServicio !== x.conServicio ||
+              (x.familia && ya.familia !== x.familia)) cambiados++;
           ya.precio = x.precio; ya.conServicio = x.conServicio;
+          // Una familia vacía en el archivo no borra la que ya tenía puesta.
+          if (x.familia) ya.familia = x.familia;
         } else {
           state.serviciosBq.push(saneaServicioBq(x)); nuevos++;
         }
@@ -8234,8 +8254,8 @@ function renderAjustes(){
   p.querySelector("#bExpSrv").onclick = () => {
     recogerAjustes();
     descargar(`servicios-de-banquetes-${hoyISO()}.csv`,
-      toCSV([["Servicio","Precio","Serv."]].concat(
-        state.serviciosBq.map(x => [x.nombre, x.precio, x.conServicio ? "sí" : "no"]))),
+      toCSV([["Servicio","Precio","Serv.","Familia"]].concat(
+        state.serviciosBq.map(x => [x.nombre, x.precio, x.conServicio ? "sí" : "no", x.familia]))),
       "text/csv");
   };
 
@@ -8246,14 +8266,15 @@ function renderAjustes(){
         <div class="modal-head"><h2>Cargar la lista de servicios</h2>
           <button class="btn" data-close>✕</button></div>
         <div class="modal-body">
-          <div class="note">Un servicio por renglón: <b>nombre, precio, serv</b>. En la
-            tercera columna <b>sí</b> o <b>no</b> dice si lleva el cargo por servicio del
-            15% —alimentos y bebidas sí; audiovisual, mobiliario, DJ y pista no—. Si se deja
-            vacía se toma como <b>sí</b>. Sirve pegarlo aquí o escoger un archivo
-            <code>.csv</code>.</div>
+          <div class="note">Un servicio por renglón:
+            <b>nombre, precio, serv, familia</b>. En la tercera columna <b>sí</b> o <b>no</b>
+            dice si lleva el cargo por servicio del 15% —alimentos y bebidas sí; audiovisual,
+            mobiliario, DJ y pista no—; vacía se toma como <b>sí</b>. La cuarta es con qué
+            título se agrupa en la lista desplegable y se puede dejar vacía. Sirve pegarlo
+            aquí o escoger un archivo <code>.csv</code>.</div>
           <p><input type="file" id="srvArch" accept=".csv,text/csv,text/plain"></p>
           <textarea class="field mono" id="srvTexto" style="width:100%;min-height:180px"
-            placeholder="Cena emplatada, 850, sí&#10;Pista iluminada, 6500, no"></textarea>
+            placeholder="Cena emplatada, 850, sí, Alimentos&#10;Pista iluminada, 6500, no, Iluminación"></textarea>
           <p><label style="display:flex;gap:8px;align-items:flex-start">
             <input type="checkbox" id="srvReemplaza">
             <span>Reemplazar todo el catálogo. Sin esto, lo que ya esté se le actualiza el
@@ -14512,16 +14533,26 @@ function editarEvento(id, tipoPre, alCerrar){
   const opcionesSrv = sel => {
     const cat = state.serviciosBq.filter(x => x.nombre);
     const conocido = cat.some(x => x.nombre === sel);
+    const una = x => `<option value="${esc(x.nombre)}"${
+      x.nombre === sel ? " selected" : ""}>${esc(x.nombre)}</option>`;
+    /* Por familias, en el orden en que aparecen en el catálogo. Las que no
+       tienen se van al final, sueltas: con 130 servicios de dos listas
+       distintas, una sola tira corrida no se puede usar. */
+    const familias = [];
+    for (const x of cat) if (x.familia && !familias.includes(x.familia)) familias.push(x.familia);
+    const sueltos = cat.filter(x => !x.familia);
     return `<option value=""${!sel ? " selected" : ""}>— Escoge —</option>` +
-      cat.map(x => `<option value="${esc(x.nombre)}"${
-        x.nombre === sel ? " selected" : ""}>${esc(x.nombre)}</option>`).join("") +
+      familias.map(f => `<optgroup label="${esc(f)}">${
+        cat.filter(x => x.familia === f).map(una).join("")}</optgroup>`).join("") +
+      sueltos.map(una).join("") +
       `<option value="${OTRO_SRV}"${sel && !conocido ? " selected" : ""}>Otro servicio…</option>`;
   };
   /* Con el catálogo vacío no se enseña una lista de un solo renglón: se deja
      el campo de siempre, para que nada se sienta peor que antes mientras
      alguien lo captura. */
   const celdaServicio = l => state.serviciosBq.some(x => x.nombre)
-    ? `<select class="field l-srvSel" style="width:100%">${opcionesSrv(l.servicio)}</select>
+    ? `<select class="field l-srvSel" title="${esc(l.servicio)}" style="width:100%"
+         >${opcionesSrv(l.servicio)}</select>
        <input class="field l-servicio" value="${esc(l.servicio)}" placeholder="Escríbelo"
          style="width:100%;margin-top:4px${
            l.servicio && !state.serviciosBq.some(x => x.nombre === l.servicio) ? "" : ";display:none"}">`
@@ -14689,6 +14720,8 @@ function editarEvento(id, tipoPre, alCerrar){
 
     txt.style.display = "none";
     txt.value = sel.value;
+    // La columna es angosta y hay nombres largos: el completo, al pasar el ratón.
+    sel.title = sel.value;
     const x = servicioBqPorNombre(sel.value);
     if (x){
       const antes = servicioBqPorNombre(tr.dataset.srvAntes || "");
