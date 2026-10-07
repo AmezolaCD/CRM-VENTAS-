@@ -550,6 +550,11 @@
      condiciones y el folio. Van en píxeles de hoja carta a 96 dpi
      (816 x 1056), que es el lienzo del rasterizador: esta hoja no se
      reacomoda, se imprime. */
+  /* Lo que incluye un paquete, debajo de su nombre en la cotización. Sin
+     cifras: los costos de cada concepto son control interno. */
+  .inc-paq{margin:4px 0 0 0; padding-left:16px; font-size:11px; color:#4a3b57}
+  .inc-paq li{margin:1px 0}
+
   .cert{position:relative; width:816px; height:1056px; overflow:hidden;
     background:#fff; color:#2b0d3a;
     font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif;
@@ -596,6 +601,15 @@
   .cert-mini{overflow:hidden; border-radius:8px;
     width:calc(816px * var(--z)); height:calc(1056px * var(--z))}
   .cert-mini .cert-marco{transform:scale(var(--z)); box-shadow:none; border-radius:0}
+  /* El desglose de un paquete, colgando de su renglón. Hundido y con una
+     barra de color para que se lea como «esto pertenece al renglón de
+     arriba», y no como otra línea de la cotización. */
+  .desglose{background:var(--panel-2, rgba(128,100,180,.06)); padding:10px 12px 12px;
+    border-left:3px solid var(--morado, #5b3fd6)}
+  .desglose-tit{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px}
+  .desglose table{margin:0}
+  .desglose .hint{margin:0}
+
   /* La captura: los campos de un lado, la hoja del otro. La columna de la
      hoja mide EXACTAMENTE lo que mide la hoja encogida. Dejarla a su aire la
      ensanchaba el día que abajo salía un aviso largo, y los campos se
@@ -971,7 +985,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.07-104";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.07-105";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2629,9 +2643,44 @@ function saneaBloqueEv(b){
  * cotización pone la palomita sola, y aun así se puede corregir —hay bodas
  * que negocian el cargo—.
  */
+/**
+ * Un renglón del desglose de un paquete: de qué se compone.
+ *
+ * Va con UNITARIO y CANTIDAD, no con un costo por persona ya repartido, y eso
+ * es a propósito: en el libro del hotel las cantidades son mixtas —el menú va
+ * por persona, el mantel por mesa, el hospedaje es uno—, así que repartirlo
+ * entre los invitados daría una cifra que deja de ser cierta en cuanto cambia
+ * el número de personas.
+ */
+function saneaParteBq(x){
+  const o = Object.assign({ concepto:"", unitario:0, cantidad:0 }, x || {});
+  o.concepto = String(o.concepto || "").trim();
+  o.unitario = Number(o.unitario) || 0;
+  o.cantidad = Number(o.cantidad) || 0;
+  return o;
+}
+
+/** Lo que suman las partes: el costo del paquete para TODO el evento. */
+const sumaPartes = partes =>
+  (partes || []).reduce((a, x) => a + (Number(x.unitario) || 0) * (Number(x.cantidad) || 0), 0);
+
+/**
+ * El costo por persona que sale de un desglose, para `pax` invitados.
+ *
+ * Redondeado al peso: es lo que se le cotiza al cliente y nadie cotiza
+ * centavos por persona. Sin invitados no hay por persona que valga.
+ */
+const porPersonaPartes = (partes, pax) => {
+  const n = Number(pax) || 0;
+  return n > 0 ? Math.round(sumaPartes(partes) / n) : 0;
+};
+
 function saneaServicioBq(s){
   const o = Object.assign({ id:"", nombre:"", precio:0, familia:"",
-                            conServicio:CON_SERVICIO_DEF }, s || {});
+                            partes:[], conServicio:CON_SERVICIO_DEF }, s || {});
+  /* De qué se compone, cuando es un paquete. Los demás servicios la traen
+     vacía y no cambian en nada. */
+  o.partes = Array.isArray(o.partes) ? o.partes.map(saneaParteBq).filter(x => x.concepto) : [];
   o.id = o.id || nuevoId("sb");
   o.nombre = String(o.nombre || "").trim();
   /* De qué es: alimentos, audiovisual, mobiliario… Es texto libre a propósito,
@@ -2668,7 +2717,11 @@ const servicioBqPorNombre = nombre => {
 
 function saneaLineaEv(l){
   const o = Object.assign({ fecha:"", servicio:"", cantidad:"", precio:"",
-    conServicio:CON_SERVICIO_DEF }, l || {});
+    partes:[], conServicio:CON_SERVICIO_DEF }, l || {});
+  /* Su PROPIA copia del desglose, no una liga al catálogo. Cambiar un costo
+     en Ajustes no puede mover una cotización ya capturada —igual que hoy no
+     le mueve el precio—. */
+  o.partes = Array.isArray(o.partes) ? o.partes.map(saneaParteBq).filter(x => x.concepto) : [];
   o.fecha = String(o.fecha || "").trim();
   o.servicio = String(o.servicio || "").trim();
   o.cantidad = Number(o.cantidad) || 0;
@@ -8258,7 +8311,17 @@ function renderAjustes(){
         conServicio: serv === "" ? true : /^(s[ií]|si|1|true|x)$/.test(serv),
         /* La cuarta columna es opcional: un archivo de tres columnas —los que
            ya se hayan cargado— sigue entrando igual, nada más sin agrupar. */
-        familia: String(f[3] == null ? "" : f[3]).trim() });
+        familia: String(f[3] == null ? "" : f[3]).trim(),
+        /* La quinta columna es el desglose del paquete, y es opcional: los
+           renglones separados por `;` y cada uno `concepto|unitario|cantidad`.
+           Feo de leer, sí; pero el archivo se baja ya escrito con «Bajar la
+           lista», que es como se mantiene, y así no hay un segundo formato
+           que aprender. */
+        partes: String(f[4] == null ? "" : f[4]).split(";")
+          .map(t => t.split("|"))
+          .filter(t => (t[0] || "").trim())
+          .map(t => ({ concepto:t[0].trim(), unitario:parseMoney(t[1]),
+                       cantidad:Number(String(t[2] || "").trim()) || 0 })) });
     }
     if (!leidos.length) return { leidos:0 };
 
@@ -8271,10 +8334,13 @@ function renderAjustes(){
         const ya = state.serviciosBq.find(y => y.nombre.toLowerCase() === x.nombre.toLowerCase());
         if (ya){
           if (ya.precio !== x.precio || ya.conServicio !== x.conServicio ||
-              (x.familia && ya.familia !== x.familia)) cambiados++;
+              (x.familia && ya.familia !== x.familia) ||
+              (x.partes.length && JSON.stringify(ya.partes) !== JSON.stringify(x.partes))) cambiados++;
           ya.precio = x.precio; ya.conServicio = x.conServicio;
           // Una familia vacía en el archivo no borra la que ya tenía puesta.
           if (x.familia) ya.familia = x.familia;
+          // Un desglose vacío tampoco: para quitarlo se vacía en la pantalla.
+          if (x.partes.length) ya.partes = x.partes.map(saneaParteBq);
         } else {
           state.serviciosBq.push(saneaServicioBq(x)); nuevos++;
         }
@@ -8287,8 +8353,9 @@ function renderAjustes(){
   p.querySelector("#bExpSrv").onclick = () => {
     recogerAjustes();
     descargar(`servicios-de-banquetes-${hoyISO()}.csv`,
-      toCSV([["Servicio","Precio","Serv.","Familia"]].concat(
-        state.serviciosBq.map(x => [x.nombre, x.precio, x.conServicio ? "sí" : "no", x.familia]))),
+      toCSV([["Servicio","Precio","Serv.","Familia","Desglose"]].concat(
+        state.serviciosBq.map(x => [x.nombre, x.precio, x.conServicio ? "sí" : "no", x.familia,
+          (x.partes || []).map(d => `${d.concepto}|${d.unitario}|${d.cantidad}`).join(";")]))),
       "text/csv");
   };
 
@@ -8300,11 +8367,14 @@ function renderAjustes(){
           <button class="btn" data-close>✕</button></div>
         <div class="modal-body">
           <div class="note">Un servicio por renglón:
-            <b>nombre, precio, serv, familia</b>. En la tercera columna <b>sí</b> o <b>no</b>
+            <b>nombre, precio, serv, familia, desglose</b>. En la tercera columna <b>sí</b> o <b>no</b>
             dice si lleva el cargo por servicio del 15% —alimentos y bebidas sí; audiovisual,
             mobiliario, DJ y pista no—; vacía se toma como <b>sí</b>. La cuarta es con qué
             título se agrupa en la lista desplegable y se puede dejar vacía. Sirve pegarlo
-            aquí o escoger un archivo <code>.csv</code>.</div>
+            aquí o escoger un archivo <code>.csv</code>. La quinta, el desglose del
+            paquete, también es opcional: sus renglones van separados por
+            <code>;</code> y cada uno es <code>concepto|unitario|cantidad</code>. Lo más
+            fácil es bajar la lista, corregirla en Excel y volverla a cargar.</div>
           <p><input type="file" id="srvArch" accept=".csv,text/csv,text/plain"></p>
           <textarea class="field mono" id="srvTexto" style="width:100%;min-height:180px"
             placeholder="Cena emplatada, 850, sí, Alimentos&#10;Pista iluminada, 6500, no, Iluminación"></textarea>
@@ -14433,7 +14503,7 @@ function cuerpoEvento(e, c){
           <th class="num" style="width:96px">Total</th></tr></thead>
         <tbody>${cu.lineas.map(l => `<tr>
           <td class="nowrap">${esc(fechaBloque(l.fecha))}</td>
-          <td>${esc(l.servicio || "—")}</td>
+          <td>${conceptosDeLinea(l)}</td>
           <td class="num">${l.cantidad}</td>
           <td class="num">${esc(moneyMN(l.precio))}</td>
           <td class="num">${esc(moneyMN(l.subtotal))}</td>
@@ -14464,6 +14534,22 @@ function cuerpoEvento(e, c){
         e.atencion || (c && c.contacto) || "", "", (c && c.telefono) || "")}
     </div>`;
 }
+
+/**
+ * El renglón, como lo ve EL CLIENTE.
+ *
+ * Si la línea trae desglose, debajo del nombre del paquete van sus conceptos
+ * como viñetas —y ni una sola cifra—. Los costos de cada cosa son control
+ * interno: viven en la captura y en el reporte de ingresos, nunca en el papel
+ * que se le manda al cliente. Lo que él ve del dinero es lo de siempre: su
+ * cantidad, su precio por persona y su total.
+ */
+const conceptosDeLinea = l => {
+  const nombre = esc(l.servicio || "—");
+  if (!(l.partes && l.partes.length)) return nombre;
+  return `${nombre}<ul class="inc-paq">${
+    l.partes.map(d => `<li>${esc(d.concepto)}</li>`).join("")}</ul>`;
+};
 
 /* ----- Las dos listas: cotizaciones y contratos ----- */
 
@@ -14634,7 +14720,47 @@ function editarEvento(id, tipoPre, alCerrar){
           title="¿Lleva cargo por servicio? Sólo alimentos y bebidas."></td>
     <td class="num l-sub">—</td>
     <td class="num l-tot">—</td>
-    <td><button class="btn sm danger" data-quita>✕</button></td></tr>`;
+    <td><button class="btn sm danger" data-quita>✕</button></td></tr>
+    <tr class="l-desglose"><td colspan="8" style="padding:0">${cajaDesglose(l)}</td></tr>`;
+
+  /* --------------------------------------------------------------------
+     El desglose del paquete.
+
+     Es CONTROL INTERNO: aquí se ve de qué se compone y cuánto cuesta cada
+     cosa, y de aquí sale el precio por persona. En la cotización del cliente
+     se imprimen los conceptos SIN una sola cifra —ver `conceptosDeLinea`—.
+     -------------------------------------------------------------------- */
+  const filaParte = d => `<tr>
+      <td><input class="field d-concepto" value="${esc(d.concepto)}" style="width:100%"
+            placeholder="Menú 3 tiempos"></td>
+      <td><input class="field d-unit num" inputmode="decimal" value="${d.unitario || ""}"
+            style="width:100%;text-align:right"></td>
+      <td><input class="field d-cant num" inputmode="numeric" value="${d.cantidad || ""}"
+            style="width:100%;text-align:right"></td>
+      <td class="num d-sub">—</td>
+      <td><button class="btn sm danger" data-quitaparte>✕</button></td></tr>`;
+
+  const cajaDesglose = l => !(l.partes && l.partes.length) ? "" : `
+    <div class="desglose">
+      <div class="desglose-tit">
+        <b>Desglose del paquete</b>
+        <span class="hint">Control interno: NO se imprime en la cotización del cliente.
+          De aquí sale el precio por persona.</span>
+        <div class="spacer"></div>
+        <button class="btn sm" data-addparte>+ Concepto</button>
+        <button class="btn sm" data-sindesglose
+          title="Vuelve a ser un renglón normal, con su precio a mano">Quitar el desglose</button>
+      </div>
+      <table class="data"><thead><tr>
+        <th>Concepto</th><th class="num" style="width:110px">Unitario</th>
+        <th class="num" style="width:90px">Cant.</th>
+        <th class="num" style="width:120px">Subtotal</th><th style="width:44px"></th>
+      </tr></thead><tbody>${l.partes.map(filaParte).join("")}</tbody>
+      <tfoot><tr><td colspan="3"><b>Total del paquete</b></td>
+        <td class="num d-total"><b>—</b></td><td></td></tr>
+      <tr><td colspan="3"><b>Por persona</b> <span class="hint d-pax"></span></td>
+        <td class="num d-xpers"><b>—</b></td><td></td></tr></tfoot></table>
+    </div>`;
 
   const ov = modal(`
     <div class="modal wide">
@@ -14742,12 +14868,68 @@ function editarEvento(id, tipoPre, alCerrar){
   const q = sel => ov.querySelector(sel);
   const pct = id => Number(q(id).value) || 0;
 
+  /** El renglón del desglose que cuelga de esta línea, si lo tiene. */
+  const desgloseDe = tr => {
+    const sig = tr.nextElementSibling;
+    return sig && sig.classList.contains("l-desglose") && sig.querySelector(".desglose")
+      ? sig : null;
+  };
+
+  /* Los renglones del desglose, por su ruta completa.
+     `caja.querySelectorAll("tbody tr")` NO sirve: en un selector con espacios
+     los ancestros se buscan en TODO el documento, no dentro del elemento, así
+     que el `tfoot` de la tabla chica también cumplía «tr dentro de un tbody»
+     —el tbody grande, el de la tabla de renglones— y venía sin campos. */
+  const renglonesDesglose = caja => caja.querySelectorAll(".desglose > table > tbody > tr");
+
+  /** Lo capturado en el desglose de una línea, tal como está en pantalla. */
+  const partesDe = tr => {
+    const caja = desgloseDe(tr);
+    if (!caja) return [];
+    return [...renglonesDesglose(caja)].map(f => ({
+      concepto: f.querySelector(".d-concepto").value.trim(),
+      unitario: parseMoney(f.querySelector(".d-unit").value),
+      cantidad: Number(f.querySelector(".d-cant").value) || 0
+    })).filter(x => x.concepto);
+  };
+
   function recalcular(){
     const pIva = pct("#evIva") / 100, pServ = pct("#evServ") / 100;
     let sub = 0, iva = 0, serv = 0;
-    ov.querySelectorAll("#tLin tbody tr").forEach(tr => {
+    // Sólo las líneas: los renglones de desglose cuelgan de ellas y no suman aparte.
+    ov.querySelectorAll("#tLin > tbody > tr:not(.l-desglose)").forEach(tr => {
       const cant = Number(tr.querySelector(".l-cant").value) || 0;
-      const pr = parseMoney(tr.querySelector(".l-precio").value);
+      const campoPr = tr.querySelector(".l-precio");
+      const caja = desgloseDe(tr);
+
+      /* Con desglose, el precio por persona NO se teclea: sale de la suma.
+         Es lo que pidió Marco —que el total dependa de lo que el ejecutivo
+         haya movido— y de paso impide que el desglose y el precio se
+         contradigan delante de un cliente. */
+      if (caja){
+        const partes = partesDe(tr);
+        const total = sumaPartes(partes);
+        renglonesDesglose(caja).forEach((f, i) => {
+          const d = partes.find((x, k) => k === i) ||
+                    { unitario: parseMoney(f.querySelector(".d-unit").value),
+                      cantidad: Number(f.querySelector(".d-cant").value) || 0 };
+          const st = (d.unitario || 0) * (d.cantidad || 0);
+          f.querySelector(".d-sub").textContent = st ? moneyMN(st) : "—";
+        });
+        caja.querySelector(".d-total").innerHTML = `<b>${total ? esc(moneyMN(total)) : "—"}</b>`;
+        const xp = porPersonaPartes(partes, cant);
+        caja.querySelector(".d-xpers").innerHTML = `<b>${xp ? esc(moneyMN(xp)) : "—"}</b>`;
+        caja.querySelector(".d-pax").textContent = cant
+          ? `entre ${cant} invitado(s)` : "— falta la cantidad de invitados";
+        campoPr.value = xp || "";
+        campoPr.readOnly = true;
+        campoPr.title = "Sale del desglose de abajo";
+      } else if (campoPr.readOnly){
+        campoPr.readOnly = false;
+        campoPr.title = "";
+      }
+
+      const pr = parseMoney(campoPr.value);
       const st = cant * pr;
       const i = st * pIva, sv = tr.querySelector(".l-serv").checked ? st * pServ : 0;
       sub += st; iva += i; serv += sv;
@@ -14800,7 +14982,20 @@ function editarEvento(id, tipoPre, alCerrar){
       if (!antes || palomita.checked === antes.conServicio) palomita.checked = x.conServicio;
     }
     tr.dataset.srvAntes = sel.value;
+    /* El desglose viaja con el servicio: al escoger un paquete baja el suyo, y
+       al cambiar a otro servicio se va el que había. Es una COPIA —por eso el
+       JSON de ida y vuelta—: a partir de aquí este renglón es dueño del suyo y
+       tocar el catálogo no lo mueve. */
+    ponerDesglose(tr, x && x.partes && x.partes.length
+      ? JSON.parse(JSON.stringify(x.partes)) : []);
     recalcular();
+  }
+
+  /** Cuelga (o quita) el desglose de una línea y lo vuelve a dibujar. */
+  function ponerDesglose(tr, partes){
+    const sig = tr.nextElementSibling;
+    if (!sig || !sig.classList.contains("l-desglose")) return;
+    sig.children[0].innerHTML = cajaDesglose({ partes: (partes || []).map(saneaParteBq) });
   }
 
   /**
@@ -14851,9 +15046,39 @@ function editarEvento(id, tipoPre, alCerrar){
     if (ev.target.classList.contains("l-srvSel")) escogerServicio(ev.target);
   });
   ov.addEventListener("click", ev => {
+    const add = ev.target.closest("[data-addparte]");
+    if (add){
+      const caja = add.closest(".l-desglose");
+      caja.querySelector(".desglose > table > tbody")
+        .insertAdjacentHTML("beforeend", filaParte(saneaParteBq({})));
+      [...renglonesDesglose(caja)].pop().querySelector(".d-concepto").focus();
+      recalcular();
+      return;
+    }
+    const quitaP = ev.target.closest("[data-quitaparte]");
+    if (quitaP){
+      const f = quitaP.closest("tr"), cuerpo = f.parentElement;
+      f.remove();
+      /* Sin conceptos no hay desglose: el renglón vuelve a ser uno normal, con
+         su precio a mano. Dejar la tabla vacía sería dejar un precio en cero
+         que nadie puede corregir. */
+      if (!cuerpo.children.length)
+        ponerDesglose(cuerpo.closest(".l-desglose").previousElementSibling, []);
+      recalcular();
+      return;
+    }
+    const sinD = ev.target.closest("[data-sindesglose]");
+    if (sinD){
+      ponerDesglose(sinD.closest(".l-desglose").previousElementSibling, []);
+      recalcular();
+      return;
+    }
     const b = ev.target.closest("[data-quita]");
     if (!b) return;
     const tr = b.closest("tr"), cuerpo = tr.parentElement;
+    // Una línea se lleva consigo su renglón de desglose, si lo tiene.
+    const sig = tr.nextElementSibling;
+    if (sig && sig.classList.contains("l-desglose")) sig.remove();
     tr.remove();
     if (!cuerpo.children.length)
       cuerpo.insertAdjacentHTML("beforeend",
@@ -14899,7 +15124,8 @@ function editarEvento(id, tipoPre, alCerrar){
       montaje: tr.querySelector(".b-montaje").value, salon: tr.querySelector(".b-salon").value,
       renta: tr.querySelector(".b-renta").value
     })).filter(b => b.fecha || b.evento || b.salon);
-    const lineas = [...ov.querySelectorAll("#tLin tbody tr")].map(tr => saneaLineaEv({
+    const lineas = [...ov.querySelectorAll("#tLin > tbody > tr:not(.l-desglose)")].map(tr => saneaLineaEv({
+      partes: partesDe(tr),
       fecha: tr.querySelector(".l-fecha").value, servicio: tr.querySelector(".l-servicio").value,
       cantidad: tr.querySelector(".l-cant").value,
       precio: parseMoney(tr.querySelector(".l-precio").value),
@@ -15201,7 +15427,7 @@ function cuerpoContratoBq(e, c){
         <th class="num" style="width:86px">Servicio</th>
         <th class="num" style="width:100px">Total</th></tr></thead>
       <tbody>${cu.lineas.map(l => `<tr>
-        <td>${esc(l.servicio || "—")}</td>
+        <td>${conceptosDeLinea(l)}</td>
         <td class="num">${l.cantidad}</td>
         <td class="num">${esc(moneyMN(l.precio))}</td>
         <td class="num">${esc(moneyMN(l.subtotal))}</td>
@@ -15791,6 +16017,8 @@ function renderReportes(){
       <input class="field" type="date" id="repH" value="${esc(hasta)}">
       <button class="btn" id="repAnio">Este año</button>
       <button class="btn" id="repCsv">Exportar CSV</button>
+      <button class="btn" id="repDesg" title="Qué lleva cada paquete y cuánto cuesta cada cosa"
+        >Desglose de paquetes</button>
     </div>
     <div class="note">Cada documento se cuenta en el mes en que <b>ocurre el evento o la
       estancia</b>, no en el que se firmó: es cuando el hotel cobra. Una cotización que ya
@@ -15864,6 +16092,39 @@ function renderReportes(){
       .concat(filas.map(f => [f.fecha, f.area, f.tipo, f.folio, f.cliente, f.concepto,
         f.ejecutivo, f.cerrado ? "Cerrado" : "En la mesa", f.monto]))), "text/csv");
   };
+  /**
+   * El desglose, que es CONTROL INTERNO.
+   *
+   * Un renglón por concepto de cada paquete cotizado en el periodo, con sus
+   * cifras. Vive aquí y en la captura; en la cotización que se le manda al
+   * cliente van los conceptos sin un solo número. Por eso es un archivo
+   * aparte y no una columna más del de ingresos: se baja a propósito.
+   */
+  cont.querySelector("#repDesg").onclick = () => {
+    const ren = [];
+    for (const e of veBanquetes() ? state.eventos : []){
+      if (!eventoEsMio(e) || e.estado === "cancelado") continue;
+      const f = fechaEvento(e);
+      if (!f || f < desde || f > hasta) continue;
+      if (e.tipo === "cotizacion" && state.eventos.some(x => x.cotizacionId === e.id)) continue;
+      for (const l of e.lineas || []){
+        for (const d of l.partes || [])
+          ren.push([f, e.folio, nombreCli(e.clienteId), ejecutivoDeEv(e) || "Sin asignar",
+                    infoTipoEv(e.tipo).name, e.estado === "confirmado" ? "Cerrado" : "En la mesa",
+                    l.servicio, l.cantidad, l.precio,
+                    d.concepto, d.unitario, d.cantidad, d.unitario * d.cantidad]);
+      }
+    }
+    if (!ren.length){
+      alert("No hay ningún paquete con desglose en este periodo.");
+      return;
+    }
+    descargar(`desglose-de-paquetes-${desde}-a-${hasta}.csv`, toCSV(
+      [["Fecha","Folio","Cliente","Ejecutivo","Tipo","Estado","Paquete","Invitados",
+        "Precio por persona","Concepto","Unitario","Cantidad","Subtotal"]].concat(ren)),
+      "text/csv");
+  };
+
   cont.querySelectorAll("tr[data-i]").forEach(tr =>
     tr.onclick = () => filas[Number(tr.dataset.i)].abre());
 }

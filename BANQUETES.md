@@ -108,6 +108,15 @@ Pestaña **Eventos**. Sale del machote que trae el departamento, sección por se
   servicio…**, que abre un campo para escribirlo. Con el catálogo vacío el servicio se sigue
   escribiendo a mano, como antes, y los documentos de antes conservan su renglón tal cual.
   Cambiar un precio en el catálogo **no** toca las cotizaciones ya capturadas.
+
+  **Los paquetes llevan desglose.** Al escoger uno baja de qué se compone —concepto, unitario
+  y cantidad— y debajo del renglón se abre una tabla para moverlo. De ahí sale el precio por
+  persona, que por eso deja de teclearse: `Σ(unitario × cantidad) ÷ invitados`. Es control
+  interno y **no se imprime**: en la cotización del cliente van los conceptos del paquete
+  **como viñetas, sin una sola cifra**, y el dinero que ve es el de siempre —su cantidad, su
+  precio por persona y su total—. Las cifras del desglose se bajan en *Reportes → Desglose de
+  paquetes*. El renglón guarda su PROPIA copia: cambiar el catálogo no mueve una cotización ya
+  capturada. Con «Quitar el desglose» vuelve a ser un renglón normal, de precio libre.
   El catálogo se llena de golpe con **Cargar una lista** —se pega o se escoge un `.csv` de
   `nombre, precio, serv`—, porque entre el kit de banquetes del hotel y la lista del proveedor
   de audiovisual son más de cien renglones que cambian cada enero. Volver a cargarla actualiza

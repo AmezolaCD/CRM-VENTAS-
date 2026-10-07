@@ -137,7 +137,7 @@ const abrirCotizacion = () => admin.p.evaluate(async () => {
 });
 
 const renglon = () => admin.p.evaluate(() => {
-  const tr = document.querySelector('#tLin tbody tr');
+  const tr = document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
   const sel = tr.querySelector('.l-srvSel');
   return {
     haySelect: !!sel,
@@ -152,7 +152,7 @@ const renglon = () => admin.p.evaluate(() => {
 });
 
 const escoger = v => admin.p.evaluate(async val => {
-  const sel = document.querySelector('#tLin tbody tr .l-srvSel');
+  const sel = document.querySelector('#tLin > tbody > tr:not(.l-desglose) .l-srvSel');
   sel.value = val;
   sel.dispatchEvent(new Event('change', { bubbles:true }));
   await new Promise(r => setTimeout(r, 80));
@@ -187,7 +187,7 @@ await bloque('2 · un precio negociado a mano NO se pierde', async () => {
   await abrirCotizacion();
   await escoger('Cena duplicada'.replace('duplicada', 'emplatada'));
   await admin.p.evaluate(async () => {
-    const tr = document.querySelector('#tLin tbody tr');
+    const tr = document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
     tr.querySelector('.l-precio').value = '700';          // se negoció con el cliente
     tr.querySelector('.l-serv').checked = false;          // y se le quitó el cargo
     tr.querySelector('.l-precio').dispatchEvent(new Event('input', { bubbles:true }));
@@ -209,7 +209,7 @@ await bloque('3 · se puede cotizar algo que no está en el catálogo', async ()
   afirma('y se limpia lo que venía de la lista', otro.servicio === '');
 
   const r = await admin.p.evaluate(async () => {
-    const tr = document.querySelector('#tLin tbody tr');
+    const tr = document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
     tr.querySelector('.l-servicio').value = 'MESA DE DULCES PERSONALIZADA';
     tr.querySelector('.l-cant').value = '1';
     tr.querySelector('.l-precio').value = '9800';
@@ -217,7 +217,7 @@ await bloque('3 · se puede cotizar algo que no está en el catálogo', async ()
     await new Promise(r => setTimeout(r, 80));
     document.querySelector('#evCli').value = 'BODA DE EJEMPLO';
     // Guardar como borrador: lo que importa es que el renglón se lea completo.
-    const lineas = [...document.querySelectorAll('#tLin tbody tr')].map(tr => ({
+    const lineas = [...document.querySelectorAll('#tLin > tbody > tr:not(.l-desglose)')].map(tr => ({
       servicio: tr.querySelector('.l-servicio').value,
       precio: parseMoney(tr.querySelector('.l-precio').value)
     }));
@@ -238,7 +238,7 @@ await bloque('4 · una cotización vieja sigue abriendo con lo suyo', async () =
     guardar(); render();
     editarEvento('ev1');
     await new Promise(r => setTimeout(r, 300));
-    const tr = document.querySelector('#tLin tbody tr');
+    const tr = document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
     const sel = tr.querySelector('.l-srvSel');
     return { servicio: tr.querySelector('.l-servicio').value,
              visible: tr.querySelector('.l-servicio').style.display !== 'none',
@@ -279,7 +279,7 @@ await bloque('6 · sin catálogo, la captura NO se rompe', async () => {
     document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
     editarEvento(null, null, 'cotizacion');
     await new Promise(r => setTimeout(r, 300));
-    const tr = document.querySelector('#tLin tbody tr');
+    const tr = document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
     tr.querySelector('.l-servicio').value = 'LO DE SIEMPRE, A MANO';
     return { haySelect: !!tr.querySelector('.l-srvSel'),
              hayTexto: !!tr.querySelector('.l-servicio'),
@@ -333,11 +333,11 @@ await bloque('7 · se captura en Ajustes y llega a la cotización', async () => 
     document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
     editarEvento(null, null, 'cotizacion');
     await new Promise(r => setTimeout(r, 300));
-    const sel = document.querySelector('#tLin tbody tr .l-srvSel');
+    const sel = document.querySelector('#tLin > tbody > tr:not(.l-desglose) .l-srvSel');
     sel.value = 'Mobiliario lounge';
     sel.dispatchEvent(new Event('change', { bubbles:true }));
     await new Promise(r => setTimeout(r, 80));
-    const tr = document.querySelector('#tLin tbody tr');
+    const tr = document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
     return { opciones: [...sel.options].map(o => o.textContent),
              precio: tr.querySelector('.l-precio').value,
              serv: tr.querySelector('.l-serv').checked };
@@ -418,7 +418,7 @@ await bloque('9 · la lista se carga de golpe, pegándola', async () => {
     vista = 'eventos'; render();
     editarEvento(null, null, 'cotizacion');
     await new Promise(r => setTimeout(r, 300));
-    const sel = document.querySelector('#tLin tbody tr .l-srvSel');
+    const sel = document.querySelector('#tLin > tbody > tr:not(.l-desglose) .l-srvSel');
     return {
       grupos: [...sel.querySelectorAll('optgroup')].map(o => o.label),
       enAlimentos: [...sel.querySelectorAll('optgroup[label="Alimentos de ejemplo"] option')]
@@ -631,7 +631,7 @@ await bloque('14 · se busca dentro de la lista', async () => {
     editarEvento(null, null, 'cotizacion');
     await new Promise(r => setTimeout(r, 300));
 
-    const tr = () => document.querySelector('#tLin tbody tr');
+    const tr = () => document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
     const campo = tr().querySelector('.busca-srv');
     const sel = () => tr().querySelector('.l-srvSel');
     const teclear = async t => {
@@ -710,11 +710,237 @@ await bloque('15 · con pocos servicios el buscador no estorba', async () => {
     vista = 'eventos'; render();
     editarEvento(null, null, 'cotizacion');
     await new Promise(r => setTimeout(r, 300));
-    const tr = document.querySelector('#tLin tbody tr');
+    const tr = document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
     return { buscador: !!tr.querySelector('.busca-srv'), lista: !!tr.querySelector('.l-srvSel') };
   });
   afirma('con dos servicios no sale el buscador', !r.buscador);
   afirma('pero la lista sí', r.lista);
+});
+
+/* ---------------------------------------------------------------------------
+   16 · EL DESGLOSE DEL PAQUETE: ADENTRO CON CIFRAS, AFUERA SIN ELLAS.
+
+   «que a la hora de estar haciendo la cotizacion se muestre el listado de los
+   servicios que se ofrecen en cada paquete y que vengan sus respectivos
+   costos por persona sujerido pero modificable pero esto solo como control
+   interno en reportes de ingreso, pero a la hora de crear la cotizacion para
+   el cliente solo se muestre la lista de servicios de ese paquete sin costos
+   y solo venga el costo total por persona».
+
+   Lo que puede salir caro: que una cifra interna se cuele al papel del
+   cliente, o que el total por persona no siga a lo que el ejecutivo movió.
+   --------------------------------------------------------------------------- */
+const PAQ = {
+  nombre:'Paquete de ejemplo · pollo o cerdo', precio:1193, conServicio:false,
+  familia:'Paquetes de ejemplo',
+  partes:[ { concepto:'Menú de ejemplo 3 tiempos', unitario:726, cantidad:80 },
+           { concepto:'Descorche de ejemplo',      unitario:400, cantidad:80 },
+           { concepto:'Mantel de ejemplo',         unitario:130, cantidad:8  } ]
+};
+// 726*80 + 400*80 + 130*8 = 58080 + 32000 + 1040 = 91120 ; /80 = 1139
+const TOTAL_PAQ = 91120, XPERS = 1139;
+
+await bloque('16 · escoger un paquete trae su desglose y de ahí sale el precio', async () => {
+  const r = await admin.p.evaluate(async paq => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    state.serviciosBq = [saneaServicioBq(Object.assign({ orden:0 }, paq)),
+      saneaServicioBq({ nombre:'Suelto de ejemplo', precio:60, orden:1, familia:'Sueltos' })];
+    state.eventos = [];
+    guardar();
+    vista = 'eventos'; render();
+    editarEvento(null, null, 'cotizacion');
+    await new Promise(r => setTimeout(r, 300));
+    const tr = () => document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
+    const sel = tr().querySelector('.l-srvSel');
+    sel.value = paq.nombre; sel.dispatchEvent(new Event('change', { bubbles:true }));
+    await new Promise(r => setTimeout(r, 120));
+    // 80 invitados
+    tr().querySelector('.l-cant').value = '80';
+    tr().querySelector('.l-cant').dispatchEvent(new Event('input', { bubbles:true }));
+    await new Promise(r => setTimeout(r, 120));
+    const caja = () => document.querySelector('#tLin .l-desglose .desglose');
+    return {
+      hayCaja: !!caja(),
+      conceptos: [...caja().querySelectorAll('.d-concepto')].map(i => i.value),
+      total: caja().querySelector('.d-total').textContent,
+      xpers: caja().querySelector('.d-xpers').textContent,
+      precio: tr().querySelector('.l-precio').value,
+      precioBloqueado: tr().querySelector('.l-precio').readOnly,
+      subEvento: document.querySelector('#evSub').textContent
+    };
+  }, PAQ);
+  afirma('baja el desglose del catálogo', r.hayCaja && r.conceptos.length === 3);
+  afirma('con sus conceptos', r.conceptos[0] === 'Menú de ejemplo 3 tiempos');
+  afirma('suma el total del paquete', r.total.includes('91,120'));
+  afirma('y saca el costo por persona', r.xpers.includes('1,139'));
+  /* Lo medular: el precio del renglón SALE del desglose y no se teclea, para
+     que no puedan contradecirse delante de un cliente. */
+  afirma('el precio del renglón sale de ahí', r.precio === String(XPERS));
+  afirma('y deja de teclearse a mano', r.precioBloqueado === true);
+  /* El subtotal del evento es exactamente lo que suma el desglose: 80 × 1,139.
+     El total de abajo lleva el IVA encima, y ése no es lo que se mide aquí. */
+  afirma('el subtotal del evento cuadra con el desglose', r.subEvento.includes('91,120'));
+});
+
+await bloque('17 · lo que mueva el ejecutivo manda', async () => {
+  const r = await admin.p.evaluate(async () => {
+    const tr = () => document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
+    const caja = () => document.querySelector('#tLin .l-desglose .desglose');
+    // Se negocia el menú: de 726 a 650
+    const u = caja().querySelectorAll('.d-unit')[0];
+    u.value = '650'; u.dispatchEvent(new Event('input', { bubbles:true }));
+    await new Promise(r => setTimeout(r, 120));
+    const tras = { xpers: caja().querySelector('.d-xpers').textContent,
+                   precio: tr().querySelector('.l-precio').value };
+    // Y se quita el mantel
+    caja().querySelectorAll('[data-quitaparte]')[2].click();
+    await new Promise(r => setTimeout(r, 120));
+    const sinMantel = { conceptos: [...caja().querySelectorAll('.d-concepto')].map(i => i.value),
+                        precio: tr().querySelector('.l-precio').value };
+    // Y se agrega uno nuevo
+    caja().querySelector('[data-addparte]').click();
+    await new Promise(r => setTimeout(r, 120));
+    const f = caja().querySelectorAll('tbody > tr')[2];
+    f.querySelector('.d-concepto').value = 'Pirotecnia de ejemplo';
+    f.querySelector('.d-unit').value = '3000';
+    f.querySelector('.d-cant').value = '1';
+    f.querySelector('.d-cant').dispatchEvent(new Event('input', { bubbles:true }));
+    await new Promise(r => setTimeout(r, 120));
+    return Object.assign({ tras, sinMantel }, {
+      conPiro: { precio: tr().querySelector('.l-precio').value,
+                 total: caja().querySelector('.d-total').textContent } });
+  });
+  // 650*80 + 400*80 + 130*8 = 52000+32000+1040 = 85040 ; /80 = 1063
+  afirma('bajar un unitario baja el por persona', r.tras.precio === '1063');
+  // sin mantel: 84000 ; /80 = 1050
+  afirma('quitar un concepto también', r.sinMantel.precio === '1050' &&
+    r.sinMantel.conceptos.length === 2);
+  // + 3000 = 87000 ; /80 = 1088 (87000/80 = 1087.5 → 1088)
+  afirma('y agregar uno, igual', r.conPiro.precio === '1088');
+  afirma('el total del paquete sigue cuadrando', r.conPiro.total.includes('87,000'));
+});
+
+await bloque('18 · el desglose del renglón es COPIA del catálogo', async () => {
+  const r = await admin.p.evaluate(async () => {
+    // Se guarda la cotización tal como quedó.
+    document.querySelector('#evCli').value = 'BODA DE EJEMPLO';
+    const lineas = [...document.querySelectorAll('#tLin > tbody > tr:not(.l-desglose)')].map(tr => ({
+      servicio: tr.querySelector('.l-servicio').value,
+      partes: [...(tr.nextElementSibling.querySelectorAll('.desglose > table > tbody > tr') || [])].map(f => ({
+        concepto: f.querySelector('.d-concepto').value,
+        unitario: parseMoney(f.querySelector('.d-unit').value) }))
+    }));
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    /* Con su cliente: un evento sin cliente es huérfano y `sanear` lo aparta
+       en la primera sincronización —y entonces los bloques de abajo medirían
+       un documento que ya no existe—. */
+    state.clientes = [saneaCliente({ id:'c1', empresa:'BODA DE EJEMPLO',
+                                     ejecutivo:'Sistemas' })];
+    state.eventos = [saneaEvento({ id:'evP', tipo:'cotizacion', clienteId:'c1',
+      estado:'borrador', fecha:'2026-10-07', lineas:[saneaLineaEv({
+        servicio: lineas[0].servicio, cantidad:80, precio:1088,
+        partes: lineas[0].partes.map(p => ({ concepto:p.concepto, unitario:p.unitario, cantidad:80 })) })] })];
+    guardar();
+    // Ahora cambia el CATÁLOGO: otro precio y otro desglose.
+    state.serviciosBq[0].precio = 9999;
+    state.serviciosBq[0].partes = [saneaParteBq({ concepto:'OTRA COSA', unitario:1, cantidad:1 })];
+    guardar();
+    const e = state.eventos.find(x => x.id === 'evP');
+    return { conceptos: e.lineas[0].partes.map(p => p.concepto),
+             precio: e.lineas[0].precio };
+  });
+  afirma('la cotización guardada conserva SU desglose',
+    r.conceptos.length === 3 && !r.conceptos.includes('OTRA COSA'));
+  afirma('y su precio', r.precio === 1088);
+});
+
+await bloque('19 · al cliente, los conceptos SIN una sola cifra', async () => {
+  const r = await admin.p.evaluate(() => {
+    /* Autónomo, como el de abajo: entre bloque y bloque corre la
+       sincronización, y heredar el documento del anterior es azar. */
+    state.clientes = [saneaCliente({ id:'c1', empresa:'BODA DE EJEMPLO', ejecutivo:'Sistemas' })];
+    const e = saneaEvento({ id:'evD', tipo:'cotizacion', clienteId:'c1', estado:'borrador',
+      fecha:'2026-10-07', lineas:[saneaLineaEv({
+        servicio:'Paquete de ejemplo · pollo o cerdo', cantidad:80, precio:1088,
+        partes:[ { concepto:'Menú de ejemplo 3 tiempos', unitario:650, cantidad:80 },
+                 { concepto:'Descorche de ejemplo', unitario:400, cantidad:80 },
+                 { concepto:'Pirotecnia de ejemplo', unitario:3000, cantidad:1 } ] })] });
+    state.eventos = [e]; guardar();
+    const caja = document.createElement('div');
+    caja.innerHTML = cuerpoEvento(e, cliente(e.clienteId));
+    const celda = [...caja.querySelectorAll('td')]
+      .find(td => td.querySelector('.inc-paq'));
+    return { hayLista: !!celda,
+             texto: celda ? celda.innerText : '',
+             html: celda ? celda.innerHTML : '',
+             todo: caja.innerText };
+  });
+  afirma('la hoja trae la lista de lo que incluye el paquete', r.hayLista);
+  afirma('con sus conceptos', /Menú de ejemplo 3 tiempos/.test(r.texto) &&
+    /Descorche de ejemplo/.test(r.texto));
+  /* El corazón del asunto: ni un costo interno en el papel del cliente. */
+  afirma('y NI UNA cifra del desglose en esa celda',
+    !/650|400|3000|85040|87,000/.test(r.html));
+  afirma('el documento no enseña ningún unitario',
+    !/\b650\b/.test(r.todo) && !/\b3,?000\b/.test(r.todo));
+  afirma('pero sí el precio por persona', /1,088/.test(r.todo));
+});
+
+await bloque('20 · adentro, el reporte sí trae las cifras', async () => {
+  const r = await admin.p.evaluate(async () => {
+    /* Se arma aquí mismo en vez de heredarlo del bloque de arriba: entre uno
+       y otro corre la sincronización, y un bloque que depende de lo que dejó
+       el anterior se vuelve azar. */
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    state.clientes = [saneaCliente({ id:'c1', empresa:'BODA DE EJEMPLO', ejecutivo:'Sistemas' })];
+    state.eventos = [saneaEvento({ id:'evR', tipo:'cotizacion', clienteId:'c1',
+      estado:'confirmado', fecha: new Date().getFullYear() + '-06-15',
+      lineas:[saneaLineaEv({ servicio:'Paquete de ejemplo · pollo o cerdo',
+        cantidad:80, precio:1088, partes:[
+          { concepto:'Menú de ejemplo 3 tiempos', unitario:650, cantidad:80 },
+          { concepto:'Pirotecnia de ejemplo', unitario:3000, cantidad:1 } ] })] })];
+    guardar();
+    let bajado = null;
+    const orig = window.descargar;
+    window.descargar = (nombre, contenido) => { bajado = { nombre, contenido }; };
+    vista = 'reportes'; render();
+    await new Promise(r => setTimeout(r, 300));
+    document.getElementById('repAnio').click();
+    await new Promise(r => setTimeout(r, 300));
+    document.getElementById('repDesg').click();
+    await new Promise(r => setTimeout(r, 200));
+    window.descargar = orig;
+    return bajado;
+  });
+  afirma('se baja un archivo de desglose', !!r && /desglose-de-paquetes/.test(r.nombre));
+  const reng = r.contenido.split(/\r?\n/).filter(Boolean);
+  afirma('con un renglón por concepto: encabezado y los dos', reng.length === 3);
+  afirma('y con sus cifras, que aquí sí van', /650/.test(r.contenido) && /3000/.test(r.contenido));
+  afirma('diciendo de qué paquete son', /Paquete de ejemplo/.test(r.contenido));
+});
+
+await bloque('21 · un servicio sin desglose sigue como siempre', async () => {
+  const r = await admin.p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    vista = 'eventos'; render();
+    editarEvento(null, null, 'cotizacion');
+    await new Promise(r => setTimeout(r, 300));
+    const tr = () => document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
+    const sel = tr().querySelector('.l-srvSel');
+    sel.value = 'Suelto de ejemplo'; sel.dispatchEvent(new Event('change', { bubbles:true }));
+    await new Promise(r => setTimeout(r, 120));
+    const sinCaja = !document.querySelector('#tLin .l-desglose .desglose');
+    const libre = !tr().querySelector('.l-precio').readOnly;
+    // Y se puede teclear el precio, como toda la vida.
+    tr().querySelector('.l-precio').value = '77';
+    tr().querySelector('.l-cant').value = '2';
+    tr().querySelector('.l-cant').dispatchEvent(new Event('input', { bubbles:true }));
+    await new Promise(r => setTimeout(r, 120));
+    return { sinCaja, libre, sub: tr().querySelector('.l-sub').textContent };
+  });
+  afirma('no le cuelga ningún desglose', r.sinCaja);
+  afirma('su precio se teclea, como siempre', r.libre);
+  afirma('y las cuentas salen', r.sub.includes('154'));
 });
 
 await br.close(); srv.close();
