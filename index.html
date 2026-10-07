@@ -1000,7 +1000,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.07-107";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.07-108";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3279,8 +3279,10 @@ function anotarLoQueSeFue(){
 /* ==========================================================================
    CUÁNTO PESA LA COPIA DE ESTE NAVEGADOR
 
-   El navegador le da a cada sitio unos 5 MB de `localStorage`, y ahí cabe
-   todo menos las imágenes. Una firma trazada en un teléfono se guardaba como
+   El navegador le da a cada sitio unos 5.2 MILLONES DE CARACTERES de
+   `localStorage` —medido en Chromium: 5,177,344—, que contados como los
+   cuenta él, a dos bytes por carácter, son unos 10 MB. Ahí cabe todo menos
+   las imágenes. Una firma trazada en un teléfono se guardaba como
    un PNG del lienzo COMPLETO a la resolución de la pantalla: 115 KB cada una,
    dos por documento. A los veintitantos documentos firmados el navegador
    dejaba de aceptar nada y la aplicación ya no podía guardar.
@@ -3291,6 +3293,17 @@ function anotarLoQueSeFue(){
 
 /** Lo que ocupa un texto en el navegador: cuenta en UTF-16, que es como mide él. */
 const pesoTexto = t => (String(t || "").length * 2);
+
+/* Hasta dónde aguanta `localStorage`, en las mismas unidades que `pesoTexto`.
+
+   NO son 5 MB, que es el número que todo el mundo repite y que yo mismo puse
+   mal en el letrero: lo que Chrome acepta son unos 5.2 MILLONES DE
+   CARACTERES —5,177,344, medido—, y como aquí se cuenta a dos bytes por
+   carácter, el techo en estas unidades es el doble. Decir «pesa 9.9 MB y ya
+   casi llega a 5» era un absurdo que no ayudaba a nadie. */
+const TECHO_LOCALSTORAGE = 5177344 * 2;
+
+const techoDelAlmacen = () => TECHO_LOCALSTORAGE;
 
 const enKB = n => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB"
                                : Math.round(n / 1024) + " KB";
@@ -3338,13 +3351,13 @@ function queLlenaElAlmacen(){
  * Lo que pesa la copia de este navegador, dicho antes de que estorbe.
  *
  * El navegador no avisa: acepta todo hasta que un día deja de aceptar, y para
- * entonces ya no se puede guardar nada. Unos 5 MB es el techo que dan casi
- * todos, así que a partir de 3.5 se dice en rojo y se explica qué hacer.
+ * entonces ya no se puede guardar nada. Por eso, al pasar del 70% del techo
+ * se dice en rojo y se explica qué hacer antes de que estorbe.
  */
 function renglonDelPeso(){
   let d;
   try{ d = queLlenaElAlmacen(); }catch(e){ return ""; }
-  const TECHO = 5 * 1024 * 1024;
+  const TECHO = techoDelAlmacen();
   const apretado = d.total > TECHO * 0.7;
   return `<div style="margin-top:6px">La copia de este equipo pesa
     <b${apretado ? ' style="color:var(--bad)"' : ""}>${enKB(d.total)}</b>` +
@@ -3352,8 +3365,8 @@ function renglonDelPeso(){
     (d.nEscaneos ? ` · ${enKB(d.escaneos)} en ${d.nEscaneos} escaneado(s) ` +
                    "todavía incrustado(s)" : "") +
     (apretado
-      ? `. <b style="color:var(--bad)">Se está acercando al tope del navegador
-         (unos 5&nbsp;MB), y al llegar deja de poder guardar.</b>
+      ? `. <b style="color:var(--bad)">Se está acercando al tope de este
+         navegador (${esc(enKB(TECHO))}), y al llegar deja de poder guardar.</b>
          Baja un respaldo y usa los botones de abajo:
          ${d.nEscaneos ? "«Mover los escaneados al almacén» y " : ""}
          «Compactar las firmas guardadas».`
@@ -14217,7 +14230,9 @@ function pesoGuardado(){
    se queda el límite viejo, que no es capricho —es lo que aguanta el navegador—. */
 const MAX_ARCHIVO      = 2 * 1024 * 1024;    // incrustado, por documento
 const MAX_ARCHIVO_NUBE = 20 * 1024 * 1024;   // en el almacén del proyecto
-const TOPE_TOTAL  = 4.2 * 1024 * 1024;    // el navegador corta cerca de 5 MB
+/* En CARACTERES, que es como los cuenta `pesoGuardado()` y como los corta el
+   navegador: Chrome acepta 5,177,344 y aquí se para en el 85% de eso. */
+const TOPE_TOTAL  = 4.4 * 1024 * 1024;
 
 /* ==========================================================================
    EL ALMACÉN DE ESCANEADOS
@@ -14420,7 +14435,7 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
   if (!hayDeposito() && pesoGuardado() > TOPE_TOTAL * 0.7)
     err.innerHTML = `<div class="errbox"><b>Este equipo ya casi no tiene lugar.</b>
       Sin el almacén del proyecto, los escaneados se guardan dentro del navegador y ahí
-      el tope son unos 5 MB —con tres o cuatro documentos se llena—.
+      el tope son unos 5 millones de caracteres —con tres o cuatro documentos se llena—.
       <br>Avísale a sistemas: se monta una vez (<code>archivos.sql</code>) y a partir de
       ahí los archivos dejan de ocupar lugar aquí.</div>`;
 

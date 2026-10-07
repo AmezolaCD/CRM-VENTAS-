@@ -4,11 +4,12 @@
 --  Qué resuelve: los convenios, contratos y cotizaciones que se suben ya
 --  firmados se guardaban DENTRO del propio registro, en texto. Eso viaja a la
 --  nube sin problema, pero también se queda en el navegador de cada equipo, y
---  ahí el tope son unos 5 MB: con tres documentos escaneados ya no cabía nada
---  más y el CRM avisaba que se estaba quedando sin lugar.
+--  ahí el tope son unos 5 millones de caracteres: con tres documentos
+--  escaneados ya no cabía nada más y el CRM avisaba que se estaba quedando
+--  sin lugar.
 --
 --  Con esto, los archivos van a un depósito aparte del mismo proyecto de
---  Supabase —1 GB en el plan gratuito, contra 5 MB del navegador— y del
+--  Supabase —1 GB en el plan gratuito, contra lo poco del navegador— y del
 --  registro cuelga nada más la ruta. El navegador deja de cargar con ellos.
 --
 --  Se corre UNA VEZ, en el SQL Editor de Supabase, y se puede repetir sin
