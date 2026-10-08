@@ -23,9 +23,17 @@
 -- 1. El buzón
 -- ---------------------------------------------------------------------------
 --    La columna se llama convenio_id por historia: hoy guarda el documento que
---    se firmó, sea un convenio —'v123'— o un contrato —'contratos:k123'—.
---    Renombrarla obligaría a mover las firmas que estuvieran esperando, y no
---    vale la pena por un nombre.
+--    se firmó, sea un convenio —'v123'—, un contrato de hospedaje
+--    —'contratos:k123'— o uno de banquetes —'eventos:e123'—. Renombrarla
+--    obligaría a mover las firmas que estuvieran esperando, y no vale la pena
+--    por un nombre.
+--
+--    datos_cliente guarda lo que el cliente ESCRIBIÓ en su pantalla al firmar.
+--    El contrato de banquetes trae declaraciones suyas —domicilio, teléfono,
+--    correo, RFC— que el hotel muchas veces no tiene completas, y ahí las
+--    llena él. Sólo eso: los datos del HOTEL —razón social, RFC, cuenta,
+--    CLABE, registro de PROFECO— no se le pueden poner a nadie de fuera, van
+--    congelados dentro del documento desde que lo firmó el hotel.
 /* ---------------------------------------------------------------------------
    TODO ESTE ARCHIVO VA EN UNA SOLA TRANSACCIÓN.
 
@@ -50,6 +58,10 @@ create table if not exists public.crm_firmas (
   aplicada    boolean not null default false,
   creado      timestamptz not null default now()
 );
+-- Las bases que ya tenían el buzón de antes no traen esta columna. Va aquí
+-- dentro, con la tabla, y con «if not exists» para que correr el archivo otra
+-- vez no toque lo que ya está.
+alter table public.crm_firmas add column if not exists datos_cliente jsonb;
 -- @fin-tabla
 create index if not exists crm_firmas_pend_idx on public.crm_firmas (aplicada) where aplicada = false;
 
@@ -62,7 +74,8 @@ alter table public.crm_firmas enable row level security;
 --    su cuenta: sólo se le deja hacer esta pregunta concreta, que se contesta
 --    con sí o no y no revela nada más.
 --
---    Sirve para convenios Y para contratos de hospedaje. El buzón guarda el id
+--    Sirve para convenios, para contratos de hospedaje y para los documentos
+--    de banquetes. El buzón guarda el id
 --    tal como lo manda el CRM: un convenio va pelado —'v123', como se mandó
 --    siempre— y un contrato va con su tipo adelante —'contratos:k123'—. Así
 --    los enlaces que ya se mandaron por WhatsApp siguen sirviendo: si el valor
@@ -93,7 +106,7 @@ as $$
      where d.id = case when position(':' in p_doc) > 0
                        then p_doc
                        else 'convenios:' || p_doc end
-       and d.tipo in ('convenios', 'contratos', 'odts')
+       and d.tipo in ('convenios', 'contratos', 'odts', 'eventos')
        and d.borrado = false
        and coalesce(d.datos ->> 'tokenFirma', '') <> ''
        and d.datos ->> 'tokenFirma' = p_token);
@@ -170,16 +183,17 @@ $$;
 --    con el encabezado que mandó. Sin clave no ve nada, y con la clave de uno
 --    no ve el de al lado.
 --
---    Los tres tipos de la lista son los que se firman desde fuera: convenios y
---    contratos los firma el cliente, y las órdenes de trabajo de marketing las
---    firma el director. La lista está cerrada a propósito: una clave que se
---    filtre no puede servir para leer un cliente ni una campaña, sólo el
---    documento que le toca.
+--    Los cuatro tipos de la lista son los que se firman desde fuera: los
+--    convenios, los contratos de hospedaje y los documentos de banquetes
+--    —cotización y contrato— los firma el cliente, y las órdenes de trabajo de
+--    marketing las firma el director. La lista está cerrada a propósito: una
+--    clave que se filtre no puede servir para leer un cliente ni una campaña,
+--    sólo el documento que le toca.
 drop policy if exists "cliente lee su convenio"   on public.crm_datos;
 drop policy if exists "cliente lee su documento"  on public.crm_datos;
 create policy "cliente lee su documento" on public.crm_datos for select to anon
 using (
-  tipo in ('convenios', 'contratos', 'odts')
+  tipo in ('convenios', 'contratos', 'odts', 'eventos')
   and borrado = false
   and public.crm_token_pedido() is not null
   and coalesce(datos ->> 'tokenFirma', '') <> ''
@@ -259,4 +273,4 @@ commit;
 --  Esto no es paranoia: ya pasó dos veces en este proyecto, las dos cortado a
 --  los 100 renglones exactos, y las dos veces el editor contestó «Success».
 -- ---------------------------------------------------------------------------
-select 'LISTO · firmas.sql aplicado: los clientes ya pueden firmar desde su enlace' as resultado;
+select 'LISTO · firmas.sql aplicado: los clientes ya pueden firmar desde su enlace, incluidos los contratos de banquetes' as resultado;

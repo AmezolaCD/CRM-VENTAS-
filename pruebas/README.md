@@ -46,10 +46,18 @@ node pruebas/navegador/firmas-que-no-llenan.mjs     # una firma no llena el nave
 node pruebas/navegador/copia-local.mjs              # la copia vive en IndexedDB
 node pruebas/navegador/salones.mjs                  # el salón y su renta por rato
 node pruebas/navegador/contrato-de-banquetes.mjs    # las 19 cláusulas, completas
+node pruebas/navegador/firma-de-banquetes.mjs       # el enlace de firma y el formulario
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
 servidor rechaza su firma, no ve letra de técnico ni se le encarga nada.
+
+`firma-de-banquetes.mjs` es la del contrato de banquetes firmado desde el enlace. Lo que de
+verdad cuida: la pantalla de firma corre en el navegador **del cliente**, que no tiene los
+ajustes del hotel, así que lo que el contrato dice del hotel —razón social, RFC, banco, cuenta,
+CLABE— se congela dentro del documento al firmarlo el hotel. Sin eso el cliente abriría un
+contrato lleno de rayas. Y comprueba el otro lado: que el formulario que él llena tiene
+**sólo los campos suyos**, nunca uno del hotel.
 
 `arranque.mjs` es la que faltaba. Marco se quedó mirando el logo morado de la entrada y en
 incógnito sí abría: lo que la mataba eran **los datos guardados** de ese navegador. Se le pone
