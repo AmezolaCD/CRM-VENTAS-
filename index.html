@@ -487,6 +487,20 @@
   .note.warn{background:var(--warn-soft)}
   h3.sec{margin:22px 0 8px; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted)}
   h3.sec:first-child{margin-top:0}
+  /* Una sección de Ajustes que se puede doblar. El triángulo gira; el título
+     entero es el botón, porque apuntarle a una flechita de ocho píxeles con
+     el dedo en una tableta no es razonable. */
+  h3.sec.sec-plegable{cursor:pointer; user-select:none; display:flex; align-items:center;
+    gap:7px; padding:5px 8px; margin-left:-8px; margin-right:-8px; border-radius:7px}
+  h3.sec.sec-plegable:hover{background:var(--panel-2); color:var(--text)}
+  h3.sec.sec-plegable:focus-visible{outline:2px solid var(--morado, #5b3fd6); outline-offset:1px}
+  h3.sec.sec-plegable::before{content:"▾"; font-size:11px; transition:transform .15s ease;
+    display:inline-block}
+  h3.sec.sec-cerrada::before{transform:rotate(-90deg)}
+  /* Cerrada, la sección se aprieta: si cada título doblado conservara sus
+     22 px de aire, catorce secciones cerradas seguirían siendo una pantalla
+     y media, y la idea era justo dejar de desplazarse. */
+  h3.sec.sec-cerrada{margin:2px 0 0}
 
   .subtabs{display:flex; gap:2px; background:var(--col); border-radius:8px; padding:3px; margin-bottom:16px}
   .subtabs button{flex:1; background:transparent; border:0; border-radius:6px; padding:7px 10px;
@@ -1000,7 +1014,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.08-4";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.08-5";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -4193,6 +4207,100 @@ function firmasDelEstado(){
   };
   mira(state);
   return out;
+}
+
+/* Qué secciones de Ajustes están cerradas, en ESTE equipo.
+
+   Es una comodidad de quien está sentado aquí, no un dato del hotel: vive en
+   la gaveta chica y no viaja a la nube ni a los demás equipos. Si no se puede
+   leer —modo privado, almacenamiento bloqueado—, todo sale abierto, que es
+   como estaba antes de que esto existiera. */
+const CERRADAS_AJ = STORE + ":ajustes-cerradas";
+
+const seccionesCerradas = () => {
+  try{ return new Set(JSON.parse(localStorage.getItem(CERRADAS_AJ)) || []); }
+  catch(e){ return new Set(); }
+};
+const guardarCerradas = set => {
+  try{ localStorage.setItem(CERRADAS_AJ, JSON.stringify([...set])); }catch(e){}
+};
+
+/**
+ * Deja cada sección de Ajustes plegable, y pone al día lo que estaba cerrado.
+ *
+ * Lo importante de cómo está hecho: una sección cerrada se OCULTA, no se
+ * quita. `recogerAjustes()` lee los campos con `querySelectorAll` cada vez
+ * que se agrega, se mueve o se borra algo; si los campos de una sección
+ * cerrada no estuvieran en la página, al guardar se borraría todo lo que hay
+ * dentro de ella. Que es la peor manera de perder datos: en silencio y por
+ * haber doblado un título.
+ */
+function plegarAjustes(panel){
+  if (!panel) return;
+  const caja = panel.firstElementChild;      // el <div style="max-width:900px">
+  if (!caja) return;
+  const cerradas = seccionesCerradas();
+
+  const titulos = [...caja.querySelectorAll(":scope > h3.sec")];
+  if (!titulos.length) return;
+
+  /* Una barra para cerrarlas o abrirlas todas de un golpe: con quince
+     secciones, ir una por una la primera vez tampoco es gracioso. */
+  if (!caja.querySelector("#ajPlegarTodo")){
+    const barra = document.createElement("p");
+    barra.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px";
+    barra.innerHTML = `<button class="btn sm" id="ajPlegarTodo">Contraer todo</button>
+      <button class="btn sm" id="ajAbrirTodo">Abrir todo</button>`;
+    caja.insertBefore(barra, caja.firstChild);
+    barra.querySelector("#ajPlegarTodo").onclick = () => {
+      guardarCerradas(new Set(titulos.map(h => h.textContent.trim())));
+      plegarAjustes(panel);
+    };
+    barra.querySelector("#ajAbrirTodo").onclick = () => {
+      guardarCerradas(new Set());
+      plegarAjustes(panel);
+    };
+  }
+
+  for (const h of titulos){
+    const nombre = h.textContent.trim();
+    let cuerpo = h.nextElementSibling;
+
+    /* La primera vez hay que armar el cuerpo: todo lo que cuelga del título
+       hasta el siguiente título se mete en un solo bloque. */
+    if (!cuerpo || !cuerpo.classList.contains("sec-cuerpo")){
+      const dentro = [];
+      let n = h.nextElementSibling;
+      while (n && !(n.tagName === "H3" && n.classList.contains("sec"))){
+        const sig = n.nextElementSibling;
+        dentro.push(n);
+        n = sig;
+      }
+      cuerpo = document.createElement("div");
+      cuerpo.className = "sec-cuerpo";
+      h.insertAdjacentElement("afterend", cuerpo);
+      dentro.forEach(x => cuerpo.appendChild(x));
+
+      h.classList.add("sec-plegable");
+      h.setAttribute("role", "button");
+      h.setAttribute("tabindex", "0");
+      const abrirCerrar = () => {
+        const s = seccionesCerradas();
+        if (s.has(nombre)) s.delete(nombre); else s.add(nombre);
+        guardarCerradas(s);
+        plegarAjustes(panel);
+      };
+      h.addEventListener("click", abrirCerrar);
+      h.addEventListener("keydown", ev => {
+        if (ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); abrirCerrar(); }
+      });
+    }
+
+    const cerrada = cerradas.has(nombre);
+    cuerpo.hidden = cerrada;
+    h.classList.toggle("sec-cerrada", cerrada);
+    h.setAttribute("aria-expanded", cerrada ? "false" : "true");
+  }
 }
 
 /** El respaldo completo, tal cual, a un archivo. */
@@ -9081,6 +9189,16 @@ function renderAjustes(){
     </div>`;
 
   const p = document.getElementById("panelAjustes");
+
+  /* Ajustes es largo: quince secciones, de la nube al catálogo de salones.
+     Marco: «puedes hacer que se pueda ocultar cada sección para no estarme
+     desplazando tanto». Se pliegan todas, y lo que esté cerrado se recuerda
+     en este equipo.
+
+     Se hace DESPUÉS de pintar y moviendo nodos, no cambiando la plantilla:
+     son cuatrocientos renglones de HTML que ya funcionan, y así cualquier
+     sección que se agregue mañana se pliega sola sin que nadie se acuerde. */
+  plegarAjustes(p);
 
   // Las filas de usuarios se pintan aquí, como el catálogo de habitaciones.
   const nombresCartera = [...new Set(state.clientes.map(c => c.ejecutivo).filter(Boolean))].sort();

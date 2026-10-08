@@ -300,6 +300,98 @@ await bloque('5 · el primer enlace espera a que se cierre la captura', async ()
   await tres.p.context().close();
 });
 
+await bloque('6 · plegar una sección de Ajustes no borra lo que hay dentro', async () => {
+  /* Marco: «puedes hacer que se pueda ocultar cada sección de ajustes para no
+     estarme desplazando tanto». Ajustes mide ocho mil píxeles de alto.
+
+     El riesgo está en CÓMO se pliega. `recogerAjustes()` lee los campos con
+     `querySelectorAll` cada vez que se agrega, se mueve o se borra algo; si
+     una sección cerrada sacara sus campos de la página, al guardar se
+     borraría todo lo que vive dentro de ella —el catálogo de salones, los
+     usuarios, los datos del hotel— en silencio y por haber doblado un
+     título. Por eso se OCULTA, no se quita, y por eso esta prueba. */
+  const eq = await equipo('plegado', 'admin1@ejemplo.example');
+  const r = await eq.p.evaluate(async () => {
+    state.salones = [saneaSalon({ nombre:'Salón de ejemplo', ubicacion:'Piso 2',
+                                  de2a5:20000, de6a12:30000, orden:0 })];
+    state.habitaciones = state.habitaciones.slice(0, 2);
+    guardar();
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    vista = 'ajustes'; render();
+    await new Promise(r => setTimeout(r, 700));
+
+    const caja = document.getElementById('panelAjustes').firstElementChild;
+    const abierto = caja.scrollHeight;
+    const plegables = caja.querySelectorAll(':scope > h3.sec.sec-plegable').length;
+
+    document.getElementById('ajPlegarTodo').click();
+    await new Promise(r => setTimeout(r, 300));
+    const cerrado = caja.scrollHeight;
+    /* Los campos tienen que SEGUIR en la página, nada más escondidos. */
+    const campoSigue = !!document.querySelector('#tSal tr[data-sl] [data-lk="nombre"]');
+
+    // Y ahora lo que de verdad importa: guardar con todo cerrado.
+    document.getElementById('bGuardarAj').click();
+    await new Promise(r => setTimeout(r, 600));
+
+    const sal = (state.salones || [])[0] || {};
+    return { abierto, cerrado, plegables, campoSigue,
+             salones: (state.salones || []).length,
+             nombre: sal.nombre, tarifa: sal.de6a12,
+             usuarios: state.usuarios.length,
+             habitaciones: state.habitaciones.length,
+             hotel: (state.ajustes && state.ajustes.hotel || {}).nombre };
+  });
+
+  afirma('todas las secciones se pueden plegar', r.plegables >= 12);
+  /* La medida de que esto sirve para algo: de ocho pantallas a media. */
+  afirma(`se encoge de verdad (${r.abierto} px → ${r.cerrado} px)`,
+    r.abierto > 4000 && r.cerrado < r.abierto / 5);
+  afirma('los campos siguen en la página, sólo escondidos', r.campoSigue);
+  /* Y lo medular: guardar con todo cerrado no se lleva nada por delante. */
+  afirma('el catálogo de salones sobrevive al guardado',
+    r.salones === 1 && r.nombre === 'Salón de ejemplo' && r.tarifa === 30000);
+  afirma('los usuarios también', r.usuarios >= 1);
+  afirma('el catálogo de habitaciones también', r.habitaciones === 2);
+  afirma('y los datos del hotel', !!r.hotel);
+  await eq.p.context().close();
+});
+
+await bloque('7 · lo plegado se recuerda al volver', async () => {
+  const eq = await equipo('memoria', 'admin1@ejemplo.example');
+  const r = await eq.p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    vista = 'ajustes'; render();
+    await new Promise(r => setTimeout(r, 600));
+    const caja = document.getElementById('panelAjustes').firstElementChild;
+    const titulos = [...caja.querySelectorAll(':scope > h3.sec')];
+    const uno = titulos.find(h => /nube y equipo/i.test(h.textContent));
+    uno.click();
+    await new Promise(r => setTimeout(r, 250));
+    const cerradaAhora = uno.classList.contains('sec-cerrada');
+
+    /* Salir de Ajustes y volver: es lo que hace cualquiera entre una cosa y
+       otra, y si el plegado se olvidara ahí no serviría de nada. */
+    vista = 'tablero'; render();
+    await new Promise(r => setTimeout(r, 200));
+    vista = 'ajustes'; render();
+    await new Promise(r => setTimeout(r, 600));
+    const caja2 = document.getElementById('panelAjustes').firstElementChild;
+    const uno2 = [...caja2.querySelectorAll(':scope > h3.sec')]
+      .find(h => /nube y equipo/i.test(h.textContent));
+    const otra = [...caja2.querySelectorAll(':scope > h3.sec')]
+      .find(h => /datos del hotel/i.test(h.textContent));
+    return { cerradaAhora,
+             sigueCerrada: uno2.classList.contains('sec-cerrada'),
+             laOtraAbierta: !otra.classList.contains('sec-cerrada') };
+  });
+  afirma('al dar clic en el título se cierra', r.cerradaAhora);
+  afirma('y al volver a Ajustes sigue cerrada', r.sigueCerrada);
+  /* Sólo la que cerró: no se le pliega lo que no pidió. */
+  afirma('las demás siguen abiertas', r.laOtraAbierta);
+  await eq.p.context().close();
+});
+
 await br.close(); srv.close();
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTodo en verde.\n');
 process.exit(fallas ? 1 : 0);
