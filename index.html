@@ -1000,7 +1000,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.08-2";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.08-3";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2628,11 +2628,13 @@ function saneaLineaHosp(l){
 }
 
 function saneaLineaEvento(e){
-  const o = Object.assign({ fecha:"", horario:"", evento:"", pax:"", montaje:"", salon:"", renta:"" },
-    e || {});
+  const o = Object.assign({ fecha:"", horario:"", evento:"", pax:"", montaje:"", salon:"",
+    renta:"", horas:"" }, e || {});
   for (const k of ["fecha","horario","evento","montaje","salon","renta"])
     o[k] = String(o[k] || "").trim();
   o.pax = String(o.pax || "").trim();
+  // Las horas que se renta el salón: ver `saneaBloqueEv`, es lo mismo.
+  o.horas = String(o.horas || "").trim();
   return o;
 }
 
@@ -2755,16 +2757,17 @@ const tramoDeHoras = horas => {
  * Devuelve `{ monto, tramo, porQue }`, o `null` si no hay nada que sugerir
  * —el salón no está en el catálogo, o no se renta en ese tramo—.
  */
-function rentaSugerida(nombreSalon, horario){
+function rentaSugerida(nombreSalon, horas, aMano){
   const s = salonPorNombre(nombreSalon);
   if (!s) return null;
-  const horas = horasDelHorario(horario);
   const tramo = tramoDeHoras(horas);
   const monto = s[tramo.k];
   if (monto === "" || !monto) return null;
-  return { monto, tramo,
-           porQue: horas ? `${(Math.round(horas * 10) / 10)} h · ${tramo.etiqueta}`
-                         : `sin horario · se cobra ${tramo.etiqueta}` };
+  const cuantas = Math.round(horas * 10) / 10;
+  return { monto, tramo, horas: cuantas,
+           porQue: horas
+             ? `${cuantas} h${aMano ? " (a mano)" : ""} · ${tramo.etiqueta}`
+             : `sin horario · se cobra ${tramo.etiqueta}` };
 }
 
 /* La salida de emergencia de la lista de salones: un salón prestado, un
@@ -2804,8 +2807,23 @@ const camposDelMomento = tr => ({
   txt:   tr.querySelector(".b-salon, .e-salon"),
   renta: tr.querySelector(".b-renta, .e-renta"),
   hora:  tr.querySelector(".b-hora, .e-hora"),
+  horas: tr.querySelector(".b-horas, .e-horas"),
   porque: tr.querySelector(".sl-porque")
 });
+
+/**
+ * Las horas que se renta el salón en este renglón, y de dónde salieron.
+ *
+ * Mandan las tecleadas. Si están vacías, las que dure el momento según su
+ * horario. Son dos cosas distintas a propósito: el evento puede correr ocho
+ * horas y el salón rentarse seis, y eso pasa todo el tiempo.
+ */
+function horasDelMomento(tr){
+  const c = camposDelMomento(tr);
+  const puestas = c.horas ? Number(String(c.horas.value).replace(",", ".")) : NaN;
+  if (Number.isFinite(puestas) && puestas > 0) return { horas: puestas, aMano: true };
+  return { horas: horasDelHorario(c.hora ? c.hora.value : ""), aMano: false };
+}
 
 /**
  * Escoger un salón llena la renta con lo que cuesta ESE rato.
@@ -2832,6 +2850,12 @@ function escogerSalon(sel){
   c.txt.style.display = "none";
   c.txt.value = sel.value;
   sel.title = sel.value;
+  /* Si nadie ha puesto horas, se proponen las que dure el momento: es lo que
+     casi siempre se cobra, y queda a la vista para corregirlo. */
+  if (c.horas && c.horas.value === ""){
+    const h = horasDelHorario(c.hora ? c.hora.value : "");
+    if (h){ c.horas.value = String(Math.round(h * 10) / 10); c.horas.dataset.deducida = "sí"; }
+  }
   ponerRentaSugerida(tr);
 }
 
@@ -2845,7 +2869,8 @@ function escogerSalon(sel){
 function ponerRentaSugerida(tr){
   const c = camposDelMomento(tr);
   if (!c.txt || !c.renta) return;
-  const sug = rentaSugerida(c.txt.value, c.hora ? c.hora.value : "");
+  const h = horasDelMomento(tr);
+  const sug = rentaSugerida(c.txt.value, h.horas, h.aMano);
 
   if (!sug){
     /* No hay nada que sugerir: el salón no está en el catálogo, o no se
@@ -2866,25 +2891,82 @@ function ponerRentaSugerida(tr){
 /* Un solo oyente para las dos tablas —la del evento y la del convenio—, y
    puesto en el documento para que alcance también a los renglones que se
    agregan después. `sl-sel` no existe en ninguna otra parte. */
+/* Después de tocar un momento, el editor que esté abierto pone al día el
+   cobro de la renta. Vive en `window` porque estos oyentes son del documento
+   y el que sabe cobrar es el editor —ahí están `#tLin` y `recalcular()`—. */
+const avisarAlEditor = tr => {
+  if (typeof window.cobrarRentaDelMomento === "function")
+    window.cobrarRentaDelMomento(tr);
+};
+
 addEventListener("change", ev => {
-  if (ev.target && ev.target.classList && ev.target.classList.contains("sl-sel"))
+  if (ev.target && ev.target.classList && ev.target.classList.contains("sl-sel")){
     escogerSalon(ev.target);
+    avisarAlEditor(ev.target.closest("tr"));
+  }
 });
 addEventListener("input", ev => {
   const t = ev.target;
   if (!t || !t.classList) return;
+  const tr = t.closest("tr");
+  if (!tr) return;
+
+  /* Cambió el horario: se vuelven a llenar las horas —pero sólo si nadie las
+     tecleó—. Lo de alguien no se pisa; lo que se dedujo, sí se corrige. */
   if (t.classList.contains("b-hora") || t.classList.contains("e-hora")){
-    const tr = t.closest("tr");
-    if (tr) ponerRentaSugerida(tr);
+    const c = camposDelMomento(tr);
+    if (c.horas && (c.horas.value === "" || c.horas.dataset.deducida === "sí")){
+      const h = horasDelHorario(t.value);
+      c.horas.value = h ? String(Math.round(h * 10) / 10) : "";
+      c.horas.dataset.deducida = "sí";
+    }
+    ponerRentaSugerida(tr);
+    avisarAlEditor(tr);
+    return;
+  }
+
+  /* Las tecleó alguien: desde aquí mandan ellas. */
+  if (t.classList.contains("b-horas") || t.classList.contains("e-horas")){
+    t.dataset.deducida = "";
+    ponerRentaSugerida(tr);
+    avisarAlEditor(tr);
   }
 });
 
+/**
+ * Qué dice la columna de RENTA en la hoja del cliente.
+ *
+ * Si esa renta ya se está cobrando abajo —hay un renglón de la propuesta
+ * amarrado a este momento—, aquí NO se repite la cifra. Verlo impreso fue lo
+ * que lo dejó claro: el mismo importe arriba y abajo se lee como un cobro
+ * doble, y nadie que firma un contrato quiere esa duda.
+ *
+ * Cuando no se cobra abajo —una cortesía por consumo, o un texto a mano— se
+ * enseña tal cual, como toda la vida.
+ */
+function rentaEnLaHoja(ev, b){
+  const cobrada = b && b.id && (ev.lineas || []).some(l => l.deSalon === b.id);
+  if (cobrada)
+    return `<span class="hint">${b.horas ? esc(b.horas) + " h · " : ""}` +
+           "se cobra en la propuesta</span>";
+  return esc(b.renta || "—");
+}
+
 function saneaBloqueEv(b){
-  const o = Object.assign({ fecha:"", horario:"", evento:"", pax:"", montaje:"", salon:"",
-    renta:"" }, b || {});
+  const o = Object.assign({ id:"", fecha:"", horario:"", evento:"", pax:"", montaje:"",
+    salon:"", renta:"", horas:"" }, b || {});
   for (const k of ["fecha","horario","evento","montaje","salon","renta"])
     o[k] = String(o[k] || "").trim();
   o.pax = String(o.pax || "").trim();
+  /* Cuántas horas se renta el salón. Se llena sola con lo que dura el
+     momento, pero es SUYA y se puede corregir: rentar el salón seis horas
+     para un evento que corre ocho es cosa de todos los días. Vacía quiere
+     decir «la que salga del horario». */
+  o.horas = String(o.horas || "").trim();
+  /* Un identificador propio, para poder amarrarle su renglón de la propuesta
+     económica. Sin esto, volver a escoger el salón agregaría otro cobro en
+     vez de corregir el que ya estaba. */
+  o.id = o.id || nuevoId("mo");
   return o;
 }
 
@@ -2979,7 +3061,11 @@ const servicioBqPorNombre = nombre => {
 
 function saneaLineaEv(l){
   const o = Object.assign({ fecha:"", servicio:"", cantidad:"", precio:"",
-    partes:[], conServicio:CON_SERVICIO_DEF }, l || {});
+    partes:[], conServicio:CON_SERVICIO_DEF, deSalon:"" }, l || {});
+  /* De qué momento salió este cobro, cuando es la renta de un salón. Es lo
+     que hace que volver a escoger el salón CORRIJA su renglón en vez de
+     agregar otro: sin el amarre, cada clic sería un cobro más. */
+  o.deSalon = String(o.deSalon || "").trim();
   /* Su PROPIA copia del desglose, no una liga al catálogo. Cambiar un costo
      en Ajustes no puede mover una cotización ya capturada —igual que hoy no
      le mueve el precio—. */
@@ -14284,6 +14370,9 @@ function editarContrato(id, clientePre, alCerrar){
     <td><input class="field e-pax num" inputmode="numeric" value="${esc(e.pax)}" style="width:100%;text-align:right"></td>
     <td><input class="field e-montaje" value="${esc(e.montaje)}" placeholder="Auditorio" style="width:100%"></td>
     <td>${celdaSalon(e.salon, "e")}</td>
+    <td><input class="field e-horas num" inputmode="decimal" value="${esc(e.horas)}"
+          placeholder="del horario" title="Horas que se renta el salón"
+          style="width:100%;text-align:right"></td>
     <td><input class="field e-renta" value="${esc(e.renta)}" placeholder="Cortesía en base a consumo" style="width:100%"></td>
     <td><button class="btn sm danger" data-quita>✕</button></td></tr>`;
 
@@ -14344,7 +14433,9 @@ function editarContrato(id, clientePre, alCerrar){
         <h3 class="sec">Salones y eventos <span class="hint">(opcional)</span></h3>
         <div style="overflow:auto"><table class="data" id="tEv">
           <thead><tr><th>Fecha</th><th>Horario</th><th>Evento</th><th class="num">Pax</th>
-            <th>Montaje</th><th>Salón</th><th>Renta</th><th style="width:44px"></th></tr></thead>
+            <th>Montaje</th><th>Salón</th>
+            <th class="num" style="width:72px" title="Horas que se renta el salón">Horas</th>
+            <th>Renta</th><th style="width:44px"></th></tr></thead>
           <tbody>${k.eventos.map(filaEv).join("")}</tbody></table></div>
         <p style="margin:8px 0 0"><button class="btn" id="bAddEv">+ Agregar evento</button></p>
 
@@ -14485,6 +14576,7 @@ function editarContrato(id, clientePre, alCerrar){
         fecha: tr.querySelector(".e-fecha").value, horario: tr.querySelector(".e-hora").value,
         evento: tr.querySelector(".e-evento").value, pax: tr.querySelector(".e-pax").value,
         montaje: tr.querySelector(".e-montaje").value, salon: tr.querySelector(".e-salon").value,
+        horas: tr.querySelector(".e-horas") ? tr.querySelector(".e-horas").value : "",
         renta: tr.querySelector(".e-renta").value
       })).filter(e => e.fecha || e.evento || e.salon),
       adicionales: [...ov.querySelectorAll("#tEx tbody tr")].map(tr => saneaLineaExtra({
@@ -15700,7 +15792,7 @@ function cuerpoEvento(e, c){
           <td class="num">${esc(b.pax || "—")}</td>
           <td>${esc(b.montaje || "—")}</td>
           <td>${esc(b.salon || "—")}</td>
-          <td>${esc(b.renta || "—")}</td></tr>`).join("")}</tbody></table>
+          <td>${rentaEnLaHoja(e, b)}</td></tr>`).join("")}</tbody></table>
       <div class="inc">${esc(TEXTOS_EV.cortesia)}</div>` : ""}
 
     ${e.servicios ? `
@@ -15846,13 +15938,16 @@ function editarEvento(id, tipoPre, alCerrar){
     lineas: [saneaLineaEv({})]
   });
 
-  const filaB = b => `<tr>
+  const filaB = b => `<tr data-mo="${esc(b.id)}">
     <td><input class="field b-fecha" type="date" value="${esc(b.fecha)}" style="width:100%"></td>
     <td><input class="field b-hora" value="${esc(b.horario)}" placeholder="20:00-02:00" style="width:100%"></td>
     <td><input class="field b-evento" value="${esc(b.evento)}" placeholder="Boda" style="width:100%"></td>
     <td><input class="field b-pax num" inputmode="numeric" value="${esc(b.pax)}" style="width:100%;text-align:right"></td>
     <td><input class="field b-montaje" value="${esc(b.montaje)}" list="listaMontajes" style="width:100%"></td>
     <td>${celdaSalon(b.salon, "b")}</td>
+    <td><input class="field b-horas num" inputmode="decimal" value="${esc(b.horas)}"
+          placeholder="del horario" title="Horas que se renta el salón"
+          style="width:100%;text-align:right"></td>
     <td><input class="field b-renta" value="${esc(b.renta)}" placeholder="En cortesía por consumo" style="width:100%"></td>
     <td><button class="btn sm danger" data-quita>✕</button></td></tr>`;
 
@@ -15940,7 +16035,8 @@ function editarEvento(id, tipoPre, alCerrar){
       <div class="hint srv-cuenta" style="margin-top:2px"></div>`;
   };
 
-  const filaL = l => `<tr class="${esLineaPaquete(l) ? "l-paq" : ""}" data-srv-antes="${esc(
+  const filaL = l => `<tr class="${esLineaPaquete(l) ? "l-paq" : ""}"${
+      l.deSalon ? ` data-desalon="${esc(l.deSalon)}"` : ""} data-srv-antes="${esc(
       state.serviciosBq.some(x => x.nombre === l.servicio) ? l.servicio : "")}">
     <td><input class="field l-fecha" type="date" value="${esc(l.fecha)}" style="width:100%"></td>
     <td>${celdaServicio(l)}</td>
@@ -16032,7 +16128,9 @@ function editarEvento(id, tipoPre, alCerrar){
         <div style="overflow:auto"><table class="data" id="tBloq">
           <thead><tr><th style="width:150px">Fecha</th><th style="width:120px">Horario</th><th>Evento</th>
             <th class="num" style="width:80px">Pax</th><th style="width:130px">Montaje</th>
-            <th style="width:130px">Salón</th><th style="width:180px">Renta</th><th style="width:44px"></th></tr></thead>
+            <th style="width:130px">Salón</th>
+            <th class="num" style="width:72px" title="Horas que se renta el salón">Horas</th>
+            <th style="width:180px">Renta</th><th style="width:44px"></th></tr></thead>
           <tbody>${(e.bloques.length ? e.bloques : [saneaBloqueEv({})]).map(filaB).join("")}</tbody></table></div>
         <datalist id="listaMontajes">${MONTAJES.map(m => `<option value="${esc(m)}">`).join("")}</datalist>
         <p style="margin:8px 0 0"><button class="btn" id="bAddBloq">+ Agregar momento</button></p>
@@ -16122,6 +16220,91 @@ function editarEvento(id, tipoPre, alCerrar){
       unitario: parseMoney(f.querySelector(".d-unit").value),
       cantidad: Number(f.querySelector(".d-cant").value) || 0
     })).filter(x => x.concepto);
+  };
+
+  /* ======================================================================
+     LA RENTA DEL SALÓN, COBRADA
+
+     Marco: la renta sí se cobra, con IVA al 8% y sin el 15% de servicio —un
+     salón no es alimentos—. Hasta aquí la renta de «Detalles del evento» era
+     texto descriptivo y NUNCA entraba al total: en su cotización de verdad,
+     los $5,000 del Ónix no estaban en los $63,250.
+
+     El cobro es un renglón normal de la propuesta, amarrado a su momento por
+     `data-desalon`. Ese amarre es todo: sin él, volver a escoger el salón
+     agregaría otro cobro en vez de corregir el que ya estaba.
+     ====================================================================== */
+
+  /** El renglón de la propuesta que cobra la renta de ESTE momento, si lo hay. */
+  const cobroDelMomento = idMomento => idMomento
+    ? ov.querySelector(`#tLin > tbody > tr[data-desalon="${CSS.escape(idMomento)}"]`) : null;
+
+  /**
+   * Pone al día —crea, corrige o quita— el cobro de la renta de un momento.
+   *
+   * Lo que NO hace: pisar un precio que alguien tecleó. Se guarda en el
+   * renglón lo último que se sugirió; si lo que hay es eso, se actualiza, y
+   * si es otra cosa, se respeta y ya.
+   */
+  function ponerCobroDeSalon(trMomento){
+    const id = trMomento && trMomento.dataset ? trMomento.dataset.mo : "";
+    if (!id) return;
+    const c = camposDelMomento(trMomento);
+    const h = horasDelMomento(trMomento);
+    const sug = c.txt ? rentaSugerida(c.txt.value, h.horas, h.aMano) : null;
+    const ya = cobroDelMomento(id);
+
+    /* Nada que cobrar: ni salón del catálogo, ni tarifa para ese rato. Se
+       quita el cobro, pero SÓLO si sigue siendo el que puso la aplicación:
+       uno que alguien corrigió a mano es suyo y no se tira. */
+    if (!sug){
+      if (ya && ya.dataset.cobroSug &&
+          ya.querySelector(".l-precio").value.trim() === ya.dataset.cobroSug){
+        const sig = ya.nextElementSibling;
+        if (sig && sig.classList.contains("l-desglose")) sig.remove();
+        ya.remove();
+        recalcular();
+      }
+      return;
+    }
+
+    const nombre = `Renta de salón ${c.txt.value}` + (sug.horas ? ` · ${sug.horas} h` : "");
+    const precio = String(sug.monto);
+
+    if (!ya){
+      const nueva = saneaLineaEv({ servicio:nombre, cantidad:1, precio:sug.monto,
+        /* Un salón no lleva el cargo por servicio del 15%: ése es de
+           alimentos y bebidas. El IVA del documento ya es 8%. */
+        conServicio:false, deSalon:id,
+        fecha: trMomento.querySelector(".b-fecha")
+          ? trMomento.querySelector(".b-fecha").value : "" });
+      ov.querySelector("#tLin tbody").insertAdjacentHTML("beforeend", filaL(nueva));
+      const puesta = cobroDelMomento(id);
+      if (puesta) puesta.dataset.cobroSug = precio;
+      recalcular();
+      return;
+    }
+
+    /* Ya existe: se le corrige el nombre y, si nadie lo movió, el precio. */
+    const txt = ya.querySelector(".l-servicio");
+    const campoPr = ya.querySelector(".l-precio");
+    if (txt) txt.value = nombre;
+    const sel = ya.querySelector(".l-srvSel");
+    if (sel){ sel.value = OTRO_SRV; if (txt) txt.style.display = ""; }
+    const antes = ya.dataset.cobroSug || "";
+    const puesto = String(campoPr.value || "").trim();
+    if (!puesto || puesto === antes) campoPr.value = precio;
+    ya.dataset.cobroSug = precio;
+    recalcular();
+  }
+
+  /* Mientras este editor esté abierto, es el que cobra.
+     No hace falta desengancharlo al cerrar: comprueba que el renglón siga
+     colgando de ESTE documento y que el documento siga en la pantalla. Un
+     editor cerrado deja de cumplir las dos cosas y no toca nada. */
+  window.cobrarRentaDelMomento = tr => {
+    if (!ov.isConnected) return;
+    if (tr && ov.contains(tr) && tr.closest("#tBloq")) ponerCobroDeSalon(tr);
   };
 
   function recalcular(){
@@ -16325,6 +16508,16 @@ function editarEvento(id, tipoPre, alCerrar){
     const b = ev.target.closest("[data-quita]");
     if (!b) return;
     const tr = b.closest("tr"), cuerpo = tr.parentElement;
+    /* Quitar un momento se lleva su cobro de renta: dejarlo sería cobrar un
+       salón que ya no está en el documento. */
+    if (tr.dataset.mo){
+      const cobro = cobroDelMomento(tr.dataset.mo);
+      if (cobro){
+        const sigC = cobro.nextElementSibling;
+        if (sigC && sigC.classList.contains("l-desglose")) sigC.remove();
+        cobro.remove();
+      }
+    }
     // Una línea se lleva consigo su renglón de desglose, si lo tiene.
     const sig = tr.nextElementSibling;
     if (sig && sig.classList.contains("l-desglose")) sig.remove();
@@ -16371,9 +16564,12 @@ function editarEvento(id, tipoPre, alCerrar){
       fecha: tr.querySelector(".b-fecha").value, horario: tr.querySelector(".b-hora").value,
       evento: tr.querySelector(".b-evento").value, pax: tr.querySelector(".b-pax").value,
       montaje: tr.querySelector(".b-montaje").value, salon: tr.querySelector(".b-salon").value,
-      renta: tr.querySelector(".b-renta").value
+      horas: tr.querySelector(".b-horas") ? tr.querySelector(".b-horas").value : "",
+      renta: tr.querySelector(".b-renta").value,
+      id: tr.dataset.mo || ""
     })).filter(b => b.fecha || b.evento || b.salon);
     const lineas = [...ov.querySelectorAll("#tLin > tbody > tr:not(.l-desglose)")].map(tr => saneaLineaEv({
+      deSalon: tr.dataset.desalon || "",
       partes: partesDe(tr),
       fecha: tr.querySelector(".l-fecha").value, servicio: tr.querySelector(".l-servicio").value,
       cantidad: tr.querySelector(".l-cant").value,
