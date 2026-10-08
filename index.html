@@ -1000,7 +1000,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.07-109";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.08-1";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3303,7 +3303,23 @@ const pesoTexto = t => (String(t || "").length * 2);
    casi llega a 5» era un absurdo que no ayudaba a nadie. */
 const TECHO_LOCALSTORAGE = 5177344 * 2;
 
-const techoDelAlmacen = () => TECHO_LOCALSTORAGE;
+/* Lo que el navegador dice que da en total, cuando ya contestó. Se pregunta
+   una vez al arrancar —es asíncrono— y se guarda aquí para poder decirlo sin
+   esperar. */
+let cuotaConocida = 0;
+
+/**
+ * Contra qué tope se mide hoy la copia de este equipo.
+ *
+ * Mientras la copia viva en la gaveta chica, el techo son esos ~10 MB y no
+ * hay más. Desde que vive en la bodega, el techo es lo que el navegador dé
+ * para el sitio entero —cientos de megas—, y seguir midiendo contra 10
+ * pondría el letrero rojo a alguien que va por el 2% de su espacio.
+ */
+function techoDelAlmacen(){
+  if (copiaViva && hayBodega() && cuotaConocida) return cuotaConocida;
+  return TECHO_LOCALSTORAGE;
+}
 
 /* ==========================================================================
    LA COPIA DE ESTE NAVEGADOR: UN SOLO CAMINO DE ESCRITURA
@@ -3349,6 +3365,24 @@ const SELLO_LOCAL = STORE + ":sello";
 let bodegaEnVuelo = false;
 let bodegaPendiente = null;
 
+/* NADIE escribe la copia de este navegador hasta que esté leída.
+
+   Es hermana de `cargaRota` y tapa un agujero que da miedo: `guardar()` lo
+   llaman noventa y tantos sitios, y uno de ellos es el arranque, que corre
+   TAMBIÉN cuando entra un cliente por su liga de firma. Si esa pantalla no
+   hidrata —y no tiene por qué esperar—, el estado que trae puede estar vacío,
+   y ese guardar escribiría el vacío encima de la copia buena.
+
+   Se pone en `true` al terminar de leer bien, o al confirmar que no hay
+   bodega y se sigue en la gaveta chica como siempre. En las ligas públicas no
+   se pone nunca. */
+let copiaViva = false;
+
+/* ¿Se halló una copia guardada, en cualquiera de los dos lados? Si no, el
+   estado es nuevo —o es el de demostración— y eso cambia qué se puede dar
+   por borrado. */
+let copiaHallada = false;
+
 /* --------------------------------------------------------------------------
    LA BODEGA GRANDE · IndexedDB
 
@@ -3376,6 +3410,15 @@ const BODEGA_V = 1;
 let laBodega = null;             // la conexión, una sola, reusada
 let bodegaRota = false;          // ya se intentó y no se pudo: no insistir
 
+/* NO es lo mismo que la bodega diga «aquí no hay nada» a que no conteste.
+
+   Lo primero es normal: es la primera vez, o es un navegador que no tiene
+   IndexedDB y se sigue en la gaveta chica como siempre. Lo segundo no se
+   puede interpretar: la copia buena PUEDE estar ahí dentro, y seguir como si
+   no existiera —y guardar encima— es la manera de perder los datos de
+   alguien. Cuando esto es cierto, la aplicación se queda de sólo lectura. */
+let bodegaColgada = false;
+
 /** ¿Este navegador tiene IndexedDB a la mano? En modo privado puede no. */
 function hayBodega(){
   if (bodegaRota) return false;
@@ -3396,14 +3439,15 @@ function abrirBodega(){
   if (!hayBodega()) return Promise.resolve(null);
   return new Promise(resolve => {
     let listo = false;
-    const rendirse = motivo => {
+    const rendirse = (motivo, colgada) => {
       if (listo) return;
       listo = true;
       console.warn("No se pudo abrir la bodega:", motivo);
       bodegaRota = true;
+      if (colgada) bodegaColgada = true;
       resolve(null);
     };
-    const reloj = setTimeout(() => rendirse("tardó demasiado"), ESPERA_BODEGA);
+    const reloj = setTimeout(() => rendirse("tardó demasiado", true), ESPERA_BODEGA);
     let q;
     try{ q = indexedDB.open(BODEGA, BODEGA_V); }
     catch(e){ clearTimeout(reloj); return rendirse(e); }
@@ -3414,7 +3458,8 @@ function abrirBodega(){
     };
     /* Otra pestaña la tiene abierta con otra versión. No se espera: se sigue
        con `localStorage`, que es mejor que no abrir. */
-    q.onblocked = () => { clearTimeout(reloj); rendirse("otra pestaña la tiene tomada"); };
+    /* Otra pestaña la tiene tomada: tampoco se sabe qué hay dentro. */
+    q.onblocked = () => { clearTimeout(reloj); rendirse("otra pestaña la tiene tomada", true); };
     q.onerror   = () => { clearTimeout(reloj); rendirse(q.error); };
     q.onsuccess = () => {
       clearTimeout(reloj);
@@ -3485,6 +3530,109 @@ async function pedirQueNoLoTiren(){
   }catch(e){}
 }
 
+/* Cuánto se espera, como mucho, a que la bodega conteste al arrancar.
+
+   Muy por debajo de los 6 segundos del seguro del <head>: si se pasara de
+   ahí, el seguro quitaría la pantalla de entrada y enseñaría la caja de
+   «CORE no pudo abrir», que es exactamente lo que no puede volver a pasar. */
+const ESPERA_HIDRATAR = 2000;
+
+/**
+ * Lee la copia de este navegador y la deja puesta en `state`.
+ *
+ * Hay DOS copias mientras dure la mudanza, y no siempre dicen lo mismo: si la
+ * gaveta chica se llenó, la suya quedó vieja. Por eso no se escoge «la de la
+ * bodega si existe», sino **la más nueva de las dos**, por su sello. Con dos
+ * pestañas abiertas —una con la versión de antes y otra con ésta— ninguna
+ * pierde, y la nube las reconcilia como ya lo hace hoy.
+ *
+ * Si algo sale mal, NO se sigue como si nada: se deja `copiaViva` en falso y
+ * la aplicación queda de sólo lectura. Caer a la gaveta chica y guardar
+ * encima es la manera de perder los nueve megas del dueño.
+ */
+async function hidratarCopiaLocal(){
+  /* Sin bodega —modo privado, almacenamiento bloqueado— todo sigue como
+     siempre: la copia es la de la gaveta chica, que ya la leyó `cargar()`. */
+  if (!hayBodega()){
+    copiaViva = true;
+    copiaHallada = !!selloDeLaGaveta();
+    return;
+  }
+
+  pedirQueNoLoTiren();      // sin esperarla: es una cortesía, no un requisito
+  /* Y de paso, cuánto da este navegador: es lo que permite dejar de medir
+     contra el techo de la gaveta chica en cuanto la copia ya no vive ahí. */
+  cuotaDelNavegador().then(c => { if (c && c.total) cuotaConocida = c.total; });
+
+  const guardada = await Promise.race([
+    leerDeBodega("copia").catch(() => null),
+    new Promise(r => setTimeout(() => r("tardó"), ESPERA_HIDRATAR))
+  ]);
+
+  /* La bodega no contestó —se colgó, o la tiene tomada otra pestaña—. No se
+     adivina: la copia buena puede estar ahí dentro, y la de la gaveta chica
+     puede ser la vieja. Escribir encima sería peor que no dejar escribir.
+
+     Ojo con la diferencia: que la bodega conteste «aquí no hay nada» es otra
+     cosa y es normal —la primera vez, o un navegador sin IndexedDB—; eso cae
+     más abajo y sigue como siempre. */
+  if (guardada === "tardó" || bodegaColgada){
+    console.warn("La bodega no contestó a tiempo; sólo lectura.");
+    letreroDeSoloLectura();
+    return;
+  }
+
+  const selloGaveta = selloDeLaGaveta();
+  const selloBodega = guardada && Number(guardada.t) || 0;
+
+  if (guardada && guardada.json && selloBodega >= selloGaveta){
+    /* La de la bodega manda. Se vuelve a sanear, igual que `cargar()`: lo
+       guardado puede venir de una versión anterior. */
+    try{
+      state = sanear(JSON.parse(guardada.json));
+      cargaRota = false;
+      copiaHallada = true;
+    }catch(e){
+      console.error("La copia de la bodega no se pudo leer:", e);
+      letreroDeSoloLectura();
+      return;
+    }
+  } else {
+    /* Manda la de la gaveta chica —la que ya tiene `state`—, y se la pasa a
+       la bodega para que la próxima vez estén parejas. Es también el camino
+       de la MUDANZA: la primera vez no hay nada en la bodega. */
+    copiaHallada = !!selloGaveta || !!(() => {
+      try{ return localStorage.getItem(STORE); }catch(e){ return null; }
+    })();
+  }
+
+  copiaViva = true;
+
+  /* El sello dice que hubo un guardado que la bodega no alcanzó a recibir
+     —el navegador se cerró en ese instante—. No se puede recuperar, pero
+     callarlo sería peor. */
+  if (selloGaveta && selloBodega && selloGaveta > selloBodega + 1500)
+    setTimeout(() => alert(
+      "Aviso: el último cambio de la sesión anterior pudo no alcanzar a " +
+      "guardarse en este equipo.\n\nSi estaba conectado a la nube, se " +
+      "recupera solo al sincronizar. Revisa lo último que capturaste."), 1200);
+}
+
+/** La hora del último guardado, según la gaveta chica. 0 si no hay. */
+function selloDeLaGaveta(){
+  try{ return Number(localStorage.getItem(SELLO_LOCAL)) || 0; }catch(e){ return 0; }
+}
+
+/** Cuando no se pudo leer la copia: se mira, no se toca. */
+function letreroDeSoloLectura(){
+  copiaViva = false;
+  ponerLetreroAlmacen({
+    titulo: "No se pudo leer la copia de este equipo.",
+    detalle: "La aplicación quedó de SÓLO LECTURA para no escribir encima de " +
+             "tus datos. Vuelve a cargar la página."
+  });
+}
+
 /** Lo que el navegador dice que le queda, para poder enseñarlo. */
 async function cuotaDelNavegador(){
   try{
@@ -3505,6 +3653,8 @@ async function cuotaDelNavegador(){
  * Devuelve si se pudo.
  */
 function guardarCopiaLocal(avisa){
+  /* Antes de leer no se escribe. Ver `copiaViva`. */
+  if (!copiaViva) return false;
   const texto = JSON.stringify(state);
   ultimoPeso = texto.length;
   const sello = Date.now();
@@ -3743,15 +3893,19 @@ function avisarAlmacenLleno(){
 }
 
 /** El letrero fijo. Mientras no se pueda guardar, no se quita. */
-function ponerLetreroAlmacen(){
+function ponerLetreroAlmacen(texto){
   if (document.getElementById("avisoAlmacen")) return;
+  const t = texto || {
+    titulo: "Este navegador ya no puede guardar: se llenó.",
+    detalle: "Lo que escribas no se está guardando en este equipo."
+  };
   const d = document.createElement("div");
   d.id = "avisoAlmacen";
   d.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:99998;background:#7a1020;" +
     "color:#fff;padding:8px 14px;font-size:13px;display:flex;gap:12px;align-items:center;" +
     "flex-wrap:wrap;box-shadow:0 2px 10px rgba(0,0,0,.3)";
-  d.innerHTML = `<b>Este navegador ya no puede guardar: se llenó.</b>
-    <span>Lo que escribas no se está guardando en este equipo.</span>
+  d.innerHTML = `<b>${esc(t.titulo)}</b>
+    <span>${esc(t.detalle)}</span>
     <span style="flex:1"></span>
     <button class="btn sm" id="avisoAlmacenResp">Bajar el respaldo</button>
     <button class="btn sm" id="avisoAlmacenVer">¿Qué lo llenó?</button>`;
@@ -19752,50 +19906,84 @@ try{
   setTimeout(quitar, 2250);
 })();
 
-/* Las lápidas pendientes ANTES del primer guardar: si no, este guardar toma
-   los ids de ahora como punto de partida y lo que se borró en la sesión
-   pasada —y no alcanzó a subir— se perdería para siempre. */
-cargarTumbas();
-if (!cargaRota) guardar();     // con la carga rota, no se pisa lo que quedó
-render();
-// Si el enlace es el de un cliente que viene a firmar, la aplicación se
-// convierte en su documento y no arranca nada del CRM.
-const _firma = enlaceDeFirma();
-const _alta  = enlaceDeAlta();
-const _odt   = enlaceDeOdt();
-if (_firma){ terminarEntrada(); pantallaFirmaCliente(_firma); }
-else if (_odt){
-  // El jefe de un área que viene a pedirle algo a marketing tampoco entra al
-  // CRM: llena su orden, la firma y ya.
-  terminarEntrada();
-  cargarNube();
-  usarServidorDeLaLiga();   // en su teléfono no hay servidor: viene en la liga
-  pantallaOdtPublica(_odt);
-}
-else if (_alta){
-  // Quien viene de un anuncio no entra al CRM: llena su registro y ya. Hace
-  // falta la nube para depositarlo, así que se carga la configuración antes.
-  terminarEntrada();
-  cargarNube();
-  usarServidorDeLaLiga();   // igual que arriba: el que viene del anuncio no lo tiene
-  pantallaAltaPublica(_alta);
-}
-else {
-  arrancarNube();
-  // A quien alcanza más de un departamento se le pregunta en cuanto se puede
-  // ver la pantalla; antes se quedaría detrás de la animación de entrada.
-  entradaLista.then(() => pantallaDepto());
-  // Si la tableta venía en modo cliente, vuelve a él antes de que se alcance a
-  // ver nada del CRM. Se espera a la animación nada más para no cortarla.
-  const _k = kioscoGuardado();
-  if (_k) entradaLista.then(() => {
-    if (!document.getElementById("kiosco")) entrarKiosco(_k.evento || "", _k.quien || "");
-  });
-}
+/* ==========================================================================
+   EL ARRANQUE
 
-/* Arrancó. El seguro del <head> se hace a un lado: de aquí en adelante los
-   errores los atiende la aplicación, no la caja de "CORE no pudo abrir". */
-if (window.CORE_ARRANCO) window.CORE_ARRANCO();
+   Es `async` desde que la copia vive en IndexedDB, que se lee esperando. Todo
+   va dentro de un `try`, y `CORE_ARRANCO()` en el `finally`: si algo de aquí
+   truena o tarda, el seguro del <head> se hace a un lado de todas formas y
+   la gente ve la aplicación en vez de la pantalla morada eterna. Eso ya pasó
+   una vez y no puede volver a pasar.
+   ========================================================================== */
+(async function arranque(){
+  try{
+    /* Si el enlace es el de un cliente que viene a firmar, la aplicación se
+       convierte en su documento y no arranca nada del CRM. */
+    const _firma = enlaceDeFirma();
+    const _alta  = enlaceDeAlta();
+    const _odt   = enlaceDeOdt();
+
+    if (_firma || _odt || _alta){
+      /* Las ligas públicas NO esperan a leer la copia y NO la tocan.
+         Ni leen, ni guardan, ni cargan lápidas: el que entra aquí es un
+         cliente con su teléfono, no el hotel. Antes, el `guardar()` de más
+         abajo corría también para él, y con la copia sin leer eso escribía
+         el vacío encima de la cartera. */
+      render();
+      terminarEntrada();
+      if (_firma) pantallaFirmaCliente(_firma);
+      else {
+        /* El jefe de un área que viene a pedirle algo a marketing, o quien
+           llega de un anuncio: en su teléfono no hay servidor configurado,
+           viene en la liga. */
+        cargarNube();
+        usarServidorDeLaLiga();
+        if (_odt) pantallaOdtPublica(_odt); else pantallaAltaPublica(_alta);
+      }
+      return;
+    }
+
+    /* La copia de este equipo, de donde esté y la más nueva. Hasta que esto
+       termine, nadie escribe nada: ver `copiaViva`. */
+    await hidratarCopiaLocal();
+
+    /* Las lápidas pendientes ANTES del primer guardar: si no, este guardar
+       toma los ids de ahora como punto de partida y lo que se borró en la
+       sesión pasada —y no alcanzó a subir— se perdería para siempre. */
+    cargarTumbas();
+
+    /* EL CANDADO DEL ARRANQUE. Si no se halló copia en ningún lado pero el
+       punto de comparación dice que sí había registros, algo no cuadra: el
+       almacenamiento se vació, o se está entrando con la cartera de
+       demostración. Comparar ahí convertiría la cartera entera en lápidas y
+       la subiría como borrada. Se pone el punto de comparación al día sin
+       apuntar nada, que es justo para lo que existe `alDiaSinTumbar`. */
+    if (!copiaHallada && idsGuardados && idsGuardados.size) alDiaSinTumbar(false);
+
+    if (!cargaRota) guardar();   // con la carga rota, no se pisa lo que quedó
+    render();
+
+    arrancarNube();
+    // A quien alcanza más de un departamento se le pregunta en cuanto se puede
+    // ver la pantalla; antes se quedaría detrás de la animación de entrada.
+    entradaLista.then(() => pantallaDepto());
+    // Si la tableta venía en modo cliente, vuelve a él antes de que se alcance a
+    // ver nada del CRM. Se espera a la animación nada más para no cortarla.
+    const _k = kioscoGuardado();
+    if (_k) entradaLista.then(() => {
+      if (!document.getElementById("kiosco")) entrarKiosco(_k.evento || "", _k.quien || "");
+    });
+  }catch(e){
+    console.error("El arranque tropezó:", e);
+    try{ render(); }catch(e2){}
+  }finally{
+    /* Arrancó. El seguro del <head> se hace a un lado: de aquí en adelante
+       los errores los atiende la aplicación, no la caja de "CORE no pudo
+       abrir". Va en el `finally` a propósito: pase lo que pase arriba, la
+       gente no se queda mirando la pantalla de entrada. */
+    if (window.CORE_ARRANCO) window.CORE_ARRANCO();
+  }
+})();
 </script>
 </body>
 </html>
