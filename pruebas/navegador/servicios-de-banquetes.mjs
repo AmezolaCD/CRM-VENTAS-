@@ -132,7 +132,7 @@ await admin.p.evaluate(cat => {
 /** Abre una cotización nueva y devuelve lo que haya en el primer renglón. */
 const abrirCotizacion = () => admin.p.evaluate(async () => {
   document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
-  editarEvento(null, null, 'cotizacion');
+  editarEvento(null, 'cotizacion');
   await new Promise(r => setTimeout(r, 300));
 });
 
@@ -277,7 +277,7 @@ await bloque('6 · sin catálogo, la captura NO se rompe', async () => {
     state.serviciosBq = [];
     guardar(); render();
     document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
-    editarEvento(null, null, 'cotizacion');
+    editarEvento(null, 'cotizacion');
     await new Promise(r => setTimeout(r, 300));
     const tr = document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
     tr.querySelector('.l-servicio').value = 'LO DE SIEMPRE, A MANO';
@@ -331,7 +331,7 @@ await bloque('7 · se captura en Ajustes y llega a la cotización', async () => 
   const enCotizacion = await admin.p.evaluate(async () => {
     vista = 'eventos'; render();
     document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
-    editarEvento(null, null, 'cotizacion');
+    editarEvento(null, 'cotizacion');
     await new Promise(r => setTimeout(r, 300));
     const sel = document.querySelector('#tLin > tbody > tr:not(.l-desglose) .l-srvSel');
     sel.value = 'Mobiliario lounge';
@@ -416,7 +416,7 @@ await bloque('9 · la lista se carga de golpe, pegándola', async () => {
   const g = await admin.p.evaluate(async () => {
     document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
     vista = 'eventos'; render();
-    editarEvento(null, null, 'cotizacion');
+    editarEvento(null, 'cotizacion');
     await new Promise(r => setTimeout(r, 300));
     const sel = document.querySelector('#tLin > tbody > tr:not(.l-desglose) .l-srvSel');
     return {
@@ -565,7 +565,7 @@ await bloque('13 · se quita de la captura sin borrar lo ya escrito', async () =
   const nuevo = await admin.p.evaluate(async () => {
     document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
     vista = 'eventos'; render();
-    editarEvento(null, null, 'cotizacion');
+    editarEvento(null, 'cotizacion');
     await new Promise(r => setTimeout(r, 300));
     /* El editor, no cualquier modal: con la pantalla de acceso encima esta
        comprobación se pasaba sola mirando el formulario equivocado. */
@@ -628,7 +628,7 @@ await bloque('14 · se busca dentro de la lista', async () => {
     state.serviciosBq = cat.map((x, i) => saneaServicioBq(Object.assign({ orden:i }, x)));
     guardar();
     vista = 'eventos'; render();
-    editarEvento(null, null, 'cotizacion');
+    editarEvento(null, 'cotizacion');
     await new Promise(r => setTimeout(r, 300));
 
     const tr = () => document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
@@ -708,7 +708,7 @@ await bloque('15 · con pocos servicios el buscador no estorba', async () => {
       saneaServicioBq({ nombre:'Dos de ejemplo', precio:20, orden:1 })];
     guardar();
     vista = 'eventos'; render();
-    editarEvento(null, null, 'cotizacion');
+    editarEvento(null, 'cotizacion');
     await new Promise(r => setTimeout(r, 300));
     const tr = document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
     return { buscador: !!tr.querySelector('.busca-srv'), lista: !!tr.querySelector('.l-srvSel') };
@@ -748,7 +748,7 @@ await bloque('16 · escoger un paquete trae su desglose y de ahí sale el precio
     state.eventos = [];
     guardar();
     vista = 'eventos'; render();
-    editarEvento(null, null, 'cotizacion');
+    editarEvento(null, 'cotizacion');
     await new Promise(r => setTimeout(r, 300));
     const tr = () => document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
     const sel = tr().querySelector('.l-srvSel');
@@ -903,27 +903,47 @@ await bloque('20 · adentro, el reporte sí trae las cifras', async () => {
     let bajado = null;
     const orig = window.descargar;
     window.descargar = (nombre, contenido) => { bajado = { nombre, contenido }; };
+
+    /* Se espera a que la cosa ESTÉ, no a que pase un rato.
+       Con relojes fijos esta prueba fallaba una de cada doce vueltas: la
+       pantalla de reportes se vuelve a dibujar al escoger el año, y si el
+       clic caía antes de que el botón nuevo existiera, no se bajaba nada y la
+       prueba acusaba al código de algo que no había hecho. */
+    const esperaA = async (hazlo, cuantos) => {
+      for (let i = 0; i < (cuantos || 60); i++){
+        const v = hazlo();
+        if (v) return v;
+        await new Promise(r => setTimeout(r, 50));
+      }
+      return null;
+    };
+
     vista = 'reportes'; render();
-    await new Promise(r => setTimeout(r, 300));
-    document.getElementById('repAnio').click();
-    await new Promise(r => setTimeout(r, 300));
-    document.getElementById('repDesg').click();
-    await new Promise(r => setTimeout(r, 200));
+    const bAnio = await esperaA(() => document.getElementById('repAnio'));
+    if (!bAnio){ window.descargar = orig; return { falta:'el botón del año' }; }
+    bAnio.click();
+    const bDesg = await esperaA(() => document.getElementById('repDesg'));
+    if (!bDesg){ window.descargar = orig; return { falta:'el botón del desglose' }; }
+    bDesg.click();
+    await esperaA(() => bajado, 40);
     window.descargar = orig;
-    return bajado;
+    return bajado || { falta:'no se bajó ningún archivo' };
   });
-  afirma('se baja un archivo de desglose', !!r && /desglose-de-paquetes/.test(r.nombre));
-  const reng = r.contenido.split(/\r?\n/).filter(Boolean);
+  if (r && r.falta) console.log('         faltó: ' + r.falta);
+  const bien = !!r && !r.falta;
+  afirma('se baja un archivo de desglose', bien && /desglose-de-paquetes/.test(r.nombre));
+  const texto = bien ? r.contenido : '';
+  const reng = texto.split(/\r?\n/).filter(Boolean);
   afirma('con un renglón por concepto: encabezado y los dos', reng.length === 3);
-  afirma('y con sus cifras, que aquí sí van', /650/.test(r.contenido) && /3000/.test(r.contenido));
-  afirma('diciendo de qué paquete son', /Paquete de ejemplo/.test(r.contenido));
+  afirma('y con sus cifras, que aquí sí van', /650/.test(texto) && /3000/.test(texto));
+  afirma('diciendo de qué paquete son', /Paquete de ejemplo/.test(texto));
 });
 
 await bloque('21 · un servicio sin desglose sigue como siempre', async () => {
   const r = await admin.p.evaluate(async () => {
     document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
     vista = 'eventos'; render();
-    editarEvento(null, null, 'cotizacion');
+    editarEvento(null, 'cotizacion');
     await new Promise(r => setTimeout(r, 300));
     const tr = () => document.querySelector('#tLin > tbody > tr:not(.l-desglose)');
     const sel = tr().querySelector('.l-srvSel');
@@ -973,7 +993,7 @@ await bloque('22 · el renglón de un paquete se lee como un paquete', async () 
     state.eventos = [];
     guardar();
     vista = 'eventos'; render();
-    editarEvento(null, null, 'cotizacion');
+    editarEvento(null, 'cotizacion');
     await new Promise(r => setTimeout(r, 300));
 
     const tr = () => document.querySelector('#tLin > tbody > tr:not(.l-desglose)');

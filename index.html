@@ -1000,7 +1000,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.08-1";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.08-2";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2232,6 +2232,7 @@ function esqueletoDeEmergencia(){
   return {
     clientes: [], actividades: [], convenios: [], prospectos: [], contratos: [],
     eventos: [], campanas: [], odts: [], certificados: [], huespedes: [], serviciosBq: [],
+    salones: [],
     usuarios:     dame(() => USUARIOS_DEF.map(saneaUsuario), []),
     habitaciones: dame(() => HABS_DEF.map(saneaHab), []),
     ajustes: {
@@ -2318,6 +2319,7 @@ function sanear(s){
     certificados: Array.isArray(s.certificados) ? s.certificados.map(saneaCertificado) : [],
     huespedes:    Array.isArray(s.huespedes) ? s.huespedes.map(saneaHuesped) : [],
     serviciosBq:  catalogoServiciosBq(s.serviciosBq),
+    salones:      catalogoSalones(s.salones),
     usuarios:     Array.isArray(s.usuarios) ? s.usuarios.map(saneaUsuario) : USUARIOS_DEF.map(saneaUsuario),
     habitaciones: catalogo(s.habitaciones),
     ajustes: {
@@ -2640,6 +2642,242 @@ function saneaLineaExtra(x){
   o.costo    = String(o.costo || "").trim();
   return o;
 }
+
+/* ==========================================================================
+   LOS SALONES Y SU RENTA
+
+   La renta se tecleaba a mano, salón por salón y cotización por cotización,
+   mirando un Excel con CINCO tablas de precios distintas —las conté—. Marco:
+   «en el apartado de detalles del evento ayúdame con una lista desplegable de
+   los salones y agregarle el precio sugerido modificable».
+
+   Lo mismo que el catálogo de banquetes: la lista vive en Ajustes, NO en este
+   archivo —que es público—, y se carga de un CSV.
+   ========================================================================== */
+
+/* Los tramos del libro del hotel. Un salón no cuesta por hora: cuesta por
+   rato, y el rato tiene tres tamaños. */
+const TRAMOS_SALON = [
+  { k:"hasta1", etiqueta:"0-1 hora",    max:1  },
+  { k:"de2a5",  etiqueta:"2-5 horas",   max:5  },
+  { k:"de6a12", etiqueta:"6-12 horas",  max:Infinity }
+];
+
+/**
+ * Un salón del hotel, con lo que cuesta rentarlo.
+ *
+ * Las tres tarifas pueden venir vacías: en el libro, los salones grandes
+ * traen un `*` en «0-1 hora» porque no se rentan por una hora suelta. Vacío
+ * quiere decir «no se renta así», y entonces no se sugiere nada —inventar un
+ * precio ahí sería peor que dejarlo en blanco—.
+ */
+function saneaSalon(x){
+  const o = Object.assign({ id:"", nombre:"", ubicacion:"",
+                            hasta1:"", de2a5:"", de6a12:"" }, x || {});
+  o.id = o.id || nuevoId("sl");
+  o.nombre = String(o.nombre || "").trim();
+  o.ubicacion = String(o.ubicacion || "").trim();
+  /* Las tarifas se guardan como número, o como cadena VACÍA cuando no hay.
+     Un 0 y un «no se renta así» no son lo mismo y no se pueden confundir. */
+  for (const t of TRAMOS_SALON){
+    const v = o[t.k];
+    o[t.k] = (v === "" || v == null) ? "" : (Number(v) || "");
+  }
+  if (o.orden !== undefined){
+    o.orden = Number(o.orden);
+    if (!Number.isFinite(o.orden)) delete o.orden;
+  }
+  return o;
+}
+
+/** El catálogo, en el orden que dejó Ajustes. Uno sin orden se va al final. */
+function catalogoSalones(guardados){
+  const lista = (Array.isArray(guardados) ? guardados : []).map(saneaSalon);
+  const pos = x => Number.isFinite(x.orden) ? x.orden : Infinity;
+  return lista.map((x, i) => [x, i])
+    .sort((a, b) => pos(a[0]) - pos(b[0]) || a[1] - b[1])
+    .map(par => par[0]);
+}
+
+/* Para comparar nombres de salón escritos a mano: «onix» es el «Ónix». */
+const llanoSalon = t => String(t || "").normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+/** El salón del catálogo que se llama así, o null. */
+const salonPorNombre = nombre => {
+  const n = String(nombre || "").trim();
+  if (!n) return null;
+  const lista = state.salones || [];
+  /* Primero exacto; si no, sin acentos y sin mayúsculas: en las cotizaciones
+     de antes alguien escribió «onix», y eso también es el Ónix. */
+  return lista.find(x => x.nombre === n) ||
+         lista.find(x => llanoSalon(x.nombre) === llanoSalon(n)) || null;
+};
+
+/**
+ * Cuántas horas dura un momento, leyendo su horario.
+ *
+ * El horario se captura a mano y viene como «20:00-2:00», «20:00 a 02:00»,
+ * «8:00-19:00»… Si no se entiende, devuelve 0 y quien llame decide: aquí eso
+ * significa «no sé, cóbrale el rato largo», que es lo prudente.
+ *
+ * Un evento que termina antes de la hora en que empezó cruzó la medianoche:
+ * una boda de 20:00 a 2:00 dura seis horas, no menos veintidós.
+ */
+function horasDelHorario(horario){
+  const t = String(horario || "");
+  const hs = [...t.matchAll(/(\d{1,2})\s*[:.]?\s*(\d{2})?/g)]
+    .map(m => ({ h: Number(m[1]), m: Number(m[2] || 0) }))
+    .filter(x => x.h <= 24 && x.m < 60);
+  if (hs.length < 2) return 0;
+  const a = hs[0].h * 60 + hs[0].m;
+  let b = hs[1].h * 60 + hs[1].m;
+  if (b <= a) b += 24 * 60;            // cruzó la medianoche
+  const horas = (b - a) / 60;
+  return horas > 0 && horas <= 24 ? horas : 0;
+}
+
+/**
+ * Qué tramo le toca a un rato de tantas horas.
+ *
+ * Sin horas —no se capturó el horario, o no se entiende— se va al tramo
+ * largo: es el caro, y equivocarse hacia arriba se corrige en la junta con el
+ * cliente; equivocarse hacia abajo se descubre cuando ya se firmó.
+ */
+const tramoDeHoras = horas => {
+  if (!horas) return TRAMOS_SALON[TRAMOS_SALON.length - 1];
+  return TRAMOS_SALON.find(t => horas <= t.max) || TRAMOS_SALON[TRAMOS_SALON.length - 1];
+};
+
+/**
+ * La renta que se sugiere para este salón con este horario.
+ *
+ * Devuelve `{ monto, tramo, porQue }`, o `null` si no hay nada que sugerir
+ * —el salón no está en el catálogo, o no se renta en ese tramo—.
+ */
+function rentaSugerida(nombreSalon, horario){
+  const s = salonPorNombre(nombreSalon);
+  if (!s) return null;
+  const horas = horasDelHorario(horario);
+  const tramo = tramoDeHoras(horas);
+  const monto = s[tramo.k];
+  if (monto === "" || !monto) return null;
+  return { monto, tramo,
+           porQue: horas ? `${(Math.round(horas * 10) / 10)} h · ${tramo.etiqueta}`
+                         : `sin horario · se cobra ${tramo.etiqueta}` };
+}
+
+/* La salida de emergencia de la lista de salones: un salón prestado, un
+   jardín de otro hotel, lo que sea que no esté en el catálogo. */
+const OTRO_SALON = "::otro-salon::";
+
+/**
+ * La celda del salón: una lista para escoger y un campo de texto debajo.
+ *
+ * El campo de texto es el que de verdad guarda el valor —por eso conserva su
+ * clase `b-salon` / `e-salon` y quien recoge el renglón no se entera de
+ * nada—. Así una cotización vieja, de cuando esto era texto libre, sigue
+ * abriendo con lo suyo aunque ese salón ya no esté en la lista.
+ *
+ * Con el catálogo vacío no se enseña una lista de un renglón: se deja el
+ * campo de siempre, para que nada se sienta peor que antes de que esto
+ * existiera.
+ */
+function celdaSalon(valor, pre){
+  const cat = state.salones || [];
+  const campo = (extra) => `<input class="field ${pre}-salon" value="${esc(valor)}"
+      placeholder="${cat.length ? "Escríbelo" : "Ónix"}" style="width:100%${extra || ""}">`;
+  if (!cat.length) return campo();
+  const conocido = cat.some(x => x.nombre === valor);
+  return `<select class="field sl-sel" style="width:100%">
+      <option value=""${!valor ? " selected" : ""}>— Escoge —</option>
+      ${cat.map(x => `<option value="${esc(x.nombre)}"${x.nombre === valor ? " selected" : ""}
+          >${esc(x.nombre)}${x.ubicacion ? " · " + esc(x.ubicacion) : ""}</option>`).join("")}
+      <option value="${OTRO_SALON}"${valor && !conocido ? " selected" : ""}>Otro…</option>
+    </select>
+    ${campo(";margin-top:4px" + (conocido || !valor ? ";display:none" : ""))}
+    <div class="hint sl-porque" style="margin-top:2px"></div>`;
+}
+
+/** Los campos del renglón de un momento, se llame `b-` o `e-`. */
+const camposDelMomento = tr => ({
+  txt:   tr.querySelector(".b-salon, .e-salon"),
+  renta: tr.querySelector(".b-renta, .e-renta"),
+  hora:  tr.querySelector(".b-hora, .e-hora"),
+  porque: tr.querySelector(".sl-porque")
+});
+
+/**
+ * Escoger un salón llena la renta con lo que cuesta ESE rato.
+ *
+ * Lo que se cuida es no pisar lo negociado: sólo se escribe la renta si está
+ * vacía o si sigue siendo, tal cual, la que se sugirió antes. El mismo trato
+ * que el catálogo de servicios. Y la renta sigue siendo texto libre: hay
+ * cotizaciones que ahí dicen «Cortesía en base a consumo», y eso no se toca.
+ */
+function escogerSalon(sel){
+  const tr = sel.closest("tr");
+  if (!tr) return;
+  const c = camposDelMomento(tr);
+  if (!c.txt) return;
+
+  if (sel.value === OTRO_SALON){
+    c.txt.style.display = "";
+    if (salonPorNombre(c.txt.value)) c.txt.value = "";   // venía de la lista
+    if (c.porque) c.porque.textContent = "";
+    c.txt.focus();
+    return;
+  }
+
+  c.txt.style.display = "none";
+  c.txt.value = sel.value;
+  sel.title = sel.value;
+  ponerRentaSugerida(tr);
+}
+
+/**
+ * Pone —o actualiza— la renta sugerida de un renglón.
+ *
+ * Se llama también al cambiar el HORARIO, porque el precio depende de él: una
+ * boda que se alarga de cuatro a siete horas cambia de tramo, y que el
+ * número se quede en el de antes es justo el error que esto venía a evitar.
+ */
+function ponerRentaSugerida(tr){
+  const c = camposDelMomento(tr);
+  if (!c.txt || !c.renta) return;
+  const sug = rentaSugerida(c.txt.value, c.hora ? c.hora.value : "");
+
+  if (!sug){
+    /* No hay nada que sugerir: el salón no está en el catálogo, o no se
+       renta en ese tramo —los grandes no se dan por una hora suelta—. No se
+       inventa un precio y no se borra lo que haya puesto nadie. */
+    if (c.porque) c.porque.textContent = c.txt.value && salonPorNombre(c.txt.value)
+      ? "Este salón no se renta por ese rato: pon la renta a mano." : "";
+    return;
+  }
+
+  const antes = tr.dataset.rentaSug || "";
+  const puesto = String(c.renta.value || "").trim();
+  if (!puesto || puesto === antes) c.renta.value = moneyMN(sug.monto);
+  tr.dataset.rentaSug = moneyMN(sug.monto);
+  if (c.porque) c.porque.textContent = sug.porQue;
+}
+
+/* Un solo oyente para las dos tablas —la del evento y la del convenio—, y
+   puesto en el documento para que alcance también a los renglones que se
+   agregan después. `sl-sel` no existe en ninguna otra parte. */
+addEventListener("change", ev => {
+  if (ev.target && ev.target.classList && ev.target.classList.contains("sl-sel"))
+    escogerSalon(ev.target);
+});
+addEventListener("input", ev => {
+  const t = ev.target;
+  if (!t || !t.classList) return;
+  if (t.classList.contains("b-hora") || t.classList.contains("e-hora")){
+    const tr = t.closest("tr");
+    if (tr) ponerRentaSugerida(tr);
+  }
+});
 
 function saneaBloqueEv(b){
   const o = Object.assign({ fecha:"", horario:"", evento:"", pax:"", montaje:"", salon:"",
@@ -4496,7 +4734,7 @@ function menuSesion(){
 
 const COLECCIONES = ["clientes","actividades","convenios","contratos","eventos","prospectos",
                      "campanas","odts","huespedes","habitaciones","usuarios","certificados",
-                     "serviciosBq"];
+                     "serviciosBq","salones"];
 /**
  * Lo que roles.sql sólo deja escribir al administrador.
  *
@@ -4507,7 +4745,7 @@ const COLECCIONES = ["clientes","actividades","convenios","contratos","eventos",
  * quedarse congelada con la de antes. Es el mismo trato que el catálogo de
  * habitaciones.
  */
-const SOLO_ADMIN = ["ajustes","usuarios","habitaciones","serviciosBq"];
+const SOLO_ADMIN = ["ajustes","usuarios","habitaciones","serviciosBq","salones"];
 
 function filasDeEstado(){
   const filas = [];
@@ -4524,7 +4762,7 @@ function estadoDesdeFilas(filas){
      perder datos —nadie se entera hasta que alguien pregunta por lo suyo—. */
   const bruto = { clientes:[], actividades:[], convenios:[], contratos:[], eventos:[],
                   prospectos:[], campanas:[], odts:[], huespedes:[], habitaciones:[],
-                  usuarios:[], certificados:[], serviciosBq:[], ajustes:null };
+                  usuarios:[], certificados:[], serviciosBq:[], salones:[], ajustes:null };
   for (const f of filas){
     if (f.tipo === "ajustes") bruto.ajustes = f.datos;
     else if (bruto[f.tipo]) bruto[f.tipo].push(f.datos);
@@ -5247,7 +5485,8 @@ async function bajarTodo(){
 const NOMBRE_TIPO = { clientes:"clientes", actividades:"actividades", convenios:"convenios",
   prospectos:"prospectos", huespedes:"huéspedes", habitaciones:"tipos de habitación",
   usuarios:"usuarios", ajustes:"ajustes", odts:"órdenes de trabajo",
-  certificados:"certificados", serviciosBq:"servicios de banquetes" };
+  certificados:"certificados", serviciosBq:"servicios de banquetes",
+  salones:"salones" };
 
 function pantallaPermisos(){
   const ov = modal(`
@@ -5479,7 +5718,8 @@ const tipoLegible = t => ({
   eventos:"Un evento", actividades:"Una actividad", huespedes:"Un huésped",
   prospectos:"Un prospecto", campanas:"Una campaña", odts:"Una orden de trabajo",
   ajustes:"Los ajustes", usuarios:"La lista de usuarios", habitaciones:"El catálogo",
-  certificados:"Un certificado", serviciosBq:"El catálogo de servicios"
+  certificados:"Un certificado", serviciosBq:"El catálogo de servicios",
+  salones:"El catálogo de salones"
 }[t] || "Un registro");
 
 /** Lo que hay que hacer cuando este aparato no está hablando con el hotel. */
@@ -8420,6 +8660,19 @@ function renderAjustes(){
         <button class="btn sm" data-sbbaja="${x.id}" title="Bajar un lugar" aria-label="Bajar un lugar">↓</button>
         <button class="btn sm danger" data-sbdel="${x.id}">Eliminar</button></td></tr>`;
 
+  const filaSal = x => `<tr data-sl="${x.id}">
+      <td><input class="field" data-lk="nombre" value="${esc(x.nombre)}"
+            placeholder="Ónix" style="width:100%"></td>
+      <td><input class="field" data-lk="ubicacion" value="${esc(x.ubicacion)}"
+            placeholder="Piso 2" style="width:100%"></td>
+      ${TRAMOS_SALON.map(t => `<td><input class="field" data-lk="${t.k}" inputmode="decimal"
+            value="${x[t.k] === "" ? "" : esc(x[t.k])}" placeholder="No se renta"
+            style="width:100%;text-align:right"></td>`).join("")}
+      <td class="nowrap">
+        <button class="btn sm" data-slsube="${x.id}" title="Subir un lugar" aria-label="Subir un lugar">↑</button>
+        <button class="btn sm" data-slbaja="${x.id}" title="Bajar un lugar" aria-label="Bajar un lugar">↓</button>
+        <button class="btn sm danger" data-sldel="${x.id}">Eliminar</button></td></tr>`;
+
   const areaTexto = (k, label, alto, ayuda) => `
     <div class="full"><label class="lbl">${esc(label)}</label>
       ${ayuda ? `<div class="hint" style="margin:-2px 0 5px">${ayuda}</div>` : ""}
@@ -8645,6 +8898,26 @@ function renderAjustes(){
       <p style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn" id="bImpSrv">Cargar una lista</button>
         <button class="btn" id="bExpSrv">Bajar la lista</button></p>
+
+      <h3 class="sec">Catálogo de salones y sus rentas</h3>
+      <div class="note">De aquí sale la lista que se escoge en <b>Detalles del evento</b> de
+        una cotización o un contrato, y la de los eventos de un convenio. Al escoger el salón,
+        la renta se llena sola con <b>el precio del rato que dura ese momento</b> —el horario
+        ya se captura ahí mismo— y se puede corregir. Deja una tarifa <b>vacía</b> si ese
+        salón no se renta por ese rato: entonces no se sugiere nada en vez de inventar un
+        precio.</div>
+      <table class="data"><thead><tr>
+        <th style="min-width:180px">Salón</th><th style="width:130px">Ubicación</th>
+        ${TRAMOS_SALON.map(t => `<th class="num" style="width:120px">${esc(t.etiqueta)}</th>`).join("")}
+        <th style="width:190px"></th>
+      </tr></thead><tbody id="tSal">${(state.salones || []).map(filaSal).join("")}</tbody></table>
+      ${(state.salones || []).length ? "" : `<p class="hint" style="margin-top:0">
+        Todavía no hay ninguno. Mientras esté vacío, el salón se sigue escribiendo a mano,
+        como hasta hoy.</p>`}
+      <p style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="bAddSal">+ Agregar salón</button>
+        <button class="btn" id="bImpSal">Cargar la lista</button>
+        <button class="btn" id="bExpSal">Bajar la lista</button></p>
 
       <h3 class="sec">Bloques de la carta</h3>
       <p class="hint" style="margin-top:0">El nombre encabeza la tabla de tarifas (“Deluxe / ${esc(h.nombre)}”)
@@ -8896,6 +9169,19 @@ function renderAjustes(){
       x.conServicio = tr.querySelector('[data-sk="conServicio"]').checked;
       x.esPaquete   = tr.querySelector('[data-sk="esPaquete"]').checked;
     });
+
+    p.querySelectorAll("#tSal tr[data-sl]").forEach((tr, i) => {
+      const x = (state.salones || []).find(y => y.id === tr.dataset.sl);
+      if (!x) return;
+      x.orden     = i;
+      x.nombre    = tr.querySelector('[data-lk="nombre"]').value.trim();
+      x.ubicacion = tr.querySelector('[data-lk="ubicacion"]').value.trim();
+      for (const t of TRAMOS_SALON){
+        const v = tr.querySelector(`[data-lk="${t.k}"]`).value.trim();
+        /* Vacío NO es cero: es «este salón no se renta por ese rato». */
+        x[t.k] = v === "" ? "" : parseMoney(v);
+      }
+    });
     /* OJO: aquí NO se tiran los que todavía no tienen nombre. `recogerAjustes`
        corre también al agregar, al mover y al eliminar otro renglón, y
        tirarlos aquí hacía que agregar dos servicios seguidos borrara el
@@ -9141,6 +9427,142 @@ function renderAjustes(){
       guardar(); ov.remove(); renderAjustes();
       alert(r.nuevos || r.cambiados
         ? `Listo: ${r.nuevos} servicio(s) nuevo(s) y ${r.cambiados} con precio actualizado.`
+        : `Se leyeron ${r.leidos} y ninguno cambió: ya estaban igual.`);
+    };
+  };
+
+  /* ---------------------------------------------------------------------
+     El catálogo de salones. Mismo trato que el de servicios: recoger antes de
+     repintar, o se le borra a quien esté capturando.
+     --------------------------------------------------------------------- */
+  p.querySelector("#bAddSal").onclick = () => {
+    recogerAjustes();
+    state.salones = (state.salones || []).concat([saneaSalon({ nombre:"" })]);
+    guardar(); renderAjustes();
+    const ultimo = document.querySelector("#tSal tr:last-child [data-lk='nombre']");
+    if (ultimo){ ultimo.scrollIntoView({ block:"center" }); ultimo.focus(); }
+  };
+
+  const moverSal = (id, paso) => {
+    recogerAjustes();
+    const a = state.salones || [];
+    const i = a.findIndex(x => x.id === id);
+    const j = i + paso;
+    if (i < 0 || j < 0 || j >= a.length) return;
+    [a[i], a[j]] = [a[j], a[i]];
+    a.forEach((x, k) => { x.orden = k; });
+    guardar(); renderAjustes();
+  };
+  p.querySelectorAll("[data-slsube]").forEach(b => b.onclick = () => moverSal(b.dataset.slsube, -1));
+  p.querySelectorAll("[data-slbaja]").forEach(b => b.onclick = () => moverSal(b.dataset.slbaja,  1));
+  p.querySelectorAll("[data-sldel]").forEach(b => b.onclick = () => {
+    const id = b.dataset.sldel;
+    const x = (state.salones || []).find(y => y.id === id);
+    /* Los documentos guardan el NOMBRE del salón, no su identificador:
+       quitarlo del catálogo no los toca, pero conviene decirlo. */
+    const usos = x ? state.eventos.filter(e =>
+      (e.bloques || []).some(b2 => b2.salon === x.nombre)).length : 0;
+    if (usos && !confirm(`«${x.nombre}» aparece en ${usos} documento(s) de evento. ` +
+      "Esos conservan su renglón y su renta; sólo deja de salir en la lista. ¿Eliminarlo?")) return;
+    recogerAjustes();
+    state.salones = (state.salones || []).filter(y => y.id !== id);
+    guardar(); renderAjustes();
+  });
+
+  p.querySelector("#bExpSal").onclick = () => {
+    recogerAjustes();
+    descargar(`salones-${hoyISO()}.csv`,
+      toCSV([["Salón","Ubicación"].concat(TRAMOS_SALON.map(t => t.etiqueta))].concat(
+        (state.salones || []).map(x =>
+          [x.nombre, x.ubicacion].concat(TRAMOS_SALON.map(t => x[t.k] === "" ? "" : x[t.k]))))),
+      "text/csv");
+  };
+
+  /** Lee un CSV de salones. Devuelve cuántos entraron. */
+  function cargarSalones(texto, reemplazar){
+    const filas = parseCSV(String(texto || ""));
+    const leidos = [];
+    for (const f of filas){
+      const nombre = String(f[0] || "").trim();
+      if (!nombre) continue;
+      if (/^(sal[óo]n|salones|nombre)$/i.test(nombre)) continue;   // el encabezado
+      const x = { nombre, ubicacion: String(f[1] == null ? "" : f[1]).trim() };
+      TRAMOS_SALON.forEach((t, i) => {
+        const v = String(f[2 + i] == null ? "" : f[2 + i]).trim();
+        /* En el libro del hotel, un `*` o un guion quieren decir «ese salón no
+           se renta por ese rato». Se respeta: vacío, no cero. */
+        x[t.k] = (v === "" || /^[*\-—–]+$/.test(v)) ? "" : parseMoney(v);
+      });
+      leidos.push(x);
+    }
+    if (!leidos.length) return { leidos:0 };
+
+    let nuevos = 0, cambiados = 0;
+    if (reemplazar){
+      state.salones = leidos.map((x, i) => saneaSalon(Object.assign({ orden:i }, x)));
+      nuevos = leidos.length;
+    } else {
+      state.salones = state.salones || [];
+      for (const x of leidos){
+        const ya = state.salones.find(y => llanoSalon(y.nombre) === llanoSalon(x.nombre));
+        if (ya){
+          const antes = JSON.stringify(TRAMOS_SALON.map(t => ya[t.k]).concat(ya.ubicacion));
+          if (x.ubicacion) ya.ubicacion = x.ubicacion;
+          for (const t of TRAMOS_SALON) ya[t.k] = x[t.k];
+          if (antes !== JSON.stringify(TRAMOS_SALON.map(t => ya[t.k]).concat(ya.ubicacion)))
+            cambiados++;
+        } else { state.salones.push(saneaSalon(x)); nuevos++; }
+      }
+      state.salones.forEach((x, i) => { x.orden = i; });
+    }
+    return { leidos: leidos.length, nuevos, cambiados };
+  }
+
+  p.querySelector("#bImpSal").onclick = () => {
+    recogerAjustes();
+    const ov = modal(`
+      <div class="modal">
+        <div class="modal-head"><h2>Cargar la lista de salones</h2>
+          <button class="btn" data-close>✕</button></div>
+        <div class="modal-body">
+          <div class="note">Un salón por renglón:
+            <b>nombre, ubicación, ${TRAMOS_SALON.map(t => t.etiqueta).join(", ")}</b>.
+            Una tarifa vacía —o con un <code>*</code>, como en el libro del hotel— quiere
+            decir que ese salón <b>no se renta por ese rato</b>, y entonces no se sugiere
+            nada. Sirve pegarlo aquí o escoger un archivo <code>.csv</code>. Lo más fácil es
+            bajar la lista, corregirla en Excel y volverla a cargar.</div>
+          <p><input type="file" id="salArch" accept=".csv,text/csv,text/plain"></p>
+          <textarea class="field mono" id="salTexto" style="width:100%;min-height:180px"
+            placeholder="Salón grande, Piso 2, *, 20000, 30000&#10;Salón chico, Piso 3, 900, 4500, 8000"></textarea>
+          <p><label style="display:flex;gap:8px;align-items:flex-start">
+            <input type="checkbox" id="salReemplaza">
+            <span>Reemplazar todo el catálogo. Sin esto, al que ya esté se le actualizan las
+              tarifas y lo que falte se agrega; no se borra nada.</span></label></p>
+          <div id="salErr"></div>
+        </div>
+        <div class="modal-foot"><div class="spacer"></div>
+          <button class="btn" data-close>Cancelar</button>
+          <button class="btn primary" id="salCargar">Cargar</button></div>
+      </div>`);
+    ov.querySelector("#salArch").addEventListener("change", e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => { ov.querySelector("#salTexto").value = String(r.result); };
+      r.readAsText(f, "utf-8");
+    });
+    ov.querySelector("#salCargar").onclick = () => {
+      const r = cargarSalones(ov.querySelector("#salTexto").value,
+                              ov.querySelector("#salReemplaza").checked);
+      if (!r.leidos){
+        ov.querySelector("#salErr").innerHTML =
+          `<div class="errbox">No se encontró ningún salón. Revisa que cada renglón traiga
+           el nombre y sus tarifas separados por coma.</div>`;
+        return;
+      }
+      guardar(); ov.remove(); renderAjustes();
+      alert(r.nuevos || r.cambiados
+        ? `Listo: ${r.nuevos} salón(es) nuevo(s) y ${r.cambiados} con tarifa actualizada.`
         : `Se leyeron ${r.leidos} y ninguno cambió: ya estaban igual.`);
     };
   };
@@ -9431,6 +9853,7 @@ function renderAjustes(){
        que nadie entiende. Agregar uno y arrepentirse es normal: se descarta
        aquí, al guardar, y no antes. */
     state.serviciosBq = state.serviciosBq.filter(x => x.nombre);
+    state.salones = (state.salones || []).filter(x => x.nombre);
     guardar(); renderAjustes();
     const ok = document.getElementById("ajOk");
     if (ok){ ok.textContent = "Guardado ✓"; setTimeout(() => { if (ok) ok.textContent = ""; }, 2500); }
@@ -13860,7 +14283,7 @@ function editarContrato(id, clientePre, alCerrar){
     <td><input class="field e-evento" value="${esc(e.evento)}" placeholder="Conferencia" style="width:100%"></td>
     <td><input class="field e-pax num" inputmode="numeric" value="${esc(e.pax)}" style="width:100%;text-align:right"></td>
     <td><input class="field e-montaje" value="${esc(e.montaje)}" placeholder="Auditorio" style="width:100%"></td>
-    <td><input class="field e-salon" value="${esc(e.salon)}" placeholder="Disponible" style="width:100%"></td>
+    <td>${celdaSalon(e.salon, "e")}</td>
     <td><input class="field e-renta" value="${esc(e.renta)}" placeholder="Cortesía en base a consumo" style="width:100%"></td>
     <td><button class="btn sm danger" data-quita>✕</button></td></tr>`;
 
@@ -15429,7 +15852,7 @@ function editarEvento(id, tipoPre, alCerrar){
     <td><input class="field b-evento" value="${esc(b.evento)}" placeholder="Boda" style="width:100%"></td>
     <td><input class="field b-pax num" inputmode="numeric" value="${esc(b.pax)}" style="width:100%;text-align:right"></td>
     <td><input class="field b-montaje" value="${esc(b.montaje)}" list="listaMontajes" style="width:100%"></td>
-    <td><input class="field b-salon" value="${esc(b.salon)}" placeholder="Ónix" style="width:100%"></td>
+    <td>${celdaSalon(b.salon, "b")}</td>
     <td><input class="field b-renta" value="${esc(b.renta)}" placeholder="En cortesía por consumo" style="width:100%"></td>
     <td><button class="btn sm danger" data-quita>✕</button></td></tr>`;
 
@@ -19812,7 +20235,7 @@ function abrirExportar(){
     if (!confirm("Se borrarán TODOS los clientes, actividades y convenios de este navegador. ¿Continuar?")) return;
     if (!confirm("Confirma otra vez: esta acción no se puede deshacer.")) return;
     state = sanear({ habitaciones: state.habitaciones, serviciosBq: state.serviciosBq,
-                     ajustes: state.ajustes });
+                     salones: state.salones, ajustes: state.ajustes });
     guardar(); render(); ov.remove();
   };
 }
