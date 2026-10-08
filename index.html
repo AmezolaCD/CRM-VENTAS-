@@ -1000,7 +1000,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.08-3";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.08-4";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1075,6 +1075,23 @@ const MONTAJES = ["Banquete","Cóctel","Auditorio","Escuela","Herradura","Imperi
 
 /** Lo que el 15% de servicio sí toca: alimentos y bebidas. */
 const CON_SERVICIO_DEF = true;
+
+/* Los tramos de renta del libro del hotel. Un salón no cuesta por hora:
+   cuesta por rato, y el rato tiene tres tamaños.
+
+   Vive AQUÍ ARRIBA, lejos de donde se usa, y es a propósito: `saneaSalon()`
+   lo lee, y a `saneaSalon()` lo llama `sanear()` desde el `cargar()` del
+   nivel superior, que corre mucho antes que la mitad de este archivo. Un
+   `const` no existe hasta la línea que lo declara: estando más abajo, cada
+   recarga con salones guardados tronaba con «Cannot access 'TRAMOS_SALON'
+   before initialization» y la persona veía «No se pudieron leer los datos
+   guardados en este equipo». Es el tercer TDZ de este proyecto; de ahí el
+   tamaño de este comentario. */
+const TRAMOS_SALON = [
+  { k:"hasta1", etiqueta:"0-1 hora",    max:1  },
+  { k:"de2a5",  etiqueta:"2-5 horas",   max:5  },
+  { k:"de6a12", etiqueta:"6-12 horas",  max:Infinity }
+];
 
 /**
  * El catálogo de servicios de banquetes, con su precio de lista.
@@ -2656,14 +2673,6 @@ function saneaLineaExtra(x){
    Lo mismo que el catálogo de banquetes: la lista vive en Ajustes, NO en este
    archivo —que es público—, y se carga de un CSV.
    ========================================================================== */
-
-/* Los tramos del libro del hotel. Un salón no cuesta por hora: cuesta por
-   rato, y el rato tiene tres tamaños. */
-const TRAMOS_SALON = [
-  { k:"hasta1", etiqueta:"0-1 hora",    max:1  },
-  { k:"de2a5",  etiqueta:"2-5 horas",   max:5  },
-  { k:"de6a12", etiqueta:"6-12 horas",  max:Infinity }
-];
 
 /**
  * Un salón del hotel, con lo que cuesta rentarlo.

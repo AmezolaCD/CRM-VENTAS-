@@ -567,6 +567,53 @@ await bloque('18 · en la hoja del cliente la renta NO sale dos veces', async ()
     /En cortesía por consumo/.test(r.cortesia || ''));
 });
 
+await bloque('19 · con salones guardados, recargar NO asusta a nadie', async () => {
+  /* Esto se me fue y lo atrapé reproduciendo otra cosa. `TRAMOS_SALON` es un
+     `const`, `saneaSalon()` lo lee, y a `saneaSalon()` lo llama `sanear()`
+     desde el `cargar()` del nivel superior —que corre mucho antes—. Estando
+     declarado más abajo, CADA recarga con salones guardados tronaba con
+     «Cannot access 'TRAMOS_SALON' before initialization», la persona veía
+     «No se pudieron leer los datos guardados en este equipo… no captures
+     nada todavía», y el estado se caía a vacío hasta que IndexedDB lo
+     rescataba. En un navegador sin IndexedDB, no lo rescata nadie.
+
+     Es el tercer TDZ de este proyecto. Por eso esta prueba existe. */
+  const ctx = await br.newContext({ viewport:{ width:1280, height:900 } });
+  const pg = await ctx.newPage();
+  const sustos = [], errores = [];
+  pg.on('pageerror', e => errores.push(e.message));
+  pg.on('console', m => {
+    if (/No se pudo leer el almacenamiento/i.test(m.text())) errores.push(m.text());
+  });
+  pg.on('dialog', d => { sustos.push(d.message()); d.accept().catch(() => {}); });
+
+  await pg.goto(`http://127.0.0.1:${PUERTO}/`);
+  await pg.waitForFunction(() => typeof guardar === 'function', null, { timeout:15000 });
+  await pg.evaluate(cat => {
+    state.salones = cat.map((x, i) => saneaSalon(Object.assign({ orden:i }, x)));
+    guardar();
+  }, CATALOGO);
+
+  await pg.reload();
+  await pg.waitForFunction(() => typeof guardar === 'function', null, { timeout:15000 });
+  await pg.waitForTimeout(1200);
+
+  const r = await pg.evaluate(() => ({
+    salones: (state.salones || []).length,
+    rota: typeof cargaRota === 'undefined' ? null : cargaRota
+  }));
+
+  afirma('los salones siguen ahí tras recargar', r.salones === 2);
+  /* Lo medular: que la lectura NO truene. Que IndexedDB lo rescate después no
+     sirve de nada en un navegador que no la tenga. */
+  afirma('no truena al leer lo guardado',
+    !errores.some(e => /TRAMOS_SALON|almacenamiento local/i.test(e)));
+  afirma('y la carga no se marca como rota', r.rota === false);
+  afirma('sin el aviso de «no se pudieron leer los datos»',
+    !sustos.some(t => /No se pudieron leer/i.test(t)));
+  await ctx.close();
+});
+
 await br.close(); srv.close();
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTodo en verde.\n');
 process.exit(fallas ? 1 : 0);
