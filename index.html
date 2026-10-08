@@ -352,7 +352,12 @@
   .rep-barras .mesa{background:var(--col)}
   .rep-et{font-size:10.5px; color:var(--muted); margin-top:5px; text-transform:capitalize}
 
-  .doc-contenido .cl{margin:9px 0; text-align:justify; font-size:11.5px; line-height:1.55}
+  /* Una cláusula no se parte entre dos hojas: media cláusula arriba y media
+     abajo es justo lo que un abogado señala con el dedo. */
+  .doc-contenido .cl{margin:9px 0; text-align:justify; font-size:11.5px; line-height:1.55;
+    break-inside:avoid; page-break-inside:avoid}
+  /* Los párrafos que siguen al primero dentro de la misma cláusula. */
+  .doc-contenido .cl .cl-p{margin:5px 0 0}
   .doc-contenido .cl b{color:#39104e}
   .ct-serv{margin:6px 0 10px; padding-left:20px}
   .ct-serv li{margin-top:3px; font-weight:600}
@@ -1014,7 +1019,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.08-5";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.08-6";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -16769,6 +16774,291 @@ function editarEvento(id, tipoPre, alCerrar){
  * recaptura. Los datos fiscales y bancarios del hotel salen de Ajustes: en
  * este archivo no puede haber ninguno, porque se publica.
  */
+/* ==========================================================================
+   LAS CLÁUSULAS DEL CONTRATO DE BANQUETES
+
+   Marco, con su contrato en la mano: «veo que compactaste todo, sin embargo
+   es importante que venga cláusula por cláusula».
+
+   Tenía razón y era más grave que el acomodo: el texto estaba RESUMIDO. Su
+   documento trae ~19,300 caracteres de texto legal y aquí había ~8,800, con
+   las sublistas aplanadas en párrafos corridos —las cuatro formas de pago de
+   la CUARTA, las dos listas de obligaciones de la SEXTA, las viñetas de la
+   TERCERA, los dos juegos de penas de la SÉPTIMA—.
+
+   Y este contrato está REGISTRADO EN PROFECO. Lo que obliga es el texto
+   registrado, no un resumen que se lea bonito. Así que aquí va transcrito.
+
+   Los datos duros —banco, cuenta, CLABE, RFC, escritura, número de registro—
+   NO viven aquí: este archivo es público. Son huecos que se llenan en
+   Ajustes → Datos legales del contrato y que `hueco()` deja como raya
+   mientras estén vacíos.
+
+   Cada cláusula es `{ titulo, bloques }`, y un bloque es un párrafo (texto)
+   o una lista (arreglo). Es un arreglo y no diecinueve literales sueltos
+   para que se pueda renumerar, insertar y —el día que haga falta— dejar que
+   Ajustes sobreescriba una sin tocar el código.
+   ========================================================================== */
+function clausulasBq(x){
+  const { e, c, h, cu, fe, primero, hueco } = x;
+
+  /* Las penas por cancelación son las mismas para las dos partes: el
+     documento las repite textualmente, una vez para el CLIENTE y otra para
+     el PRESTADOR. Se escriben una vez y se usan dos. */
+  const penas = [
+    "Pagar el 10% del monto total del contrato, en caso de que la cancelación se solicite " +
+      "90 días hábiles antes del evento.",
+    "Pagar el 25% del monto total del contrato en caso de la cancelación se solicite " +
+      "60 días hábiles antes del evento.",
+    "Pagar el 50% del monto total del contrato en caso de que la cancelación se solicite " +
+      "30 días hábiles antes del evento.",
+    "Pagar el 100% del monto total del contrato en caso de que la cancelación se solicite " +
+      "5 días hábiles antes del evento."
+  ];
+
+  return [
+  { titulo:"PRIMERA. CONSENTIMIENTO.—", bloques:[
+    "“LAS PARTES” manifiestan su voluntad de celebrar el presente Contrato de Prestación de " +
+    "servicios de eventos sociales, por lo que “EL PRESTADOR DEL SERVICIO” se obliga a " +
+    "prestar el servicio a “EL CLIENTE” en el domicilio del primero y en consecuencia este " +
+    "último se obliga a pagar como contraprestación un precio cierto y determinado."] },
+
+  { titulo:"SEGUNDA. OBJETO.—", bloques:[
+    `El Prestador de Servicios se obliga a proporcionar al CLIENTE el servicio del evento ` +
+    `denominado <b>“${esc(hueco(e.titulo))}”</b>, con fecha ` +
+    `<b>${esc(fe ? fechaLarga(fe) : "________________")}</b>, a llevarse a cabo en el salón ` +
+    `<b>${esc(hueco(primero.salon))}</b>${primero.horario
+      ? ` en horario de <b>${esc(primero.horario)}</b>` : ""}, los cuales se especifican en ` +
+    `el presupuesto definitivo del evento (anexo A) y en la hoja de trabajo (anexo B), que ` +
+    `forman parte integrante del presente contrato.`,
+    "Las partes acuerdan que el Prestador de servicios podrá proporcionar los Servicios con " +
+    "ayuda de proveedores que designe para tal efecto, quedando expresamente convenido que " +
+    "el Prestador de Servicios será el único responsable frente al CLIENTE por la prestación " +
+    "de los mismos."] },
+
+  { titulo:"TERCERA. LOS SERVICIOS.—", bloques:[
+    "El Prestador de los Servicios que se especifican en el presupuesto definitivo y en las " +
+    "órdenes de trabajo que, de manera general, son los siguientes:",
+    ["Renta de salones para eventos.",
+     "Servicio de banquete, proporcionando alimento y servicio en los eventos.",
+     "Asistir al CLIENTE en el desarrollo de sus eventos, dando las mejores opciones que " +
+       "estén disponibles para el momento del evento.",
+     "Prestar todos aquellos servicios que de tiempo en tiempo convengan al CLIENTE y al " +
+       "Prestador de Servicios."],
+    "En el caso de que el CLIENTE decida contratar por su parte servicios adicionales, es " +
+    "responsabilidad del CLIENTE que los proveedores cuenten con los permisos necesarios en " +
+    "tiempo y forma ante cualquier institución, ya sea gubernamental o sindical, para la " +
+    "prestación del servicio para el que fue contratado.",
+    "Así mismo, se obliga a tramitar las licencias y permisos necesarios para la realización " +
+    "del evento que se pretende realizar, así como a sacar en paz y a salvo de cualquier " +
+    "reclamación, multa o clausura que por el incumplimiento en el trámite de los permisos y " +
+    "licencias necesarias le llegare a fincar cualquier autoridad municipal, estatal o " +
+    "federal, debido a la naturaleza del evento."] },
+
+  { titulo:"CUARTA. PAGO DEL SERVICIO.—", bloques:[
+    "El precio total que EL CLIENTE debe cubrir por la prestación del servicio es el " +
+    "estipulado en el presupuesto que se agrega como anexo “A”, en el cual se precisan los " +
+    "conceptos contratados así como los precios unitarios, anexo que forma parte del " +
+    "presente contrato. El precio se cubrirá no importando si el número de asistentes es " +
+    "inferior al contratado. Dicho costo será pagado utilizando alguna de las siguientes " +
+    "opciones de pago:",
+    [`En efectivo en las instalaciones de ${esc(hueco(h.razonSocial))}, identificado ` +
+       `comercialmente como ${esc(hueco(h.nombre))}, ubicadas en ` +
+       `${esc(hueco(h.domicilioFiscal || h.direccion))}.`,
+     "Con tarjeta de crédito y/o débito.",
+     `Mediante transferencia interbancaria a nombre de ${esc(hueco(h.razonSocial))}, con ` +
+       `número de cuenta ${esc(hueco(h.cuenta))} y clave interbancaria ` +
+       `${esc(hueco(h.clabe))}, del banco ${esc(hueco(h.banco))}.`,
+     `Por depósito bancario a ${esc(hueco(h.banco))}, a la cuenta ${esc(hueco(h.cuenta))}.`],
+    `El costo total del servicio contratado asciende a la cantidad de ` +
+    `<b>${esc(moneyMN(cu.total))}</b> (${esc(enLetras(cu.total))}), IVA, ISH y CARGO POR ` +
+    `SERVICIO de alimentos y bebidas incluido, el cual deberá ser cubierto ` +
+    (e.fechaLimitePago ? `antes del <b>${esc(fechaTexto(e.fechaLimitePago))}</b>`
+                       : "conforme a lo acordado entre las partes") + "." +
+    (e.anticipo !== "" && Number(e.anticipo)
+      ? ` Se entrega como anticipo la cantidad de <b>${esc(moneyMN(e.anticipo))}</b>.` : ""),
+    "El pago de extras autorizados en el evento deberá ser cubierto al finalizar el evento " +
+    "mediante efectivo o tarjeta de crédito o débito.",
+    "El Prestador emitirá las facturas correspondientes a cada pago realizado por EL CLIENTE " +
+    "con todos los requisitos fiscales que establezca la ley de la materia.",
+    "El importe en el presente contrato contempla todas las cantidades y conceptos " +
+    "referentes al Servicio, por lo que el PRESTADOR DEL SERVICIO se obliga a respetar en " +
+    "todo momento dicho costo. Cualquier servicio adicional que el CLIENTE desee contratar " +
+    "posterior a la firma de este contrato será condicionado a la disponibilidad del " +
+    "PRESTADOR DEL SERVICIO cuando éste sea solicitado."] },
+
+  { titulo:"QUINTA. COBRO POR EXCESO DE INVITADOS.—", bloques:[
+    `EL PRESTADOR DEL SERVICIO podrá cobrar al CLIENTE, al final del servicio, la cantidad ` +
+    `que corresponda al número de invitados que excedan de la garantía de ` +
+    `<b>${esc(hueco(e.garantiaPax))}</b> personas.`,
+    "EL CLIENTE se obliga a depositar o entregar a EL PRESTADOR DEL SERVICIO la cantidad " +
+    "equivalente al 10% (diez por ciento) del precio estipulado, con el fin de garantizar el " +
+    "pago de los servicios excedentes e imprevistos que se llegaren a presentar, cantidad " +
+    "que le será devuelta si al finalizar el evento no se presenta ninguno de estos supuestos."] },
+
+  { titulo:"SEXTA. OBLIGACIONES DE LAS PARTES:", bloques:[
+    "<b>EL PRESTADOR DEL SERVICIO</b>",
+    ["Cumplir con lo establecido en el presente contrato.",
+     "Llevar a cabo la prestación del servicio en la fecha y horarios establecidos en el " +
+       "presente contrato.",
+     "No hacer ningún cobro ajeno a lo establecido en este Contrato."],
+    "<b>EL CLIENTE</b>",
+    ["Cumplir con lo establecido en este contrato.",
+     "Hacer los pagos correspondientes en la forma y tiempo establecido en el presente " +
+       "contrato."]] },
+
+  { titulo:"SÉPTIMA. CANCELACIÓN.—", bloques:[
+    "EL CLIENTE cuenta con un plazo de cinco días hábiles posteriores a la firma de este " +
+    "contrato para cancelar la operación o solicitar el cambio de la fecha de la prestación " +
+    "del servicio sin responsabilidad alguna de su parte, siempre y cuando el servicio no se " +
+    "haya prestado.",
+    "Las cancelaciones deberán solicitarse por escrito en el domicilio señalado en el " +
+    "presente contrato, tomando como fecha de revocación la de recepción de la solicitud.",
+    "Las partes acuerdan que en caso de que el CLIENTE requiera cancelar la prestación del " +
+    "servicio, una vez transcurrido el plazo señalado en el primer párrafo de esta cláusula, " +
+    "al solicitar dicha cancelación en cualquiera de los plazos que se señalan a continuación " +
+    "deberá:",
+    penas,
+    "En caso de que la cancelación haya sido solicitada por EL PRESTADOR DEL SERVICIO dentro " +
+    "de un plazo de 5 (cinco) días posteriores a la firma de contrato, éste deberá reintegrar " +
+    "al CLIENTE la cantidad que éste hubiese dejado como anticipo del servicio contratado.",
+    "La cancelación por parte de EL PRESTADOR DE SERVICIOS deberá ser notificada al CLIENTE " +
+    "por cualquier medio electrónico o por correspondencia, señalando el motivo de la " +
+    "cancelación.",
+    "En el caso de que el PRESTADOR DE SERVICIOS solicite la cancelación del servicio en una " +
+    "fecha posterior a los 5 días posteriores a la firma de este contrato, se aplicarán las " +
+    "penas siguientes:",
+    penas] },
+
+  { titulo:"OCTAVA. CAUSAS DE RESCISIÓN.—", bloques:[
+    "Son causas de rescisión las siguientes:",
+    ["Que alguna de las partes incumpla con cualquiera de los términos y condiciones " +
+       "establecidas en el presente contrato y sus Anexos.",
+     "Si el Prestador no realiza los servicios en las fechas convenidas y conforme a las " +
+       "condiciones pactadas en este contrato y sus Anexos.",
+     "Si el CLIENTE no cumpliere con los pagos convenidos en las fechas estipuladas y de las " +
+       "cuales es obligado para el cumplimiento de este contrato.",
+     "Cuando las diversas disposiciones aplicables así lo señalen."],
+    "En caso de rescisión del presente contrato, la parte que incumpla deberá cubrir la pena " +
+    "convencional señalada en la cláusula Novena de este instrumento."] },
+
+  { titulo:"NOVENA. PENA CONVENCIONAL.—", bloques:[
+    "En caso de presentarse alguna de las causales de rescisión citadas en la cláusula " +
+    "anterior, la parte que cause la rescisión deberá pagar una pena convencional " +
+    "equivalente al 10% (diez por ciento) del precio total del servicio, sin incluir el " +
+    "Impuesto al Valor Agregado.",
+    "Esta sanción se estipula por el simple retraso en el cumplimiento de las obligaciones " +
+    "por alguna de las partes involucradas, lo anterior sin perjuicio del cumplimiento del " +
+    "contrato.",
+    "La parte que requiera el pago de la Pena Convencional deberá solicitarlo por escrito, " +
+    "debiendo la parte que incumplió hacer el pago en los 10 (diez) días hábiles siguientes " +
+    "a la solicitud."] },
+
+  { titulo:"DÉCIMA. ATENCIÓN DE RECLAMACIONES.—", bloques:[
+    "Para efectos de esta cláusula, se entiende por reclamación o queja cualquier expresión " +
+    "formal que manifieste fundadamente la inconformidad del CLIENTE con el servicio " +
+    "recibido.",
+    `El procedimiento de reclamación o queja se puede iniciar de manera telefónica al número ` +
+    `${esc(hueco(h.telefono))}, con un horario de atención ${esc(hueco(h.horarioAtencion))}, ` +
+    `o por comunicación directa con el personal del área donde se genere.`,
+    "Dicha queja o reclamo, para cualquier canal de comunicación que se utilice, deberá " +
+    "contener la siguiente información:",
+    ["El motivo preciso de la misma, especificando de la mejor manera posible los hechos en " +
+       "que se funda.",
+     "El momento en que se han producido dichos hechos, con indicación de fecha y hora, de " +
+       "ser posible.",
+     "La información necesaria que permita su contacto para la respuesta respectiva (números " +
+       "de teléfono, correo electrónico, otros)."],
+    "El responsable deberá, en el más breve plazo posible, analizar el caso, hacer las " +
+    "consultas y verificaciones internas respectivas y escuchar al quejoso. El plazo para la " +
+    "respuesta no podrá exceder de 20 días hábiles.",
+    "El reclamante tendrá 30 días posteriores a la recepción de la respuesta para manifestar " +
+    "su inconformidad con la respuesta del prestador de servicios."] },
+
+  { titulo:"DÉCIMA PRIMERA. TERMINACIÓN DEL CONTRATO.—", bloques:[
+    "El presente contrato llegará a su fin al concluir la prestación del servicio para el " +
+    "cual fue contratado, en la hora señalada en la cláusula SEGUNDA."] },
+
+  { titulo:"DÉCIMA SEGUNDA. DESIGNACIÓN DE PERSONAL.—", bloques:[
+    "EL CLIENTE se obliga a designar a una persona de su confianza, quien durante el evento " +
+    "será quien trate con EL PRESTADOR DEL SERVICIO todos los asuntos relacionados con la " +
+    "prestación del servicio.",
+    "Por su parte, EL PRESTADOR DEL SERVICIO se obliga a designar, de entre su personal, a " +
+    "una persona que será quien durante la celebración del evento atienda los asuntos " +
+    "relacionados con la prestación del servicio. EL CLIENTE se obliga a abstenerse de dar " +
+    "instrucciones al personal del PRESTADOR DEL SERVICIO que no tengan relación con el " +
+    "objeto de este contrato, y a procurar que sus invitados observen la misma conducta."] },
+
+  { titulo:"DÉCIMA TERCERA. ESPECIFICACIONES OPERATIVAS EN SALONES.—", bloques:[
+    "Los salones son asignados dependiendo del tipo de montaje y número de asistentes. El " +
+    "tiempo extra que se requiera para montajes o desmontajes podrá tener un cargo adicional.",
+    "En caso de que dentro del salón se requiera de sonido y éste rebase los parámetros " +
+    "normales de decibeles y moleste a los eventos y/o salones contiguos, EL PRESTADOR DEL " +
+    "SERVICIO podrá reubicar o cancelar el evento.",
+    `${esc(hueco(h.razonSocial))}, identificado comercialmente como ${esc(hueco(h.nombre))}, ` +
+    `es un hotel libre de humo; por lo tanto está PROHIBIDO fumar dentro de las ` +
+    `instalaciones, aun en áreas abiertas, y su incumplimiento se sanciona con ` +
+    `$${esc(hueco(h.multaFumar))} pesos.`] },
+
+  { titulo:"DÉCIMA CUARTA. SEGURIDAD.—", bloques:[
+    "Para eventos con asistencia de 600 personas o más, se recomienda que EL CLIENTE " +
+    "contrate un servicio médico con ambulancia, por seguridad de sus participantes."] },
+
+  { titulo:"DÉCIMA QUINTA. GASTOS DE REPARACIÓN.—", bloques:[
+    "Si los bienes destinados a la prestación del servicio sufrieren un menoscabo por culpa " +
+    "o negligencia comprobada de EL CLIENTE o de sus invitados, éste se obliga a cubrir los " +
+    "gastos de reparación o a indemnizar hasta con un 50% del valor de los bienes dañados."] },
+
+  { titulo:"DÉCIMA SEXTA. CONFIDENCIALIDAD.—", bloques:[
+    "Las Partes convienen que el presente contrato tiene el carácter de confidencial, por lo " +
+    "que el Prestador del Servicio se obliga a mantener los datos de EL CLIENTE con tal " +
+    "carácter y a no cederlos ni transmitirlos a terceros con fines mercadotécnicos o " +
+    "publicitarios, salvo autorización expresa."] },
+
+  { titulo:"DÉCIMA SÉPTIMA. AVISO DE PRIVACIDAD.—", bloques:[
+    "Previo a la firma del presente contrato, y en cumplimiento a lo dispuesto en la Ley " +
+    "Federal de Protección de Datos Personales en Posesión de los Particulares, EL PRESTADOR " +
+    "DEL SERVICIO hizo del conocimiento de EL CLIENTE el aviso de privacidad y el " +
+    "procedimiento para ejercer sus derechos de acceso, rectificación, cancelación y " +
+    "oposición."] },
+
+  { titulo:"DÉCIMA OCTAVA. CASO FORTUITO Y FUERZA MAYOR.—", bloques:[
+    "Ninguna de las PARTES responderá por el incumplimiento, suspensión o retraso en la " +
+    "ejecución de sus obligaciones cuando ello obedezca a caso fortuito o fuerza mayor.",
+    "Para los efectos de este contrato, se entiende por caso fortuito o fuerza mayor " +
+    "cualquier acontecimiento proveniente de la naturaleza o del hombre que resulte " +
+    "imprevisible, inevitable y ajeno a la voluntad de las partes, e incluirá los siguientes " +
+    "actos o eventos: a) fenómenos de la naturaleza, tales como inundaciones, tormentas, " +
+    "huracanes o terremotos; b) incendios; c) guerras, disturbios civiles, motines, actos de " +
+    "terrorismo o sabotaje; d) huelgas o paros laborales; y e) actos de autoridad.",
+    "Queda expresamente convenido que ninguna de las PARTES podrá invocar Caso Fortuito o " +
+    "Fuerza Mayor por dificultad económica o falta de fondos.",
+    "La Parte que alegue Caso Fortuito o Fuerza Mayor deberá comunicarlo por escrito a la " +
+    "otra parte con la brevedad razonablemente posible, pero en todo caso dentro de los diez " +
+    "días hábiles siguientes.",
+    "En caso de que EL PRESTADOR DEL SERVICIO invoque una causa de caso fortuito o fuerza " +
+    "mayor, no se incurrirá en incumplimiento; únicamente EL CLIENTE tendrá derecho a la " +
+    "devolución de las cantidades que hubiere entregado."] },
+
+  { titulo:"DÉCIMA NOVENA. JURISDICCIÓN.—", bloques:[
+    "La Procuraduría Federal del Consumidor es competente en la vía administrativa para " +
+    "resolver cualquier controversia que se suscite sobre la interpretación o cumplimiento " +
+    "del presente contrato.",
+    `Sin perjuicio de lo anterior, para el caso de controversia judicial las partes se ` +
+    `someten expresamente a la jurisdicción y competencia de los tribunales de la ciudad de ` +
+    `${esc(hueco(h.ciudad))}, renunciando a cualquier otro fuero que pudiera corresponderles ` +
+    `en razón de sus domicilios presentes o futuros.`] }
+  ];
+}
+
+/** Una cláusula, con su título, sus párrafos y sus listas, en ese orden. */
+function pintaClausula(x){
+  const partes = x.bloques.map((b, i) => Array.isArray(b)
+    ? `<ul class="ct-serv">${b.map(y => `<li>${y}</li>`).join("")}</ul>`
+    : (i === 0 ? b : `<p class="cl-p">${b}</p>`));
+  return `<div class="cl"><b>${esc(x.titulo)}</b> ${partes.join("")}</div>`;
+}
+
 function cuerpoContratoBq(e, c){
   if (!(c && c.empresa) && e.destinatario) c = e.destinatario;
   const h = state.ajustes.hotel;
@@ -16777,14 +17067,7 @@ function cuerpoContratoBq(e, c){
   const primero = e.bloques[0] || {};
   const hueco = v => String(v || "").trim() || "________________";
 
-  const cl = (t, x) => `<div class="cl"><b>${esc(t)}</b> ${x}</div>`;
   const li = xs => `<ul class="ct-serv">${xs.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
-  const penas = [
-    "El 10% del monto total, si la cancelación se solicita 90 días hábiles antes del evento.",
-    "El 25% del monto total, si se solicita 60 días hábiles antes del evento.",
-    "El 50% del monto total, si se solicita 30 días hábiles antes del evento.",
-    "El 100% del monto total, si se solicita 5 días hábiles antes del evento."
-  ];
 
   return `
     <div class="doc-hotel">
@@ -16828,134 +17111,7 @@ function cuerpoContratoBq(e, c){
 
     <h2>Cláusulas</h2>
 
-    ${cl("PRIMERA. CONSENTIMIENTO.—",
-      "Las partes manifiestan su voluntad de celebrar el presente contrato de prestación de " +
-      "servicios de eventos sociales, por lo que EL PRESTADOR DEL SERVICIO se obliga a prestar " +
-      "el servicio a EL CLIENTE en el domicilio del primero y, en consecuencia, este último se " +
-      "obliga a pagar como contraprestación un precio cierto y determinado.")}
-
-    ${cl("SEGUNDA. OBJETO.—",
-      `El Prestador de Servicios se obliga a proporcionar al CLIENTE el servicio del evento ` +
-      `denominado <b>“${esc(hueco(e.titulo))}”</b>, con fecha ` +
-      `<b>${esc(fe ? fechaLarga(fe) : "________________")}</b>, a llevarse a cabo en el salón ` +
-      `<b>${esc(hueco(primero.salon))}</b>${primero.horario
-        ? ` en horario de <b>${esc(primero.horario)}</b>` : ""}. Los servicios se especifican ` +
-      `en el presupuesto final del evento (anexo A) y en la hoja de trabajo (anexo B), que ` +
-      `forman parte integrante de este contrato.`)}
-
-    ${cl("TERCERA. LOS SERVICIOS.—",
-      "De manera general: renta de salones para eventos; servicio de banquete, proporcionando " +
-      "alimento y servicio; asistir al CLIENTE en el desarrollo de su evento; y prestar " +
-      "aquellos servicios que de tiempo en tiempo convengan ambas partes. Si el CLIENTE " +
-      "contrata servicios adicionales por su parte, es su responsabilidad que esos proveedores " +
-      "cuenten con los permisos necesarios.")}
-
-    ${cl("CUARTA. PAGO DEL SERVICIO.—",
-      `El costo total del servicio contratado asciende a <b>${esc(moneyMN(cu.total))}</b> ` +
-      `(${esc(enLetras(cu.total))}), con IVA, ISH y cargo por servicio de alimentos y bebidas ` +
-      `incluidos, el cual deberá ser cubierto ` +
-      (e.fechaLimitePago ? `antes del <b>${esc(fechaTexto(e.fechaLimitePago))}</b>` :
-        "conforme a lo acordado entre las partes") + `. ` +
-      (e.anticipo !== "" && Number(e.anticipo)
-        ? `Se entrega como anticipo la cantidad de <b>${esc(moneyMN(e.anticipo))}</b>. ` : "") +
-      `El pago podrá hacerse en efectivo en las instalaciones del hotel, con tarjeta de ` +
-      `crédito o débito, o mediante transferencia o depósito a la cuenta ` +
-      `<b>${esc(hueco(h.cuenta))}</b>, CLABE <b>${esc(hueco(h.clabe))}</b>, del banco ` +
-      `<b>${esc(hueco(h.banco))}</b>, a nombre de ${esc(hueco(h.razonSocial))}. ` +
-      `El precio se cubrirá sin importar si el número de asistentes resulta inferior al ` +
-      `contratado. El pago de extras autorizados durante el evento deberá cubrirse al finalizar.`)}
-
-    ${cl("QUINTA. COBRO POR EXCESO DE INVITADOS.—",
-      `El PRESTADOR DEL SERVICIO podrá cobrar al CLIENTE, al final del servicio, la cantidad ` +
-      `que corresponda al número de invitados excedente sobre la garantía de ` +
-      `<b>${esc(hueco(e.garantiaPax))}</b> personas. EL CLIENTE se obliga a entregar el 10% ` +
-      `del precio estipulado para garantizar el pago de servicios excedentes e imprevistos, ` +
-      `cantidad que le será devuelta si al finalizar el evento no se presenta ninguno de ` +
-      `estos supuestos.`)}
-
-    ${cl("SEXTA. OBLIGACIONES DE LAS PARTES.—",
-      "EL PRESTADOR DEL SERVICIO: cumplir lo establecido en este contrato; llevar a cabo la " +
-      "prestación del servicio en la fecha y horarios establecidos; y no hacer ningún cobro " +
-      "ajeno a lo aquí establecido. EL CLIENTE: cumplir lo establecido en este contrato y " +
-      "hacer los pagos en la forma y tiempo señalados.")}
-
-    ${cl("SÉPTIMA. CANCELACIÓN.—",
-      "EL CLIENTE cuenta con cinco días hábiles posteriores a la firma para cancelar o " +
-      "solicitar cambio de fecha sin responsabilidad alguna, siempre que el servicio no se " +
-      "haya prestado. Las cancelaciones deberán solicitarse por escrito. Transcurrido ese " +
-      "plazo, la parte que cancele deberá pagar:") + li(penas) +
-      `<div class="pol">Las mismas penas aplican cuando la cancelación la solicite EL
-        PRESTADOR DEL SERVICIO fuera de ese plazo; dentro de él, deberá reintegrar el anticipo
-        recibido.</div>`}
-
-    ${cl("OCTAVA. CAUSAS DE RESCISIÓN.—",
-      "Que alguna de las partes incumpla cualquiera de los términos y condiciones de este " +
-      "contrato y sus anexos; que el Prestador no realice los servicios en las fechas " +
-      "convenidas; que el CLIENTE no cumpla con los pagos en las fechas estipuladas; o cuando " +
-      "las disposiciones aplicables así lo señalen.")}
-
-    ${cl("NOVENA. PENA CONVENCIONAL.—",
-      "La parte que cause la rescisión deberá pagar una pena equivalente al 10% del precio " +
-      "total del servicio sin incluir el Impuesto al Valor Agregado, dentro de los diez días " +
-      "hábiles siguientes a la solicitud por escrito.")}
-
-    ${cl("DÉCIMA. ATENCIÓN DE RECLAMACIONES.—",
-      `El procedimiento de queja puede iniciarse al teléfono ${esc(h.telefono)}, ` +
-      `${esc(h.horarioAtencion)}, o por comunicación directa con el personal del área donde se ` +
-      `genere. La queja deberá indicar el motivo preciso, el momento en que ocurrieron los ` +
-      `hechos y los datos de contacto para la respuesta. El plazo de respuesta no excederá de ` +
-      `veinte días hábiles.`)}
-
-    ${cl("DÉCIMA PRIMERA. TERMINACIÓN.—",
-      "El presente contrato llegará a su fin al concluir la prestación del servicio para el " +
-      "cual fue contratado, en la hora señalada en la cláusula SEGUNDA.")}
-
-    ${cl("DÉCIMA SEGUNDA. DESIGNACIÓN DE PERSONAL.—",
-      "Cada parte designará a una persona que durante el evento tratará los asuntos " +
-      "relacionados con la prestación del servicio. EL CLIENTE se obliga a abstenerse de dar " +
-      "instrucciones al personal del PRESTADOR que no tengan relación con el objeto de este " +
-      "contrato, y a procurar que sus invitados observen la misma conducta.")}
-
-    ${cl("DÉCIMA TERCERA. ESPECIFICACIONES OPERATIVAS EN SALONES.—",
-      `Los salones se asignan según el tipo de montaje y el número de asistentes. El tiempo ` +
-      `extra para montajes o desmontajes puede tener cargo adicional. Si el sonido rebasa los ` +
-      `parámetros normales de decibeles y molesta a los eventos contiguos, el hotel podrá ` +
-      `reubicar o cancelar el evento. El hotel es libre de humo: está prohibido fumar dentro ` +
-      `de las instalaciones, aun en áreas abiertas, y su incumplimiento se sanciona con ` +
-      `$${esc(h.multaFumar)} pesos.`)}
-
-    ${cl("DÉCIMA CUARTA. SEGURIDAD.—",
-      "Para eventos con asistencia de 600 personas o más, se recomienda que EL CLIENTE " +
-      "contrate un servicio médico con ambulancia por seguridad de sus participantes.")}
-
-    ${cl("DÉCIMA QUINTA. GASTOS DE REPARACIÓN.—",
-      "Si los bienes destinados a la prestación del servicio sufrieren menoscabo por culpa o " +
-      "negligencia comprobada de EL CLIENTE o de sus invitados, éste se obliga a cubrir los " +
-      "gastos de reparación o a indemnizar hasta con un 50% del valor de los bienes dañados.")}
-
-    ${cl("DÉCIMA SEXTA. CONFIDENCIALIDAD.—",
-      "El presente contrato tiene carácter confidencial. El Prestador del Servicio se obliga a " +
-      "mantener los datos del CLIENTE con tal carácter y a no cederlos ni transmitirlos a " +
-      "terceros con fines mercadotécnicos o publicitarios, salvo autorización expresa.")}
-
-    ${cl("DÉCIMA SÉPTIMA. AVISO DE PRIVACIDAD.—",
-      "Previo a la firma, y en cumplimiento de la Ley Federal de Protección de Datos " +
-      "Personales en Posesión de los Particulares, EL PRESTADOR DEL SERVICIO hizo del " +
-      "conocimiento de EL CLIENTE el aviso de privacidad y el procedimiento para ejercer sus " +
-      "derechos de acceso, rectificación, cancelación y oposición.")}
-
-    ${cl("DÉCIMA OCTAVA. CASO FORTUITO Y FUERZA MAYOR.—",
-      "Ninguna de las partes responderá por el incumplimiento, suspensión o retraso causado " +
-      "por caso fortuito o fuerza mayor, entendido como el acontecimiento imprevisible, " +
-      "inevitable y ajeno a la voluntad de las partes. La parte que lo alegue deberá " +
-      "comunicarlo por escrito dentro de los diez días hábiles siguientes. No podrá invocarse " +
-      "por dificultad económica o falta de fondos.")}
-
-    ${cl("DÉCIMA NOVENA. JURISDICCIÓN.—",
-      `La Procuraduría Federal del Consumidor es competente en la vía administrativa para ` +
-      `resolver cualquier controversia sobre la interpretación o cumplimiento de este ` +
-      `contrato. Sin perjuicio de lo anterior, las partes se someten a la jurisdicción de los ` +
-      `tribunales competentes en la ciudad de ${esc(h.ciudad)}.`)}
+    ${clausulasBq({ e, c, h, cu, fe, primero, hueco }).map(pintaClausula).join("")}
 
     <div class="pol" style="margin-top:14px">Leído que fue por las partes el contenido del
       presente contrato y sabedoras de su alcance legal, lo firman por duplicado en

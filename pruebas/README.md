@@ -45,6 +45,7 @@ node pruebas/navegador/servicios-de-banquetes.mjs   # la propuesta sale del cat�
 node pruebas/navegador/firmas-que-no-llenan.mjs     # una firma no llena el navegador
 node pruebas/navegador/copia-local.mjs              # la copia vive en IndexedDB
 node pruebas/navegador/salones.mjs                  # el salón y su renta por rato
+node pruebas/navegador/contrato-de-banquetes.mjs    # las 19 cláusulas, completas
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
