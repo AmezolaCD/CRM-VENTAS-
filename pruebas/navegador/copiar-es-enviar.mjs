@@ -86,8 +86,13 @@ async function copiarYMirar(que){
       enviarConvenio(doc, c);
       boton = '#cCopiar';
     } else {
+      /* Una COTIZACIÓN, no un contrato. Antes esto era un contrato y dejó de
+         valer: los contratos ya no se firman en pantalla —lo pidió el
+         departamento legal del hotel, ver `soloEnPapel`— así que no tienen
+         enlace que copiar. Lo que se mide aquí sigue existiendo igual en todo
+         lo que sí se firma en pantalla. */
       doc = saneaContrato({ id:'k1', folio:'CT-2026-007', tokenFirma:'laclave',
-        clienteId:'c1', tipo:'contrato', estado:'firmado_hotel',
+        clienteId:'c1', tipo:'cotizacion', estado:'firmado_hotel',
         firmaHotel:{ nombre:'Ejecutivo de ejemplo' } });
       state.contratos = [doc];
       enviarContrato(doc, c);
@@ -109,7 +114,7 @@ async function copiarYMirar(que){
   }, [que, CLIENTE]);
 }
 
-for (const que of ['convenio', 'contrato']){
+for (const que of ['convenio', 'cotización']){
   await bloque(`· ${que}: copiar el enlace lo marca como enviado`, async () => {
     const r = await copiarYMirar(que);
     afirma('antes de copiar estaba sin enviar', r.antes === null);

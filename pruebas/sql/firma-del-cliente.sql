@@ -80,28 +80,31 @@ commit;
 update public.crm_datos set borrado = false where id = 'convenios:v_prueba';
 
 \echo ''
-\echo '7. Un CONTRATO DE BANQUETES también se abre y se firma desde el enlace'
+\echo '7. Una COTIZACIÓN DE EVENTO también se abre y se firma desde el enlace'
 --    Es un tipo distinto —'eventos'—, y la regla lleva una lista CERRADA de
 --    tipos. Sin agregarlo ahí, el cliente abre su enlace y lee «este enlace ya
 --    no sirve» aunque todo lo demás esté bien.
+--
+--    El CONTRATO de banquetes vive en esa misma colección y también pasa la
+--    regla, pero no llega hasta aquí: el CRM le borra la clave al cargarlo
+--    —los contratos se firman en papel— y sin clave el servidor no lo sirve.
 insert into public.crm_datos (id, tipo, datos, borrado)
 values ('eventos:e_prueba', 'eventos',
-        '{"id":"e_prueba","folio":"CB-PRUEBA-1","tokenFirma":"laclavedelevento"}'::jsonb, false)
+        '{"id":"e_prueba","folio":"EV-PRUEBA-1","tokenFirma":"laclavedelevento"}'::jsonb, false)
 on conflict (id) do update set datos = excluded.datos, borrado = false;
 begin;
   set local role anon;
   select set_config('request.headers','{"x-firma-token":"laclavedelevento"}',true) \g /dev/null
   select case when count(*) = 1 then '   ok · lo lee' else '   FALLA · no lo lee' end as resultado
     from public.crm_datos where id = 'eventos:e_prueba';
-  insert into public.crm_firmas (convenio_id, token, nombre, img, datos_cliente)
+  insert into public.crm_firmas (convenio_id, token, nombre, img)
   values ('eventos:e_prueba','laclavedelevento','Cliente de prueba',
-          'data:image/png;base64,AAAA',
-          '{"ubicacion":"Domicilio de ejemplo","rfc":"XAXX010101000"}'::jsonb);
-  \echo '   ok · deposita su firma con los datos que llenó'
+          'data:image/png;base64,AAAA');
+  \echo '   ok · deposita su firma'
 commit;
 
 \echo ''
-\echo '8. Y con la clave de OTRO documento, el contrato de banquetes no abre'
+\echo '8. Y con la clave de OTRO documento, la cotización de evento no abre'
 begin;
   set local role anon;
   select set_config('request.headers','{"x-firma-token":"laclavebuena"}',true) \g /dev/null

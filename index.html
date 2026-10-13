@@ -698,6 +698,9 @@
   .doc-campos div{margin:2px 0}
   .doc-campos i{font-style:normal; color:#6f6279; display:inline-block; min-width:190px}
   .doc-campos b{border-bottom:1px solid #c9bfd3; padding:0 4px; min-width:180px; display:inline-block}
+  /* El recuadro donde se firma A MANO. La raya tiene que verse: es la línea
+     sobre la que alguien va a poner su firma con una pluma. */
+  .doc-body .cv.cv-papel{border-bottom:1px solid #8a7c96}
   @media print{
     .hoja{page-break-after:always; padding:16mm 18mm}
     .hoja:last-child{page-break-after:auto}
@@ -1021,7 +1024,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.08-7";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.08-8";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1114,70 +1117,13 @@ const TRAMOS_SALON = [
   { k:"de6a12", etiqueta:"6-12 horas",  max:Infinity }
 ];
 
-/* Los huecos del contrato que son DEL CLIENTE, y por eso él los puede llenar
-   en su pantalla de firma.
+/* El formulario que llenaba el cliente en su pantalla de firma vivió aquí.
 
-   La lista es cerrada a propósito. En el contrato hay dos clases de hueco: los
-   del hotel —razón social, RFC, escritura, banco, cuenta, CLABE, registro de
-   PROFECO— y los del cliente. Los del hotel se capturan en Ajustes y NUNCA se
-   le pueden poner a alguien de fuera: que un cliente pudiera escribir la cuenta
-   bancaria en su propio contrato es la puerta de un fraude. Los de aquí son
-   datos suyos que él conoce mejor que nadie, y si los corrige, lo que firma es
-   lo corregido.
-
-   Vive aquí arriba, lejos de donde se usa, por lo mismo que `TRAMOS_SALON`:
-   `saneaEvento()` lo lee y a `saneaEvento()` lo llama `cargar()`. */
-const CAMPOS_DEL_CLIENTE = [
-  { k:"ubicacion", etiqueta:"Domicilio",          ancho:"full", auto:"street-address" },
-  { k:"telefono",  etiqueta:"Teléfono",           modo:"tel",   auto:"tel" },
-  { k:"email",     etiqueta:"Correo electrónico", modo:"email", auto:"email" },
-  { k:"rfc",       etiqueta:"RFC",                ayuda:"Como aparece en su constancia de situación fiscal" }
-];
-
-/**
- * Lo que el cliente escribió en SU pantalla al firmar.
- *
- * Vacío es `null`, no un objeto vacío: un documento que nadie corrigió no
- * carga el campo y queda byte por byte como estaba. Ver el porqué en
- * `saneaEvento`.
- */
-function saneaDatosCliente(d){
-  if (!d || typeof d !== "object") return null;
-  const o = {};
-  /* Se conserva TODA respuesta que haya dado, incluida la vacía.
-
-     Parece un detalle y no lo es. Si el cliente borra el RFC que traía puesto,
-     el contrato que él ve en pantalla enseña una raya; si aquí se tirara el
-     campo vacío, el documento firmado volvería a sacar el RFC de su ficha y
-     diría algo DISTINTO de lo que él leyó al firmar. Lo que se congela es lo
-     que vio. Vacío quiere decir «ese renglón va en blanco», no «no contestó».
-     
-     Lo que no existe es otra cosa: un documento al que nadie le preguntó nada
-     no carga el campo, y por eso `null` cuando no hay ninguna llave. */
-  for (const campo of CAMPOS_DEL_CLIENTE){
-    if (!(campo.k in d)) continue;
-    const v = String(d[campo.k] || "").trim().slice(0, 240);
-    o[campo.k] = campo.k === "rfc" ? v.toUpperCase() : v;
-  }
-  return Object.keys(o).length ? o : null;
-}
-
-/**
- * La ficha del cliente, con lo que él corrigió al firmar puesto encima.
- *
- * Manda lo que escribió: es lo que firmó. Si después alguien le cambia el
- * domicilio en la ficha, el contrato firmado sigue diciendo el que decía
- * cuando lo firmó, que es lo que tiene que decir.
- */
-function conDatosDelCliente(e, c){
-  const d = (e || {}).datosCliente;
-  if (!d) return c;
-  const o = Object.assign({}, c || {});
-  // Manda que la llave EXISTA, no que traiga algo: ver `saneaDatosCliente`.
-  for (const campo of CAMPOS_DEL_CLIENTE)
-    if (campo.k in d) o[campo.k] = String(d[campo.k] || "").trim();
-  return o;
-}
+   Se quitó junto con la firma digital del contrato: era su pantalla de firma
+   la que lo alojaba, y sin ella no hay dónde ponerlo. Lo que pedía —domicilio,
+   teléfono, correo y RFC— lo captura ahora el ejecutivo en la ficha del
+   cliente antes de imprimir; las declaraciones del contrato lo leen de ahí.
+   Ver `soloEnPapel` para el porqué de todo esto. */
 
 /* Lo del hotel que el contrato dice, congelado dentro del documento.
 
@@ -1240,6 +1186,48 @@ const ESTADOS_CT = {
   firmado_hotel:    { name:"Firmado por el hotel", bg:"var(--warn-soft)", fg:"var(--warn)" },
   aceptado:         { name:"Aceptado",           bg:"var(--ok-soft)",  fg:"var(--ok)" }
 };
+
+/* ==========================================================================
+   EL CONTRATO NO SE FIRMA EN PANTALLA
+
+   Lo revisó el departamento legal del hotel y fue tajante: una firma trazada
+   con el dedo —venga del lienzo del mostrador o del enlace que abre el
+   cliente en su teléfono— es firma electrónica SIMPLE. La que hace prueba
+   plena, la avanzada, sólo la emite un prestador de servicios de
+   certificación autorizado, y el CRM no lo es ni pretende serlo. En un
+   contrato de adhesión REGISTRADO EN PROFECO eso no es un matiz: es la
+   diferencia entre tener un contrato y tener un papel bonito.
+
+   Así que el contrato se EMITE con su folio, se imprime, se firma a mano y se
+   sube escaneado, que es exactamente como ya funcionan los convenios que
+   llegan firmados de fuera.
+
+   Lo que NO cambia, porque ninguno es el papel que obliga: las cotizaciones
+   —ni la de hospedaje ni la de evento comprometen al hotel—, los convenios,
+   las órdenes de trabajo y los certificados de cortesía. Ésos se siguen
+   firmando en pantalla.
+
+   Los dos módulos llaman "contrato" a su tipo, y por eso basta con mirarlo.
+   Esto se usa SÓLO desde contratos y desde eventos; un convenio no tiene tipo
+   y una orden de trabajo no pasa por aquí.
+   ========================================================================== */
+const soloEnPapel = doc => String((doc || {}).tipo || "") === "contrato";
+
+/**
+ * El estado, con el nombre que le toca a un documento que se firma en papel.
+ *
+ * El estado por dentro no cambia —sigue queriendo decir «ya no es borrador,
+ * tiene folio y está esperando al cliente»—, pero decirle "Firmado por el
+ * hotel" a un contrato que nadie firmó sería mentir en la pantalla. Se llama
+ * EMITIDO, que es lo que de verdad pasó.
+ */
+function estadoDoc(mapa, doc){
+  const e = mapa[(doc || {}).estado] || mapa.borrador;
+  if (!soloEnPapel(doc)) return e;
+  if (doc.estado === "firmado" || doc.estado === "firmado_hotel")
+    return Object.assign({}, e, { name:"Emitido" });
+  return e;
+}
 
 /** 8% de IVA más 5% de impuesto sobre hospedaje, como en la carta-convenio. */
 const IMPUESTOS_DEF = 13;
@@ -3353,14 +3341,17 @@ function saneaEvento(e){
     o.tokenFirma = String(o.tokenFirma || "").trim();
     if (!o.tokenFirma) delete o.tokenFirma;
   }
-  if (o.datosCliente !== undefined){
-    o.datosCliente = saneaDatosCliente(o.datosCliente);
-    if (!o.datosCliente) delete o.datosCliente;
-  }
-  if (o.datosVistos !== undefined){
-    o.datosVistos = !!o.datosVistos;
-    if (!o.datosVistos) delete o.datosVistos;
-  }
+  /* Y el apagador: un CONTRATO no se firma en pantalla, así que si traía clave
+     de enlace se le quita AQUÍ, al cargarlo. No es cosmético: mientras la clave
+     viva dentro del documento, el servidor se lo sirve a cualquiera que tenga
+     el enlace —y ésos ya andan por WhatsApp—. Quitársela es lo que de verdad
+     cierra la puerta. Ver `soloEnPapel`. */
+  if (soloEnPapel(o)) delete o.tokenFirma;
+  /* Lo que el cliente escribía al firmar, y si el ejecutivo ya lo había
+     visto. Se van de los eventos que los traigan: el contrato ya no se firma
+     en pantalla, así que nadie los vuelve a escribir. */
+  delete o.datosCliente;
+  delete o.datosVistos;
   if (o.datosHotel !== undefined){
     o.datosHotel = saneaDatosHotel(o.datosHotel);
     if (!o.datosHotel) delete o.datosHotel;
@@ -3431,9 +3422,10 @@ function saneaContrato(k){
     createdAt:"", updatedAt:"" }, k || {});
   o.externo = !!o.externo;
   /* La clave del enlace con el que el cliente lo firma en su pantalla, igual
-     que en los convenios. Los contratos de antes no la traen y está bien: se
-     genera al firmar el ejecutivo. */
-  o.tokenFirma = String(o.tokenFirma || "").trim();
+     que en los convenios. Las COTIZACIONES de hospedaje la siguen usando; el
+     CONTRATO ya no, y si la traía se le quita aquí al cargarlo, que es lo que
+     de verdad apaga los enlaces que ya andan por WhatsApp. Ver `soloEnPapel`. */
+  o.tokenFirma = soloEnPapel(o) ? "" : String(o.tokenFirma || "").trim();
   o.avisado = !!o.avisado;
   o.firmaManual = saneaManual(o.firmaManual);
   o.id = o.id || nuevoId("k");
@@ -5366,7 +5358,14 @@ async function recogerFirmas(){
     }
     const firma = { nombre:f.nombre, puesto:f.puesto, celular:f.celular,
                     fecha:f.creado || new Date().toISOString(), img:f.img };
-    if (v[info.campoFirma]){
+    if (soloEnPapel(v)){
+      /* Puede quedar alguna firma en el buzón de antes de que legal lo
+         prohibiera, o de un enlace que alcanzó a usarse. No se aplica: en un
+         contrato esa firma no vale. Ver `soloEnPapel`. */
+      parte.notas.push(`Llegó una firma en pantalla para el contrato ${v.folio || v.id}, y los ` +
+        "contratos se firman en papel. No se aplicó: imprímelo, fírmenlo a mano y súbelo " +
+        "con «Registrar que se firmó en papel».");
+    } else if (v[info.campoFirma]){
       parte.notas.push(`${v.folio} ya estaba firmado; se descartó una firma repetida.`);
     } else if (!v.tokenFirma || v.tokenFirma !== f.token){
       // Suele pasar si se rehizo el enlace: firmaron con el viejo.
@@ -14446,15 +14445,21 @@ function cuerpoContrato(k, c){
     .replace(/\{\{VIGENCIA\}\}/g, k.vigencia ? fechaTexto(k.vigencia) : "—")
     .replace(/\{\{EMPRESA\}\}/g, (c && c.empresa) || "");
 
+  /* En un CONTRATO la firma va en blanco siempre: se imprime y se firma a
+     mano. Si trae una firma trazada de antes no se dibuja —ya no vale como
+     firma, y enseñarla haría creer que sí—. La cotización, que sí se firma en
+     pantalla, no cambia. Ver `soloEnPapel`. */
+  const enPapel = soloEnPapel(k);
   const bloqueFirma = (f, titulo, nombreDef, puestoDef, celDef) => `
     <div class="firma">
       <h4>${esc(titulo)}</h4>
-      <div class="cv">${f ? `<img src="${f.img}" alt="Firma">` : `<span>Pendiente de firma</span>`}</div>
+      <div class="cv${enPapel ? " cv-papel" : ""}">${
+        enPapel ? "" : f ? `<img src="${f.img}" alt="Firma">` : `<span>Pendiente de firma</span>`}</div>
       <div class="lin">
-        <i>Nombre</i> <u>${esc(f ? f.nombre : (nombreDef || ""))}</u><br>
-        <i>Puesto</i> <u>${esc(f ? f.puesto : (puestoDef || ""))}</u><br>
-        <i>Fecha</i> <u>${esc(f ? fechaFirma(f.fecha) : "")}</u><br>
-        <i>Celular</i> <u>${esc(f ? f.celular : (celDef || ""))}</u>
+        <i>Nombre</i> <u>${esc(!enPapel && f ? f.nombre  : (nombreDef || ""))}</u><br>
+        <i>Puesto</i> <u>${esc(!enPapel && f ? f.puesto  : (puestoDef || ""))}</u><br>
+        <i>Fecha</i> <u>${esc(!enPapel && f ? fechaFirma(f.fecha) : "")}</u><br>
+        <i>Celular</i> <u>${esc(!enPapel && f ? f.celular : (celDef || ""))}</u>
       </div>
     </div>`;
 
@@ -14582,7 +14587,7 @@ function renderContratos(){
         <th>Tipo</th><th>Fecha</th><th class="num">Total</th>
         <th>Estado</th><th>Enviado</th><th>Firmas</th><th></th></tr></thead>
       <tbody>${ks.map(k => {
-        const ec = ESTADOS_CT[k.estado], cu = cuentasContrato(k);
+        const ec = estadoDoc(ESTADOS_CT, k), cu = cuentasContrato(k);
         return `<tr class="row-link" data-id="${k.id}">
           <td><b>${esc(k.folio || "—")}</b>${k.externo
             ? ` <span class="pill" title="Se subió escaneado; no se armó aquí">externo</span>` : ""}${
@@ -14597,8 +14602,9 @@ function renderContratos(){
           <td class="num nowrap"><b>${esc(money(cu.total, k.moneda))}</b></td>
           <td><span class="estado-chip" style="background:${ec.bg};color:${ec.fg}">${esc(ec.name)}</span></td>
           <td class="nowrap">${selloEnvio(k)}</td>
-          <td class="nowrap">${k.firmaHotel ? "✍️ Hotel" : "—"}${
-            k.firmaCliente ? " · ✍️ Cliente" : ""}</td>
+          <td class="nowrap">${soloEnPapel(k)
+            ? (k.firmaManual ? "📄 En papel" : "—")
+            : (k.firmaHotel ? "✍️ Hotel" : "—") + (k.firmaCliente ? " · ✍️ Cliente" : "")}</td>
           <td class="nowrap"><button class="btn sm" data-doc="${k.id}">Ver documento</button></td>
         </tr>`;
       }).join("")}</tbody></table>`;
@@ -14884,7 +14890,13 @@ function verContrato(id, alCerrar, pedirFirma){
   if (k.externo){ verContratoExterno(k, alCerrar); return; }
   const c = cliente(k.clienteId);
   const h = state.ajustes.hotel;
-  const ec = ESTADOS_CT[k.estado];
+  const ec = estadoDoc(ESTADOS_CT, k);
+  /* Un CONTRATO de hospedaje se firma en papel; una cotización, en pantalla.
+     Ver `soloEnPapel`. */
+  const papel   = soloEnPapel(k);
+  const emitido = papel ? !!k.folio : !!k.firmaHotel;
+  const cerrado = papel ? !!k.firmaManual : !!k.firmaCliente;
+  const trazoViejo = papel && !!(k.firmaHotel || k.firmaCliente);
   const agua = h.marcaAgua === "ninguna" ? ""
              : (h.marcaAgua === "logo" && h.logo) ? `<img src="${esc(h.logo)}" alt="">`
              : monogramaQ(MORADO_QUARTZ);
@@ -14896,6 +14908,12 @@ function verContrato(id, alCerrar, pedirFirma){
         <span class="estado-chip" style="background:${ec.bg};color:${ec.fg}">${esc(ec.name)}</span>
         <button class="btn" data-close>✕</button>
       </div>
+      ${trazoViejo ? `<div class="modal-body no-imprimir">
+        <div class="note warn" style="margin:0"><b>Este contrato trae una firma trazada de
+          antes.</b> Ya no vale: el departamento legal del hotel confirmó que la firma digital
+          sólo la puede emitir un sistema certificado. Por eso el documento sale con el espacio
+          de firma en blanco. <b>Imprímelo y fírmenlo a mano</b>, y luego usa
+          <i>Registrar que se firmó en papel</i>.</div></div>` : ""}
       <div class="doc-body">
         ${agua ? `<div class="doc-agua">${agua}</div>` : ""}
         <div class="doc-contenido">${cuerpoContrato(k, c)}</div>
@@ -14905,13 +14923,18 @@ function verContrato(id, alCerrar, pedirFirma){
         <button class="btn" id="bPdfCt">Descargar PDF</button>
         ${k.estado === "borrador" ? `<button class="btn" id="bEditCt">Editar</button>` : ""}
         <div class="spacer"></div>
-        ${!k.firmaHotel ? `<button class="btn ok" id="bCtF1">Firmar como ejecutivo</button>` : ""}
-        ${k.firmaHotel && !k.firmaCliente
-          ? `<button class="btn primary" id="bCtEnviar">Enviar al cliente</button>
-             <button class="btn ok" id="bCtF2">Registrar firma del cliente</button>` : ""}
-        ${k.firmaHotel && !k.firmaCliente && !k.tokenFirma && puedeMandarLiga()
+        ${!emitido ? (papel
+          ? `<button class="btn ok" id="bCtEmitir">Emitir y numerar</button>`
+          : `<button class="btn ok" id="bCtF1">Firmar como ejecutivo</button>`) : ""}
+        ${emitido && !cerrado
+          ? `<button class="btn primary" id="bCtEnviar">Enviar al cliente</button>` +
+            (papel ? `<button class="btn ok" id="bCtPapel">Registrar que se firmó en papel</button>`
+                   : `<button class="btn ok" id="bCtF2">Registrar firma del cliente</button>`) : ""}
+        ${!papel && k.firmaHotel && !k.firmaCliente && !k.tokenFirma && puedeMandarLiga()
           ? `<button class="btn" id="bCtLiga">Rehacer enlace de firma</button>` : ""}
-        ${k.firmaCliente ? `<span class="hint">Aceptado por el cliente.</span>` : ""}
+        ${cerrado ? `<span class="hint">${papel ? "Firmado en papel." : "Aceptado por el cliente."}</span>` : ""}
+        ${cerrado && papel && traeEscaneo(k.firmaManual)
+          ? `<button class="btn sm" id="bCtEscaneo">Ver el escaneado</button>` : ""}
       </div>
     </div>`);
 
@@ -14939,6 +14962,20 @@ function verContrato(id, alCerrar, pedirFirma){
 
   const be = ov.querySelector("#bEditCt");
   if (be) be.onclick = () => { ov.remove(); editarContrato(k.id, null, alCerrar); };
+
+  const em = ov.querySelector("#bCtEmitir");
+  if (em) em.onclick = async () => {
+    em.disabled = true; em.textContent = "Emitiendo…";
+    if (!await emitirContrato(k, null)){ em.disabled = false; em.textContent = "Emitir y numerar"; return; }
+    ov.remove(); verContrato(k.id, alCerrar);
+  };
+
+  const pa = ov.querySelector("#bCtPapel");
+  if (pa) pa.onclick = () => subirContratoFirmado(k, () => { ov.remove(); verContrato(k.id, alCerrar); });
+
+  const es = ov.querySelector("#bCtEscaneo");
+  if (es) es.onclick = () => verEscaneado(k.firmaManual,
+    `${infoTipoCt(k.tipo).name} ${k.folio || "sin folio"} · escaneado`);
 
   const f1 = ov.querySelector("#bCtF1");
   if (f1) f1.onclick = () => padFirma("Firma del ejecutivo de ventas",
@@ -14982,33 +15019,77 @@ function verContrato(id, alCerrar, pedirFirma){
 async function firmarContrato(k, quien, d){
   const fecha = new Date().toISOString();
   const firma = saneaFirma(Object.assign({}, d, { fecha }));
+  if (quien === "hotel") return emitirContrato(k, firma);
+  if (!k.firmaHotel){ alert("Primero debe firmar el ejecutivo."); return false; }
+  aceptaElClienteCt(k, firma, `Firmó ${d.nombre}.`);
+  guardar(); render();
+  return true;
+}
+
+/**
+ * El documento de hospedaje deja de ser borrador: toma su número.
+ *
+ * Igual que en banquetes (ver `emitirEvento`): una COTIZACIÓN lo marca con la
+ * firma del ejecutivo, y un CONTRATO con emitirlo, porque el contrato se
+ * imprime y se firma a mano —ver `soloEnPapel`—. El folio se pide antes de
+ * tocar nada, para no dejar huecos en la serie por un intento fallido.
+ */
+async function emitirContrato(k, firma){
   const c = cliente(k.clienteId);
   const doc = infoTipoCt(k.tipo).name;
-
-  if (quien === "hotel"){
-    const folio = await folioParaFirmar(k, "contratos", "CT", anioContrato(k),
-                                        () => folioContrato(anioContrato(k), k.id));
-    if (!folio){ alert(AVISO_SIN_CONTADOR); return false; }
-    k.folio = folio;
-    k.firmaHotel = firma;
-    if (k.estado === "borrador") k.estado = "firmado_hotel";
-    k.tokenFirma = k.tokenFirma || nuevoToken();   // habilita el enlace del cliente
-    // El destinatario se congela: el documento tiene que poder leerse igual
-    // dentro de un año, aunque la ficha del cliente haya cambiado.
-    if (c) k.destinatario = { empresa:c.empresa, contacto:c.contacto, ubicacion:c.ubicacion,
-                              telefono:c.telefono, email:c.email };
-    registrarAuto(k.clienteId, `${doc} ${k.folio} firmada por el ejecutivo`,
-      k.titulo || "", ejecutivoDeCt(k));
-  } else {
-    if (!k.firmaHotel){ alert("Primero debe firmar el ejecutivo."); return false; }
-    k.firmaCliente = firma;
-    k.estado = "aceptado";
-    registrarAuto(k.clienteId, `${doc} ${k.folio} aceptada por el cliente`,
-      `Firmó ${d.nombre}.`, ejecutivoDeCt(k));
-  }
+  const folio = await folioParaFirmar(k, "contratos", "CT", anioContrato(k),
+                                      () => folioContrato(anioContrato(k), k.id));
+  if (!folio){ alert(AVISO_SIN_CONTADOR); return false; }
+  k.folio = folio;
+  if (firma) k.firmaHotel = firma;
+  if (k.estado === "borrador") k.estado = "firmado_hotel";
+  // El enlace del cliente, sólo donde se firma en pantalla.
+  if (!soloEnPapel(k)) k.tokenFirma = k.tokenFirma || nuevoToken();
+  // El destinatario se congela: el documento tiene que poder leerse igual
+  // dentro de un año, aunque la ficha del cliente haya cambiado.
+  if (c) k.destinatario = { empresa:c.empresa, contacto:c.contacto, ubicacion:c.ubicacion,
+                            telefono:c.telefono, email:c.email };
+  registrarAuto(k.clienteId,
+    firma ? `${doc} ${k.folio} firmada por el ejecutivo` : `${doc} ${k.folio} emitido`,
+    firma ? (k.titulo || "")
+          : `Listo para imprimirse y firmarse en papel.${k.titulo ? "\n" + k.titulo : ""}`,
+    ejecutivoDeCt(k));
   k.updatedAt = new Date().toISOString();
   guardar(); render();
   return true;
+}
+
+/** El cliente aceptó, haya firmado en pantalla o en papel. */
+function aceptaElClienteCt(k, firma, comoFirmo){
+  const doc = infoTipoCt(k.tipo).name;
+  // Sin firma trazada cuando llegó en papel: ahí la constancia es el escaneado.
+  if (firma) k.firmaCliente = firma;
+  k.estado = "aceptado";
+  /* Vacía, no borrada: en los contratos de hospedaje esta llave existe
+     siempre, y quitarla le cambiaría la forma al renglón sin ninguna ganancia. */
+  k.tokenFirma = "";
+  registrarAuto(k.clienteId, `${doc} ${k.folio} aceptada por el cliente`,
+    comoFirmo, ejecutivoDeCt(k));
+  k.updatedAt = new Date().toISOString();
+}
+
+/** El contrato de hospedaje volvió firmado en papel. */
+function subirContratoFirmado(k, alTerminar){
+  const c = cliente(k.clienteId);
+  pedirEscaneado({
+    titulo: "Subir el contrato firmado",
+    explica: `El contrato se imprime y se firma a mano. Al subir el escaneado queda
+      <b>Aceptado</b> a nombre de <b>${esc((c && c.empresa) || "el cliente")}</b>.`,
+    quienDef: miNombre() || ejecutivoDeCt(k),
+    boton: "Subir y cerrar el contrato",
+    alSubir: (manual, f, listo) => {
+      k.firmaManual = manual;
+      aceptaElClienteCt(k, null, `Firmado en papel. Se subió el archivo "${f.name}".`);
+      guardar(); render();
+      listo(true);
+      if (alTerminar) alTerminar();
+    }
+  });
 }
 
 /** El PDF adjunto donde el aparato lo permita, y si no, el mensaje y el archivo aparte. */
@@ -15028,7 +15109,10 @@ function enviarContrato(k, c){
   /* El enlace para que la firme en su pantalla, igual que en los convenios.
      Hace falta la nube —el enlace vive ahí— y que el ejecutivo ya haya
      firmado, porque es al firmar cuando se genera la clave. */
-  let conLiga = !!(k.tokenFirma && puedeMandarLiga());   // se baja si no hay buzón
+  /* En un CONTRATO no hay enlace: se imprime y se firma a mano. Ver
+     `soloEnPapel`. */
+  const papel = soloEnPapel(k);
+  let conLiga = !papel && !!(k.tokenFirma && puedeMandarLiga());   // se baja si no hay buzón
   let sinBuzon = false;
   const msgLiga = () => `Estimado(a) ${(c && c.contacto) || ""}:\n\n` +
     `Le comparto la ${doc.toLowerCase()} ${k.folio} de ${h.nombre}` +
@@ -15076,6 +15160,10 @@ function enviarContrato(k, c){
            <p class="hint">El enlace sólo abre este documento y deja de servir en cuanto se firma.</p>
            ${enlaceYaViajo(k, "contratos") ? "" : avisoSinSubir()}
            <h3 class="sec">O mándale el PDF</h3>`
+        : papel
+        ? `<div class="note"><b>Este contrato se firma en papel.</b> Mándaselo, imprímanlo y
+             fírmenlo a mano; cuando lo tengas firmado, súbelo con <i>Registrar que se firmó en
+             papel</i>.</div>`
         : sinBuzon ? avisoSinBuzon()
         : `<div class="note warn"><b>El enlace de firma no está disponible.</b>
              ${!puedeMandarLiga()
@@ -15330,29 +15418,45 @@ async function firmar(v, quien, d){
  * dice en voz alta. Un escaneado de 8 MB haría lenta la aplicación para todos,
  * todo el día, por un documento que se consulta una vez al año.
  */
-function subirConvenioFirmado(v, alTerminar){
-  const c = cliente(v.clienteId);
+/**
+ * Pedir el escaneado de algo que se firmó en papel.
+ *
+ * Lo comparten el convenio —que siempre pudo llegar firmado de fuera— y los
+ * CONTRATOS, que desde que legal lo revisó ya no se firman de otra manera
+ * (ver `soloEnPapel`). Lo que cambia entre uno y otro es el texto y qué hacer
+ * con el archivo; el cuidado del tamaño, el almacén y los errores es el mismo
+ * y por eso vive en un solo lugar.
+ *
+ * El archivo se guarda DENTRO del documento cuando no hay almacén, y el
+ * documento viaja completo a cada equipo en cada sincronización: por eso el
+ * límite es bajo y se dice en voz alta. Un escaneado de 8 MB haría lenta la
+ * aplicación para todos, todo el día, por un papel que se consulta una vez al
+ * año.
+ *
+ * `alSubir(manual, archivo, listo)` recibe la constancia ya saneada. Si algo
+ * le sale mal llama a `listo(false)` y el botón se suelta para reintentar.
+ */
+function pedirEscaneado({ titulo, explica, quienDef, boton, alSubir }){
   const ov = modal(`
     <div class="modal" style="max-width:520px">
-      <div class="modal-head"><h2>Subir convenio firmado</h2><button class="btn" data-close>✕</button></div>
+      <div class="modal-head"><h2>${esc(titulo)}</h2><button class="btn" data-close>✕</button></div>
       <div class="modal-body">
-        <p class="hint" style="margin-top:0">Para cuando el cliente lo firmó en papel. Al subirlo,
-          el convenio queda <b>Firmado por cliente</b> y <b>${esc((c && c.empresa) || "el cliente")}</b>
-          pasa a <b>Ganado</b>, igual que si lo hubiera firmado en pantalla.</p>
+        <p class="hint" style="margin-top:0">${explica}</p>
         <div class="grid">
           <div class="full"><label class="lbl">El PDF escaneado</label>
             <input type="file" class="field" id="fPdfFirmado" accept="application/pdf,image/*">
-            <div class="hint">PDF o foto, <b>máximo 2 MB</b>. El archivo viaja a todos los
-              equipos en cada sincronización, así que uno pesado los hace lentos a todos.
-              Si tu escáner lo saca muy grande, sube una foto del documento.</div></div>
+            <div class="hint">PDF o foto, <b>máximo ${hayDeposito() ? "20" : "2"} MB</b>. El archivo
+              viaja a todos los equipos en cada sincronización, así que uno pesado los hace
+              lentos a todos. Si tu escáner lo saca muy grande, sube una foto del
+              documento.</div></div>
           <div class="full"><label class="lbl">¿Quién lo recibió?</label>
-            <input class="field" id="fQuienRecibe" value="${esc(miNombre() || ejecutivoDe(v))}"></div>
+            <input class="field" id="fQuienRecibe" value="${esc(quienDef || "")}"></div>
         </div>
         <div id="errPdf" style="margin-top:10px"></div>
       </div>
       <div class="modal-foot"><div class="spacer"></div>
         <button class="btn" data-close>Cancelar</button>
-        <button class="btn primary" id="bOkPdf">Subir y cerrar el convenio</button></div>
+        <button class="btn primary" id="bOkPdf">${esc(boton)}</button></div>
     </div>`);
 
   ov.querySelector("#bOkPdf").onclick = () => {
@@ -15368,26 +15472,10 @@ function subirConvenioFirmado(v, alTerminar){
       return;
     }
     b.disabled = true; b.textContent = "Subiendo…";
-    const suelta = () => { b.disabled = false; b.textContent = "Subir y cerrar el convenio"; };
-
-    const cerrar = async manual => {
-      /* También aquí: éste es otro momento en que el convenio deja de ser un
-         borrador, así que también necesita su número. Un convenio que el
-         cliente firmó en papel y nadie firmó en pantalla llegaba sin folio. */
-      const folio = await folioParaFirmar(v, "convenios", "CV", anioConvenio(v),
-                                          () => folioLibre(anioConvenio(v), v.id));
-      if (!folio){ alert(AVISO_SIN_CONTADOR); suelta(); return; }
-      v.folio = folio;
-      v.firmaManual = manual;
-      // Sin firma trazada: la constancia es el archivo.
-      cerrarConvenio(v, null, `Firmado en papel. Se subió el archivo "${f.name}".`,
-        v.firmaManual.quien);
-      v.avisado = true;        // lo subió el propio equipo: no hay novedad que avisar
-      guardar(); render();
-      ov.remove();
-      if (alTerminar) alTerminar();
-    };
+    const suelta = () => { b.disabled = false; b.textContent = boton; };
     const quien = () => ov.querySelector("#fQuienRecibe").value.trim();
+    const listo = bien => { if (bien) ov.remove(); else suelta(); };
+    const entregar = manual => alSubir(manual, f, listo);
 
     const incrustar = () => {
       if (pesoGuardado() + f.size * 1.4 > TOPE_TOTAL){
@@ -15398,7 +15486,7 @@ function subirConvenioFirmado(v, alTerminar){
         return;
       }
       const r = new FileReader();
-      r.onload = () => cerrar(saneaManual({ fecha:new Date().toISOString(), quien: quien(),
+      r.onload = () => entregar(saneaManual({ fecha:new Date().toISOString(), quien: quien(),
         archivo: f.name, pdf: String(r.result), tam: f.size, tipoMime: f.type }));
       r.onerror = () => { suelta();
         err.innerHTML = `<div class="errbox">No se pudo leer el archivo.</div>`; };
@@ -15407,7 +15495,7 @@ function subirConvenioFirmado(v, alTerminar){
 
     if (hayDeposito()){
       subirEscaneo(f)
-        .then(ruta => cerrar(saneaManual({ fecha:new Date().toISOString(), quien: quien(),
+        .then(ruta => entregar(saneaManual({ fecha:new Date().toISOString(), quien: quien(),
           archivo: f.name, ruta, tam: f.size, tipoMime: f.type })))
         .catch(e => {
           if (nube.sinDeposito) return incrustar();
@@ -15417,6 +15505,37 @@ function subirConvenioFirmado(v, alTerminar){
         });
     } else incrustar();
   };
+  return ov;
+}
+
+/** El convenio que el cliente firmó en papel y alguien escaneó. */
+function subirConvenioFirmado(v, alTerminar){
+  const c = cliente(v.clienteId);
+  pedirEscaneado({
+    titulo: "Subir convenio firmado",
+    explica: `Para cuando el cliente lo firmó en papel. Al subirlo, el convenio queda
+      <b>Firmado por cliente</b> y <b>${esc((c && c.empresa) || "el cliente")}</b> pasa a
+      <b>Ganado</b>, igual que si lo hubiera firmado en pantalla.`,
+    quienDef: miNombre() || ejecutivoDe(v),
+    boton: "Subir y cerrar el convenio",
+    alSubir: async (manual, f, listo) => {
+      /* También aquí: éste es otro momento en que el convenio deja de ser un
+         borrador, así que también necesita su número. Un convenio que el
+         cliente firmó en papel y nadie firmó en pantalla llegaba sin folio. */
+      const folio = await folioParaFirmar(v, "convenios", "CV", anioConvenio(v),
+                                          () => folioLibre(anioConvenio(v), v.id));
+      if (!folio){ alert(AVISO_SIN_CONTADOR); listo(false); return; }
+      v.folio = folio;
+      v.firmaManual = manual;
+      // Sin firma trazada: la constancia es el archivo.
+      cerrarConvenio(v, null, `Firmado en papel. Se subió el archivo "${f.name}".`,
+        v.firmaManual.quien);
+      v.avisado = true;        // lo subió el propio equipo: no hay novedad que avisar
+      guardar(); render();
+      listo(true);
+      if (alTerminar) alTerminar();
+    }
+  });
 }
 
 /* ----- Documentos que no se hicieron aquí ----- */
@@ -16175,7 +16294,7 @@ function pintarListaEv(tipo, idCaja){
         <th>Fecha del evento</th><th class="num">Pax</th><th class="num">Total</th>
         <th>Estado</th><th>Enviado</th><th></th></tr></thead>
       <tbody>${es.map(e => {
-        const ec = ESTADOS_EV[e.estado], cu = cuentasEvento(e);
+        const ec = estadoDoc(ESTADOS_EV, e), cu = cuentasEvento(e);
         const pax = e.bloques.reduce((a,b) => Math.max(a, Number(b.pax) || 0), 0);
         const fe = fechaEvento(e);
         return `<tr class="row-link" data-id="${e.id}">
@@ -17214,9 +17333,6 @@ function pintaClausula(x){
 
 function cuerpoContratoBq(e, c){
   if (!(c && c.empresa) && e.destinatario) c = e.destinatario;
-  /* Lo que el cliente escribió en su pantalla al firmar manda sobre la ficha:
-     es lo que firmó. Ver `conDatosDelCliente`. */
-  c = conDatosDelCliente(e, c);
   /* Manda lo que se congeló al firmar; lo de Ajustes rellena lo que falte —los
      contratos de antes de que esto existiera no traen nada congelado—. */
   const h = Object.assign({}, state.ajustes.hotel, e.datosHotel || {});
@@ -17276,25 +17392,24 @@ function cuerpoContratoBq(e, c){
       presente contrato y sabedoras de su alcance legal, lo firman por duplicado en
       ${esc(h.ciudad)} el ${esc(fechaTexto(e.fecha || hoyISO()))}.</div>
 
+    <!-- En blanco, para firmar a mano: el contrato de banquetes está
+         registrado en PROFECO y no se firma en pantalla. -->
     <div class="firmas">
       <div class="firma">
         <h4>EL PRESTADOR DEL SERVICIO</h4>
-        <div class="cv">${e.firmaHotel
-          ? `<img src="${e.firmaHotel.img}" alt="Firma">` : `<span>Pendiente de firma</span>`}</div>
+        <div class="cv cv-papel"></div>
         <div class="lin">
-          <i>Nombre</i> <u>${esc((e.firmaHotel && e.firmaHotel.nombre) || h.representante)}</u><br>
+          <i>Nombre</i> <u>${esc(h.representante)}</u><br>
           <i>Por</i> <u>${esc(h.razonSocial)}</u><br>
-          <i>Fecha</i> <u>${esc(e.firmaHotel ? fechaFirma(e.firmaHotel.fecha) : "")}</u>
+          <i>Fecha</i> <u></u>
         </div></div>
       <div class="firma">
         <h4>EL CLIENTE</h4>
-        <div class="cv">${e.firmaCliente
-          ? `<img src="${e.firmaCliente.img}" alt="Firma">` : `<span>Pendiente de firma</span>`}</div>
+        <div class="cv cv-papel"></div>
         <div class="lin">
-          <i>Nombre</i> <u>${esc((e.firmaCliente && e.firmaCliente.nombre) ||
-            e.atencion || (c && c.contacto) || "")}</u><br>
+          <i>Nombre</i> <u>${esc(e.atencion || (c && c.contacto) || "")}</u><br>
           <i>Por</i> <u>${esc((c && c.empresa) || "")}</u><br>
-          <i>Fecha</i> <u>${esc(e.firmaCliente ? fechaFirma(e.firmaCliente.fecha) : "")}</u>
+          <i>Fecha</i> <u></u>
         </div></div>
     </div>
 
@@ -17387,24 +17502,6 @@ const nombrePdfEvento = (e, c) =>
   infoTipoEv(e.tipo).name + "-" +
   nombreArchivo([e.folio || "sin-folio", e.titulo || (c && c.empresa)].filter(Boolean).join(" ")) + ".pdf";
 
-/**
- * Lo que el cliente corrigió al firmar y su ficha todavía no dice.
- *
- * Lo que escribió queda congelado en el documento que firmó, y eso no se
- * pregunta: es lo que firmó. Pero la FICHA la lleva ventas, y a la ficha no le
- * escribe nadie de fuera sin que alguien del hotel lo vea. Así que aquí no se
- * decide nada: se arma la comparación para poder ofrecérsela al ejecutivo.
- */
-function datosQueNoCuadran(e){
-  const d = (e || {}).datosCliente;
-  const c = cliente((e || {}).clienteId);
-  if (!d || !c) return [];
-  return CAMPOS_DEL_CLIENTE
-    .map(campo => ({ campo, nuevo: String(d[campo.k] || "").trim(),
-                     antes: String(c[campo.k] || "").trim() }))
-    .filter(x => x.nuevo && x.nuevo !== x.antes);
-}
-
 /* ----- Ver el documento ----- */
 
 function verEvento(id, alCerrar, pedirFirma){
@@ -17413,12 +17510,18 @@ function verEvento(id, alCerrar, pedirFirma){
   if (e.externo){ verEventoExterno(e, alCerrar); return; }
   const c = cliente(e.clienteId);
   const h = state.ajustes.hotel;
-  const ec = ESTADOS_EV[e.estado];
+  const ec = estadoDoc(ESTADOS_EV, e);
+  /* Un CONTRATO de banquetes se firma en papel; una cotización, en pantalla.
+     Ver `soloEnPapel`. En papel, lo que marca que dejó de ser borrador es el
+     folio, y lo que lo cierra es el escaneado. */
+  const papel   = soloEnPapel(e);
+  const emitido = papel ? !!e.folio : !!e.firmaHotel;
+  const cerrado = papel ? !!e.firmaManual : !!e.firmaCliente;
+  const trazoViejo = papel && !!(e.firmaHotel || e.firmaCliente);
   const agua = h.marcaAgua === "ninguna" ? ""
              : (h.marcaAgua === "logo" && h.logo) ? `<img src="${esc(h.logo)}" alt="">`
              : monogramaQ(MORADO_QUARTZ);
   const yaTieneContrato = state.eventos.some(x => x.cotizacionId === e.id);
-  const corregidos = e.datosVistos ? [] : datosQueNoCuadran(e);
 
   const ov = modal(`
     <div class="modal doc">
@@ -17427,16 +17530,12 @@ function verEvento(id, alCerrar, pedirFirma){
         <span class="estado-chip" style="background:${ec.bg};color:${ec.fg}">${esc(ec.name)}</span>
         <button class="btn" data-close>✕</button>
       </div>
-      ${corregidos.length ? `<div class="modal-body no-imprimir" id="avisoDC">
-        <div class="note warn" style="margin:0"><b>El cliente corrigió sus datos al
-          firmar.</b> En este documento quedaron como él los escribió, que es lo que firmó.
-          Su ficha todavía dice lo de antes:
-          <ul style="margin:8px 0 10px">${corregidos.map(x =>
-            `<li>${esc(x.campo.etiqueta)}: <b>${esc(x.nuevo)}</b> ${
-              x.antes ? `<span class="hint">(la ficha dice ${esc(x.antes)})</span>`
-                      : `<span class="hint">(en la ficha está vacío)</span>`}</li>`).join("")}</ul>
-          <button class="btn sm primary" id="bDCPasar">Pasarlo a su ficha</button>
-          <button class="btn sm" id="bDCDejar">Dejarlo así</button></div></div>` : ""}
+      ${trazoViejo ? `<div class="modal-body no-imprimir">
+        <div class="note warn" style="margin:0"><b>Este contrato trae una firma trazada de
+          antes.</b> Ya no vale: el departamento legal del hotel confirmó que la firma digital
+          sólo la puede emitir un sistema certificado. Por eso el documento sale con el espacio
+          de firma en blanco. <b>Imprímelo y fírmenlo a mano</b>, y luego usa
+          <i>Registrar que se firmó en papel</i>.</div></div>` : ""}
       <div class="doc-body">
         ${agua ? `<div class="doc-agua">${agua}</div>` : ""}
         <div class="doc-contenido">${docEvento(e, c)}</div>
@@ -17448,13 +17547,18 @@ function verEvento(id, alCerrar, pedirFirma){
         <div class="spacer"></div>
         ${e.tipo === "cotizacion" && !yaTieneContrato
           ? `<button class="btn" id="bAContrato">Pasar a contrato</button>` : ""}
-        ${!e.firmaHotel ? `<button class="btn ok" id="bEvF1">Firmar por el hotel</button>` : ""}
-        ${e.firmaHotel && !e.firmaCliente
-          ? `<button class="btn primary" id="bEvEnviar">Enviar al cliente</button>
-             <button class="btn ok" id="bEvF2">Registrar firma del cliente</button>` : ""}
-        ${e.firmaHotel && !e.firmaCliente && !e.tokenFirma && puedeMandarLiga()
+        ${!emitido ? (papel
+          ? `<button class="btn ok" id="bEvEmitir">Emitir y numerar</button>`
+          : `<button class="btn ok" id="bEvF1">Firmar por el hotel</button>`) : ""}
+        ${emitido && !cerrado
+          ? `<button class="btn primary" id="bEvEnviar">Enviar al cliente</button>` +
+            (papel ? `<button class="btn ok" id="bEvPapel">Registrar que se firmó en papel</button>`
+                   : `<button class="btn ok" id="bEvF2">Registrar firma del cliente</button>`) : ""}
+        ${!papel && e.firmaHotel && !e.firmaCliente && !e.tokenFirma && puedeMandarLiga()
           ? `<button class="btn" id="bEvLiga">Rehacer enlace de firma</button>` : ""}
-        ${e.firmaCliente ? `<span class="hint">Aceptado y firmado por el cliente.</span>` : ""}
+        ${cerrado ? `<span class="hint">${papel ? "Firmado en papel." : "Aceptado y firmado por el cliente."}</span>` : ""}
+        ${cerrado && papel && traeEscaneo(e.firmaManual)
+          ? `<button class="btn sm" id="bEvEscaneo">Ver el escaneado</button>` : ""}
       </div>
     </div>`);
 
@@ -17486,6 +17590,20 @@ function verEvento(id, alCerrar, pedirFirma){
   const bc = ov.querySelector("#bAContrato");
   if (bc) bc.onclick = () => { ov.remove(); pasarAContratoBq(e, alCerrar); };
 
+  const em = ov.querySelector("#bEvEmitir");
+  if (em) em.onclick = async () => {
+    em.disabled = true; em.textContent = "Emitiendo…";
+    if (!await emitirEvento(e, null)){ em.disabled = false; em.textContent = "Emitir y numerar"; return; }
+    ov.remove(); verEvento(e.id, alCerrar);
+  };
+
+  const pa = ov.querySelector("#bEvPapel");
+  if (pa) pa.onclick = () => subirEventoFirmado(e, () => { ov.remove(); verEvento(e.id, alCerrar); });
+
+  const es = ov.querySelector("#bEvEscaneo");
+  if (es) es.onclick = () => verEscaneado(e.firmaManual,
+    `${infoTipoEv(e.tipo).name} ${e.folio || "sin folio"} · escaneado`);
+
   const f1 = ov.querySelector("#bEvF1");
   if (f1) f1.onclick = () => padFirma("Firma por el hotel",
     { nombre: ejecutivoDeEv(e) || miNombre(), puesto:"Banquetes", celular:"" },
@@ -17516,28 +17634,6 @@ function verEvento(id, alCerrar, pedirFirma){
     verEvento(e.id, alCerrar);
   };
 
-  const bPasar = ov.querySelector("#bDCPasar");
-  if (bPasar) bPasar.onclick = () => {
-    const ficha = cliente(e.clienteId);
-    if (ficha){
-      for (const x of datosQueNoCuadran(e)) ficha[x.campo.k] = x.nuevo;
-      ficha.updatedAt = new Date().toISOString();
-    }
-    e.datosVistos = true;
-    e.updatedAt = new Date().toISOString();
-    guardar(); render(); ov.remove();
-    verEvento(e.id, alCerrar);
-  };
-
-  const bDejar = ov.querySelector("#bDCDejar");
-  if (bDejar) bDejar.onclick = () => {
-    e.datosVistos = true;
-    e.updatedAt = new Date().toISOString();
-    guardar();
-    const caja = ov.querySelector("#avisoDC");
-    if (caja) caja.remove();
-  };
-
   if (pedirFirma && !e.firmaHotel && f1) setTimeout(() => f1.click(), 60);
 }
 
@@ -17551,37 +17647,85 @@ function verEvento(id, alCerrar, pedirFirma){
 async function firmarEvento(e, quien, d){
   const fecha = new Date().toISOString();
   const firma = saneaFirma(Object.assign({}, d, { fecha }));
+  if (quien === "hotel") return emitirEvento(e, firma);
+  if (!e.firmaHotel){ alert("Primero debe firmar el hotel."); return false; }
+  aceptaElCliente(e, firma, `Firmó ${d.nombre}.`);
+  guardar(); render();
+  return true;
+}
+
+/**
+ * El documento deja de ser un borrador: toma su número.
+ *
+ * Es el mismo momento contado de dos maneras. En una COTIZACIÓN lo marca la
+ * firma del ejecutivo, y por eso recibe una firma trazada. En un CONTRATO no
+ * hay firma que recibir —se imprime y se firma a mano, ver `soloEnPapel`—, y
+ * lo que lo marca es emitirlo. En los dos casos pasa lo mismo: se aparta el
+ * folio, se congela a quién va dirigido y lo que el documento dice del hotel,
+ * y deja de poderse editar.
+ *
+ * El folio se pide ANTES de tocar nada: si no se consigue, no se emite y no se
+ * gasta, así la serie no se queda con un hueco por un intento fallido.
+ */
+async function emitirEvento(e, firma){
   const c = cliente(e.clienteId);
   const doc = infoTipoEv(e.tipo).name;
-
-  if (quien === "hotel"){
-    const serie = e.tipo === "contrato" ? "CB" : "EV";
-    const folio = await folioParaFirmar(e, "eventos_" + serie.toLowerCase(), serie, anioEvento(e),
-      () => folioEvento(e.tipo === "contrato" ? "contrato" : "cotizacion", anioEvento(e), e.id));
-    if (!folio){ alert(AVISO_SIN_CONTADOR); return false; }
-    e.folio = folio;
-    e.firmaHotel = firma;
-    if (e.estado === "borrador") e.estado = "firmado";
-    e.tokenFirma = e.tokenFirma || nuevoToken();   // habilita el enlace del cliente
-    // El destinatario y los datos del hotel se congelan: el documento tiene que
-    // poder leerse igual dentro de un año, y el cliente lo abre desde un
-    // navegador que no tiene los ajustes del hotel. Ver LO_DEL_HOTEL_EN_EL_CONTRATO.
-    if (c){
-      e.destinatario = { empresa:c.empresa, contacto:c.contacto, ubicacion:c.ubicacion,
-                         telefono:c.telefono, email:c.email };
-      if (c.rfc) e.destinatario.rfc = c.rfc;
-    }
-    const dh = datosDelHotelAhora();
-    if (dh) e.datosHotel = dh;
-    registrarAuto(e.clienteId, `${doc} ${e.folio} firmada por el hotel`,
-      e.titulo || "", ejecutivoDeEv(e));
-  } else {
-    if (!e.firmaHotel){ alert("Primero debe firmar el hotel."); return false; }
-    aceptaElCliente(e, firma, `Firmó ${d.nombre}.`);
+  const serie = e.tipo === "contrato" ? "CB" : "EV";
+  const folio = await folioParaFirmar(e, "eventos_" + serie.toLowerCase(), serie, anioEvento(e),
+    () => folioEvento(e.tipo === "contrato" ? "contrato" : "cotizacion", anioEvento(e), e.id));
+  if (!folio){ alert(AVISO_SIN_CONTADOR); return false; }
+  e.folio = folio;
+  if (firma) e.firmaHotel = firma;
+  if (e.estado === "borrador") e.estado = "firmado";
+  // El enlace del cliente, sólo donde se firma en pantalla.
+  if (!soloEnPapel(e)) e.tokenFirma = e.tokenFirma || nuevoToken();
+  /* El destinatario y los datos del hotel se congelan: el documento tiene que
+     poder leerse igual dentro de un año aunque en Ajustes cambie el
+     representante legal, y una cotización la abre el cliente desde un
+     navegador que no tiene los ajustes del hotel. Ver
+     LO_DEL_HOTEL_EN_EL_CONTRATO. */
+  if (c){
+    e.destinatario = { empresa:c.empresa, contacto:c.contacto, ubicacion:c.ubicacion,
+                       telefono:c.telefono, email:c.email };
+    if (c.rfc) e.destinatario.rfc = c.rfc;
   }
+  const dh = datosDelHotelAhora();
+  if (dh) e.datosHotel = dh;
+  registrarAuto(e.clienteId,
+    firma ? `${doc} ${e.folio} firmada por el hotel` : `${doc} ${e.folio} emitido`,
+    firma ? (e.titulo || "")
+          : `Listo para imprimirse y firmarse en papel.${e.titulo ? "\n" + e.titulo : ""}`,
+    ejecutivoDeEv(e));
   e.updatedAt = new Date().toISOString();
   guardar(); render();
   return true;
+}
+
+/**
+ * El contrato volvió firmado en papel: se sube el escaneado y se cierra.
+ *
+ * La constancia es el ARCHIVO, no una firma trazada: ver `soloEnPapel`. Por
+ * dentro el evento queda igual que si se hubiera firmado en pantalla
+ * —confirmado y el cliente ganado para banquetes—, porque lo que pasó es lo
+ * mismo: el cliente aceptó.
+ */
+function subirEventoFirmado(e, alTerminar){
+  const c = cliente(e.clienteId);
+  pedirEscaneado({
+    titulo: "Subir el contrato firmado",
+    explica: `El contrato se imprime y se firma a mano. Al subir el escaneado queda
+      <b>Confirmado</b> y <b>${esc((c && c.empresa) || "el cliente")}</b> pasa a
+      <b>Ganado</b> en banquetes.`,
+    quienDef: miNombre() || ejecutivoDeEv(e),
+    boton: "Subir y cerrar el contrato",
+    alSubir: (manual, f, listo) => {
+      e.firmaManual = manual;
+      aceptaElCliente(e, null, `Firmado en papel. Se subió el archivo "${f.name}".`);
+      guardar(); render();
+      listo(true);
+      if (alTerminar) alTerminar();
+    }
+  });
 }
 
 /**
@@ -17595,7 +17739,8 @@ async function firmarEvento(e, quien, d){
 function aceptaElCliente(e, firma, comoFirmo){
   const c = cliente(e.clienteId);
   const doc = infoTipoEv(e.tipo).name;
-  e.firmaCliente = firma;
+  // Sin firma trazada cuando llegó en papel: ahí la constancia es el escaneado.
+  if (firma) e.firmaCliente = firma;
   e.estado = "confirmado";
   /* La clave deja de servir en cuanto se firma: el enlace anda por WhatsApp y
      por correo, y un documento firmado no tiene por qué seguir abriéndose
@@ -17610,7 +17755,7 @@ function aceptaElCliente(e, firma, comoFirmo){
      departamento se mire, lo que se ganó fue un evento. */
   tocaBanquetes(e);
   if (c && !(estatusSiHay(c.estatusBq) || {}).won){
-    c.estatusBq = "ganado"; c.updatedAt = firma.fecha || new Date().toISOString();
+    c.estatusBq = "ganado"; c.updatedAt = (firma && firma.fecha) || new Date().toISOString();
   }
   e.updatedAt = new Date().toISOString();
 }
@@ -17626,7 +17771,7 @@ function pasarAContratoBq(cot, alCerrar){
        La clave del enlace sobre todo: copiada, el contrato nuevo y la
        cotización vieja compartirían la misma, y quien tuviera la de una
        abriría la otra. El saneador los borra por quedar vacíos. */
-    tokenFirma:"", datosCliente:null, datosVistos:false, datosHotel:null,
+    tokenFirma:"", datosHotel:null,
     garantiaPax: String(cot.bloques.reduce((a,b) => Math.max(a, Number(b.pax) || 0), 0) || ""),
     fecha: hoyISO(), createdAt:"", updatedAt:""
   }));
@@ -17651,10 +17796,12 @@ function enviarEvento(e, c){
     (e.vigencia ? ` La cotización tiene vigencia hasta el ${fechaTexto(e.vigencia)}.` : "") +
     `\n\nQuedo al pendiente de sus comentarios.\n\nSaludos cordiales,\n${firmante}\n${h.nombre}`;
 
-  /* El enlace para que lo firme en su pantalla, igual que en los convenios y
-     en los contratos de hospedaje. Hace falta la nube —el enlace vive ahí— y
-     que el hotel ya haya firmado, porque es al firmar cuando nace la clave. */
-  let conLiga = !!(e.tokenFirma && puedeMandarLiga());   // se baja si no hay buzón
+  /* El enlace para que lo firme en su pantalla. Hace falta la nube —el enlace
+     vive ahí— y que el hotel ya haya firmado, porque es al firmar cuando nace
+     la clave. En un CONTRATO no hay enlace y tampoco hay nada que explicar: se
+     imprime y se firma a mano. Ver `soloEnPapel`. */
+  const papel = soloEnPapel(e);
+  let conLiga = !papel && !!(e.tokenFirma && puedeMandarLiga());   // se baja si no hay buzón
   let sinBuzon = false;
   const msgLiga = () => `Estimado(a) ${e.atencion || (c && c.contacto) || ""}:\n\n` +
     `Le comparto la ${doc.toLowerCase()} ${e.folio} de ${h.nombre}` +
@@ -17705,6 +17852,10 @@ function enviarEvento(e, c){
            <p class="hint">El enlace sólo abre este documento y deja de servir en cuanto se firma.</p>
            ${enlaceYaViajo(e, "eventos") ? "" : avisoSinSubir()}
            <h3 class="sec">O mándale el PDF</h3>`
+        : papel
+        ? `<div class="note"><b>Este contrato se firma en papel.</b> Mándaselo, imprímanlo y
+             fírmenlo a mano; cuando lo tengas firmado, súbelo con <i>Registrar que se firmó en
+             papel</i>.</div>`
         : sinBuzon ? avisoSinBuzon()
         : `<div class="note warn"><b>El enlace de firma no está disponible.</b>
              ${!puedeMandarLiga()
@@ -17834,7 +17985,7 @@ function agenda(mes){
         titulo: e.titulo || nombreCli(e.clienteId),
         detalle: mismos.map(x => [x.horario, x.salon, x.pax ? x.pax + " pax" : ""]
           .filter(Boolean).join(" · ")).join("  |  "),
-        pie: `${infoTipoEv(e.tipo).name} ${e.folio} · ${ESTADOS_EV[e.estado].name}`,
+        pie: `${infoTipoEv(e.tipo).name} ${e.folio} · ${estadoDoc(ESTADOS_EV, e).name}`,
         abre: () => verEvento(e.id)
       });
     }
@@ -18261,7 +18412,7 @@ function contextoIA(){
 "",
 `CONTRATOS Y COTIZACIONES DE HOSPEDAJE (${state.contratos.filter(contratoEsMio).length}):`,
 ...lim(state.contratos.filter(contratoEsMio).map(k =>
-  `- ${k.folio} · ${infoTipoCt(k.tipo).name} · ${nombreCli(k.clienteId)} · ${ESTADOS_CT[k.estado].name}` +
+  `- ${k.folio} · ${infoTipoCt(k.tipo).name} · ${nombreCli(k.clienteId)} · ${estadoDoc(ESTADOS_CT, k).name}` +
   ` · fecha ${k.fecha} · total ${money(cuentasContrato(k).total, k.moneda)}` +
   (k.titulo ? ` · ${k.titulo}` : "")), 60),
 ""] : []),
@@ -18269,7 +18420,7 @@ function contextoIA(){
 `EVENTOS DE BANQUETES (${state.eventos.filter(eventoEsMio).length}):`,
 ...lim(state.eventos.filter(eventoEsMio).map(e =>
   `- ${e.folio} · ${e.tipo === "contrato" ? "contrato" : "cotización"} · ${nombreCli(e.clienteId)}` +
-  ` · ${ESTADOS_EV[e.estado].name} · ${corta(e.titulo, 70) || "sin título"}` +
+  ` · ${estadoDoc(ESTADOS_EV, e).name} · ${corta(e.titulo, 70) || "sin título"}` +
   ` · fecha ${fechaEvento(e) || "sin fecha"}` +
   ` · ${e.bloques.reduce((a, b) => Math.max(a, Number(b.pax) || 0), 0) || "?"} pax` +
   ` · total ${moneyMN(cuentasEvento(e).total)}` +
@@ -18521,6 +18672,8 @@ const DOCS_FIRMABLES = {
     aplica: (v, firma) => cerrarConvenio(v, firma,
       "Firmado por el cliente desde el enlace que se le envió.", "")
   },
+  /* La COTIZACIÓN de hospedaje. El contrato entra por la misma colección pero
+     ya no se firma en pantalla: ver `soloEnPapel`. */
   contratos: {
     prefijo: "contratos:",
     campoFirma: "firmaCliente",
@@ -18533,25 +18686,21 @@ const DOCS_FIRMABLES = {
     pdf: (v, c) => pdfDeDocumento(cuerpoContrato(v, c)),
     nombrePdf: (v, c) => nombrePdfContrato(v, c),
     aplica: (v, firma, f) => {
-      v.firmaCliente = saneaFirma(firma);
-      v.estado = "aceptado";
       /* La clave deja de servir en cuanto se firma: el enlace anda por
          WhatsApp y por correo, y un documento firmado no tiene por qué seguir
-         abriéndose desde fuera. Igual que en los convenios. */
-      v.tokenFirma = "";
+         abriéndose desde fuera. Lo hace `aceptaElClienteCt`, igual que en los
+         convenios. */
+      aceptaElClienteCt(v, saneaFirma(firma),
+        `Firmó ${(f && f.nombre) || "el cliente"} desde el enlace que se le envió.`);
       v.avisado = false;          // que el ejecutivo se entere al volver
-      v.updatedAt = new Date().toISOString();
-      registrarAuto(v.clienteId, `${infoTipoCt(v.tipo).name} ${v.folio} aceptada por el cliente`,
-        `Firmó ${(f && f.nombre) || "el cliente"} desde el enlace que se le envió.`, ejecutivoDeCt(v));
       guardar();
     }
   },
-  /* El contrato —y la cotización— de BANQUETES.
-     
-     Es la cuarta, y la única que le pide algo al cliente además de la firma:
-     el contrato de banquetes trae declaraciones suyas —domicilio, teléfono,
-     correo, RFC— que el hotel muchas veces no tiene completas. Ver
-     `camposCliente` y `CAMPOS_DEL_CLIENTE`. */
+  /* La COTIZACIÓN de banquetes.
+
+     El contrato de banquetes entra por aquí también —es la misma colección—,
+     pero `aplica` lo rechaza y el servidor ni siquiera lo sirve: un contrato
+     no se firma en pantalla. Ver `soloEnPapel`. */
   eventos: {
     prefijo: "eventos:",
     campoFirma: "firmaCliente",
@@ -18560,20 +18709,10 @@ const DOCS_FIRMABLES = {
     abriendo: () => "su documento",
     comoSeLlama: e => infoTipoEv(e.tipo).name.toLowerCase(),
     destinatario: e => e.destinatario || {},
-    /* Los huecos que son del cliente sólo se le piden en el CONTRATO: una
-       cotización no tiene declaraciones que llenar, y pedirle el RFC para
-       cotizar una boda es ponerle un trámite donde no hay ninguno. */
-    camposCliente: e => e.tipo === "contrato" ? CAMPOS_DEL_CLIENTE : null,
     cuerpo: (e, c) => docEvento(e, c),
     pdf: (e, c) => pdfDeDocumento(docEvento(e, c)),
     nombrePdf: (e, c) => nombrePdfEvento(e, c),
     aplica: (e, firma, f) => {
-      /* Lo que el cliente corrigió se CONGELA en este documento: es lo que
-         firmó. A su ficha no se pasa solo —se lo ofrecemos al ejecutivo
-         cuando abra el evento, ver `avisoDatosDelCliente`—, porque la ficha
-         la lleva ventas y nadie de fuera le escribe encima. */
-      const d = saneaDatosCliente(f && f.datos_cliente);
-      if (d) e.datosCliente = d;
       aceptaElCliente(e, firma,
         `Firmó ${(f && f.nombre) || "el cliente"} desde el enlace que se le envió.`);
       guardar();
@@ -18705,15 +18844,6 @@ function dibujarParaFirmar(caja, v, datos, pedir){
               telefono: dest.telefono || "",
               email: dest.email || "",
               rfc: dest.rfc || "" };
-
-  /* Los huecos del documento que son DEL CLIENTE, si este documento tiene
-     alguno. Lo dice el descriptor: sólo el contrato de banquetes trae
-     declaraciones suyas que llenar. Los del hotel —razón social, RFC, cuenta,
-     CLABE— NUNCA se le ponen a alguien de fuera; ésos van congelados dentro
-     del documento desde que lo firmó el hotel. */
-  const suyos = (info.camposCliente && info.camposCliente(v)) || null;
-  const escrito = {};
-  if (suyos) for (const campo of suyos) escrito[campo.k] = String(c[campo.k] || "");
   const agua = h.marcaAgua === "ninguna" ? ""
              : (h.marcaAgua === "logo" && h.logo) ? `<img src="${esc(h.logo)}" alt="">`
              : monogramaQ(MORADO_QUARTZ);
@@ -18741,6 +18871,16 @@ function dibujarParaFirmar(caja, v, datos, pedir){
   };
 
   const zona = caja.querySelector("#zonaFirma");
+  /* Un CONTRATO no se firma aquí. El servidor deja de servirlo en cuanto el
+     hotel sincroniza —la clave se borra al cargarlo, ver `soloEnPapel`—, pero
+     entre una cosa y otra puede caer alguien con un enlace viejo, y a ése hay
+     que decirle qué hacer en vez de dejarlo firmar algo que no valdría. */
+  if (soloEnPapel(v)){
+    zona.innerHTML = `<div class="note warn"><b>Este contrato se firma en papel.</b><br><br>
+      Use <i>Descargar en PDF</i>, imprímalo y fírmelo a mano; después devuélvaselo a su
+      ejecutivo. Es un requisito legal del contrato, no algo que usted haya hecho mal.</div>`;
+    return;
+  }
   if (v[info.campoFirma]){
     zona.innerHTML = `<div class="note"><b>Esto ya está firmado.</b> No hay nada más
       que hacer; conserve el PDF para sus registros.</div>`;
@@ -18765,20 +18905,6 @@ function dibujarParaFirmar(caja, v, datos, pedir){
   const resumen = [quienFirma.nombre, quienFirma.celular].filter(Boolean).join(" · ");
 
   zona.innerHTML = `
-    ${suyos ? `
-    <h3 class="sec" style="margin-top:0">Sus datos</h3>
-    <div class="note">Esto es lo que el documento dice de usted. Si algo falta o está
-      equivocado, corríjalo aquí: <b>lo que escriba aparece arriba</b> y es lo que va a
-      firmar.</div>
-    <div class="grid" id="dcCampos">
-      ${suyos.map(campo => `<div${campo.ancho === "full" ? ` class="full"` : ""}>
-        <label class="lbl">${esc(campo.etiqueta)}</label>
-        <input class="field" data-dc="${esc(campo.k)}" style="width:100%"${
-          campo.modo ? ` inputmode="${esc(campo.modo)}"` : ""}${
-          campo.auto ? ` autocomplete="${esc(campo.auto)}"` : ""} value="${
-          esc(String(escrito[campo.k] || ""))}">
-        ${campo.ayuda ? `<div class="hint">${esc(campo.ayuda)}</div>` : ""}</div>`).join("")}
-    </div>` : ""}
     <h3 class="sec">Su firma</h3>
     ${resumen ? `<p class="hint" style="margin:0 0 10px">Firma como
       <b style="color:var(--text)">${esc(resumen)}</b>
@@ -18803,40 +18929,6 @@ function dibujarParaFirmar(caja, v, datos, pedir){
   const limpiar = prepararPad(zona.querySelector("#pad"));
   zona.querySelector("#cfBorrar").onclick = limpiar;
 
-  /* Lo que teclea se ve EN EL DOCUMENTO, no sólo en la casilla.
-
-     Es la diferencia entre llenar un formulario y leer lo que uno firma: el
-     renglón de las declaraciones deja de decir «________» y dice su domicilio.
-     Se repinta el documento completo porque el hueco está a media cláusula y
-     no vale la pena buscarlo; con un cuarto de segundo de espera no se nota
-     ni en un teléfono viejo. */
-  const campoDoc = () => caja.querySelector(".doc-contenido");
-  const repinta = () => {
-    const d = saneaDatosCliente(escrito);
-    if (d) v.datosCliente = d; else delete v.datosCliente;
-    const cont = campoDoc();
-    if (!cont) return;
-    const antes = cont.offsetHeight;
-    cont.innerHTML = info.cuerpo(v, c);
-    /* Si el documento creció, el formulario se iría para abajo y el cliente
-       perdería de vista el renglón que está escribiendo. Se compensa a mano,
-       y sólo si ya venía desplazado: estando arriba no hay nada que corregir. */
-    const crecio = cont.offsetHeight - antes;
-    if (crecio && window.scrollY > 0) window.scrollBy(0, crecio);
-  };
-
-  const cajaCampos = zona.querySelector("#dcCampos");
-  if (cajaCampos){
-    let tic = 0;
-    cajaCampos.addEventListener("input", ev => {
-      const k = ev.target.dataset && ev.target.dataset.dc;
-      if (!k) return;
-      escrito[k] = ev.target.value;
-      clearTimeout(tic);
-      tic = setTimeout(repinta, 250);
-    });
-  }
-
   const bCorregir = zona.querySelector("#cfCorregir");
   if (bCorregir) bCorregir.onclick = () => {
     zona.querySelector("#cfDatos").style.display = "";   // vuelve a su .grid
@@ -18850,21 +18942,6 @@ function dibujarParaFirmar(caja, v, datos, pedir){
     const pad = zona.querySelector("#pad");
     // Lo único que se le exige es la firma, que es lo que vino a hacer.
     if (!pad.dataset.trazado){ err.innerHTML = `<div class="errbox">Falta su firma.</div>`; return; }
-    /* Se le avisa UNA vez de los huecos y se le deja firmar en la segunda.
-       Obligarlo sería dejar a un cliente sin poder firmar porque no se acuerda
-       de su RFC un domingo, y eso es justo lo que no puede pasar: el hotel
-       completa después lo que falte. */
-    if (suyos){
-      const faltan = suyos.filter(campo => !String(escrito[campo.k] || "").trim());
-      if (faltan.length && !e.currentTarget.dataset.insistio){
-        e.currentTarget.dataset.insistio = "1";
-        err.innerHTML = `<div class="note warn" style="margin:0 0 8px"><b>Falta ${
-          esc(faltan.map(campo => campo.etiqueta.toLowerCase()).join(", "))}.</b>
-          Si no lo tiene a la mano puede firmar así y el hotel lo completa después.
-          Vuelva a darle a <i>Firmar</i> para continuar.</div>`;
-        return;
-      }
-    }
     err.innerHTML = "";
     const b = e.currentTarget, antes = b.textContent;
     b.disabled = true; b.textContent = "Enviando…";
@@ -18881,22 +18958,10 @@ function dibujarParaFirmar(caja, v, datos, pedir){
            del ejecutivo ya pasaba por aquí y la del cliente no. */
         img: padAPng(pad)
       };
-      const mios = suyos ? saneaDatosCliente(escrito) : null;
-      const manda = cuerpo => pedir("/rest/v1/crm_firmas", {
+      const r = await pedir("/rest/v1/crm_firmas", {
         method:"POST", headers:{ "Prefer":"return=minimal" },
-        body: JSON.stringify(cuerpo)
+        body: JSON.stringify(fila)
       });
-      let r = await manda(mios ? Object.assign({ datos_cliente: mios }, fila) : fila);
-      if (!r.ok && mios){
-        const txt = await r.text();
-        /* Si el hotel todavía no corrió la última versión de firmas.sql, la
-           columna de los datos no existe y el servidor rebota TODO. Entonces se
-           manda la firma sola: lo que se pierde es la corrección —el hotel la
-           puede capturar—, no la firma. Nadie se queda sin firmar por una
-           columna que falta. */
-        if (/datos_cliente|PGRST204|42703|column/i.test(txt)) r = await manda(fila);
-        else throw new Error(`${r.status} · ${txt.slice(0,200)}`);
-      }
       if (!r.ok) throw new Error(`${r.status} · ${(await r.text()).slice(0,200)}`);
       caja.innerHTML = `<div class="note" style="border-left:3px solid var(--ok)">
         <b>Listo${nombre ? ", " + esc(nombre) : ""}. Su ${esc(comoSeLlama)} quedó
