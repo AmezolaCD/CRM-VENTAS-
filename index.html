@@ -1024,7 +1024,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.08-8";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.14-1";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3454,6 +3454,30 @@ function saneaContrato(k){
   if ("folioRepetido" in o){
     o.folioRepetido = String(o.folioRepetido || "");
     if (!o.folioRepetido) delete o.folioRepetido;
+  }
+  /* ¿Las tarifas son comisionables, y a qué porcentaje?
+
+     Lo pidió la ejecutiva de ventas: el machote del hotel dice siempre
+     «TARIFAS NETAS NO COMISIONABLES», y a una agencia de viajes hay que
+     cotizarle lo contrario. Sin marcar, el documento dice lo de siempre.
+
+     NACEN AL MARCARSE, y no en los valores por omisión de arriba. Es el mismo
+     cuidado que `saneaCliente` tiene con el estatus de banquetes: un campo
+     nuevo ahí les cambiaría la forma a TODOS los contratos a la vez, la
+     sincronización los tomaría por edición local sin subir y este equipo
+     mandaría su copia encima de la de los demás. Un contrato que nadie marcó
+     es byte por byte el de siempre.
+
+     El porcentaje se cae con la casilla: no se queda un 10% colgando de una
+     opción apagada, esperando a confundir a alguien el día que la vuelva a
+     prender. */
+  if (o.comisionable !== undefined){
+    o.comisionable = !!o.comisionable;
+    if (!o.comisionable) delete o.comisionable;
+  }
+  if (o.comision !== undefined){
+    o.comision = Number(o.comision) || 0;
+    if (!o.comision || !o.comisionable) delete o.comision;
   }
   return o;
 }
@@ -14379,6 +14403,23 @@ const TEXTOS_CT = {
   cierre: "Me reitero nuevamente a sus órdenes por cualquier duda o requerimiento adicional."
 };
 
+/**
+ * El renglón de la comisión, tal como va impreso.
+ *
+ * Los asteriscos son del machote del hotel —así escribe las negritas— y se
+ * conservan para que el documento se vea igual que siempre. Sin porcentaje
+ * dice sólo «TARIFAS COMISIONABLES»: más vale eso que un «AL %» suelto,
+ * porque el porcentaje a veces se negocia aparte.
+ */
+/** Lo que dice la ayuda del editor, que cambia al prender la casilla. */
+const ayudaComision = on => on
+  ? "El porcentaje que se le reconoce a la agencia. Vacío imprime sólo «TARIFAS COMISIONABLES»."
+  : "Sin marcar, el documento dice «TARIFAS NETAS NO COMISIONABLES», como hasta hoy.";
+
+const textoComisionable = k => k.comisionable
+  ? `**TARIFAS COMISIONABLES${k.comision ? ` AL ${k.comision}%` : ""}**`
+  : "**TARIFAS NETAS NO COMISIONABLES**";
+
 const anioContrato = k => String(k.fecha || hoyISO()).slice(0, 4) ||
   String(new Date().getFullYear());
 
@@ -14535,7 +14576,7 @@ function cuerpoContrato(k, c){
           <td>${esc(e.renta || "—")}</td></tr>`).join("")}</tbody></table>` : ""}
 
     <h2>Costos adicionales no incluidos</h2>
-    <div class="ct-mon">**TARIFAS NETAS NO COMISIONABLES**</div>
+    <div class="ct-mon">${textoComisionable(k)}</div>
     ${k.adicionales.length ? `<table class="tar"><thead><tr>
         <th>Concepto</th><th class="num" style="width:220px">Costo</th></tr></thead>
       <tbody>${k.adicionales.map(x => `<tr>
@@ -14703,6 +14744,21 @@ function editarContrato(id, clientePre, alCerrar){
           <div><label class="lbl">Impuestos (%)</label>
             <input class="field" id="ctImp" inputmode="decimal" value="${esc(String(k.impuestos))}">
             <div class="hint">8% de IVA más 5% sobre hospedaje.</div></div>
+          <div><label class="lbl">Comisión</label>
+            <div style="display:flex;gap:8px;align-items:center;min-height:38px">
+              <!-- La pastilla va en su propia caja: el CSS de .opciones esconde
+                   TODO input que lleve dentro —así es como la casilla de verdad
+                   se oculta detrás de la pastilla—, y el porcentaje acabaría
+                   invisible ahí dentro. -->
+              <div class="opciones">${pildora(
+                `<input type="checkbox" id="ctComOn"${k.comisionable ? " checked" : ""}>`,
+                "Tarifas comisionables")}</div>
+              <input class="field" id="ctComPct" inputmode="decimal" placeholder="10 %"
+                aria-label="Porcentaje de comisión"
+                style="width:96px;flex:none${k.comisionable ? "" : ";display:none"}"
+                value="${k.comision ? esc(String(k.comision)) : ""}">
+            </div>
+            <div class="hint" id="ctComAyuda">${esc(ayudaComision(k.comisionable))}</div></div>
         </div>
 
         <h3 class="sec">Hospedaje</h3>
@@ -14784,6 +14840,15 @@ function editarContrato(id, clientePre, alCerrar){
 
   q("#ctTipo").onchange = e => {
     q("#ctTipoAyuda").textContent = infoTipoCt(e.target.value).ayuda;
+  };
+  /* El porcentaje sólo se asoma si las tarifas son comisionables: un campo de
+     porcentaje a la vista en un contrato que no lo es invita a llenarlo.
+     Mismo trato que el bloque Recovery del editor de convenios. */
+  q("#ctComOn").onchange = e => {
+    const on = e.target.checked;
+    q("#ctComPct").style.display = on ? "" : "none";
+    q("#ctComAyuda").textContent = ayudaComision(on);
+    if (on) q("#ctComPct").focus();
   };
   q("#bAddHosp").onclick = () => {
     ov.querySelector("#tHosp tbody").insertAdjacentHTML("beforeend", filaHosp(saneaLineaHosp({})));
@@ -14872,8 +14937,15 @@ function editarContrato(id, clientePre, alCerrar){
         concepto: tr.querySelector(".x-concepto").value, costo: tr.querySelector(".x-costo").value
       })).filter(x => x.concepto || x.costo),
       notas: q("#ctNotas").value.trim(),
+      comisionable: q("#ctComOn").checked,
+      comision: Number(q("#ctComPct").value) || 0,
       updatedAt: new Date().toISOString()
     });
+    /* `Object.assign` suma, no quita. Los dos campos de la comisión nacen al
+       marcarse —ver saneaContrato—, así que aquí se van en cuanto dejan de
+       valer, y no al recargar: un contrato sin comisión no carga las llaves. */
+    if (!k.comisionable) delete k.comisionable;
+    if (!k.comision || !k.comisionable) delete k.comision;
     if (!existente){ k.createdAt = new Date().toISOString(); state.contratos.push(k); }
     guardar(); render();
     return true;

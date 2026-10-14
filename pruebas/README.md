@@ -47,10 +47,16 @@ node pruebas/navegador/copia-local.mjs              # la copia vive en IndexedDB
 node pruebas/navegador/salones.mjs                  # el salón y su renta por rato
 node pruebas/navegador/contrato-de-banquetes.mjs    # las 19 cláusulas, completas
 node pruebas/navegador/contratos-en-papel.mjs       # el contrato no se firma en pantalla
+node pruebas/navegador/tarifas-comisionables.mjs    # la opción de comisión del contrato
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
 servidor rechaza su firma, no ve letra de técnico ni se le encarga nada.
+
+`tarifas-comisionables.mjs` cuida las dos mitades de una opción nueva: que marcada diga lo que
+se negoció, y que **sin marcar el documento diga exactamente lo de siempre** —quien no la use no
+tiene por qué notar nada—. Lleva su grupo de control: la carta-convenio, que Marco pidió dejar
+quieta.
 
 `contratos-en-papel.mjs` cuida lo que pidió el departamento legal del hotel: que a un
 **contrato** no se le pueda sacar una firma por ningún camino —ni el lienzo, ni el enlace, ni
