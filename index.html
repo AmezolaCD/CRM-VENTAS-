@@ -1024,7 +1024,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.14-1";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.15-1";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -4767,6 +4767,51 @@ function aplicarInvitacion(cfg){
   nube.ultimo = "";
   if (otroServidor) nube.enlazado = false;   // servidor distinto: enlace nuevo
   guardarNubeCfg();
+}
+
+/* ==========================================================================
+   DEJAR LA CONEXIÓN DENTRO DE LA APLICACIÓN
+
+   La liga de invitación de aquí arriba resuelve un equipo a la vez, y hay que
+   acordarse de mandarla. Lo que de verdad acaba con el problema es que la
+   aplicación publicada YA traiga la dirección y la llave: entonces quien abre
+   core-quartz.vercel.app no ve más que la pantalla de entrar, y no hay nada
+   que configurar en ningún equipo, nunca.
+
+   Eso se hace llenando una sola línea arriba de este archivo —`CORE_NUBE`—, y
+   `cargarNube()` la adopta sola en cualquier equipo que no tenga nada guardado.
+   El mecanismo lleva tiempo ahí; lo que faltaba era no tener que dictarle la
+   llave a nadie ni escribirla a mano, que es justo donde se equivoca uno.
+
+   Esto NO se puede hacer con el repositorio público: la llave anon está hecha
+   para viajar al navegador, pero la dirección del proyecto del hotel no tiene
+   por qué quedar publicada ni indexada para siempre. Primero privado, después
+   la línea. Por eso el botón lo dice antes de copiar nada.
+   ========================================================================== */
+const lineaDelHotel = () =>
+  `window.CORE_NUBE = { url:${JSON.stringify(nube.url)}, anon:${JSON.stringify(nube.anon)} };`;
+
+/** ¿Esta copia del CRM ya trae la conexión del hotel adentro? */
+const traeLaNubeDentro = () => !!(NUBE_DEF.url && NUBE_DEF.anon);
+
+async function copiarLineaDelHotel(){
+  if (!nube.url || !nube.anon){
+    alert("Primero hay que conectar este equipo: hacen falta la dirección y la llave.");
+    return;
+  }
+  const linea = lineaDelHotel();
+  const comoSeUsa =
+    "Pégala en GitHub, en el archivo index.html, encima de la línea que dice CORE_NUBE " +
+    "(está arriba de todo; búscala con Ctrl+F). Al publicarse, cualquier equipo que abra " +
+    "la dirección del CRM cae directo en la pantalla de entrar, sin configurar nada.\n\n" +
+    "IMPORTANTE: esto va ÚNICAMENTE con el repositorio en privado. Mientras sea público, " +
+    "no la pegues: la dirección del proyecto quedaría publicada para siempre.";
+  try{
+    await navigator.clipboard.writeText(linea);
+    alert("Línea copiada.\n\n" + comoSeUsa);
+  }catch(e){
+    prompt(comoSeUsa, linea);
+  }
 }
 
 /** Deja la liga en el portapapeles, o a la vista si el navegador no deja. */
@@ -9092,12 +9137,14 @@ function renderAjustes(){
         <button class="btn" id="bNbPerm">¿Por qué no veo algo?</button>
         <button class="btn" id="bNbFirmas">Buscar firmas de clientes</button>
         <button class="btn" id="bNbLiga">Copiar liga para otro equipo</button>
+        <button class="btn" id="bNbFija">Copiar la línea del hotel</button>
         <button class="btn" id="bNbTodo">Volver a subir todo</button>
         <button class="btn" id="bNbArchivos">Mover los escaneados al almacén</button>
         <button class="btn" id="bCompFirmas">Compactar las firmas guardadas</button>
         <button class="btn" id="bNbEntrar">Entrar con otra cuenta</button>
         <button class="btn danger" id="bNbSalir">Cerrar sesión</button>
         <button class="btn danger" id="bNbQuitar">Desconectar este equipo</button></p>
+      <div class="note" id="nbComoSeDaDeAlta" style="margin-top:10px"></div>
 
       <h3 class="sec">Usuarios y permisos</h3>
       <div class="note"><b>Esta tabla es la lista de ejecutivos de toda la aplicación.</b>
@@ -10065,6 +10112,20 @@ function renderAjustes(){
     bArch.style.display = (nube.sesion && porMudar) ? "" : "none";
     bArch.textContent = `Mover ${porMudar} escaneado(s) al almacén`;
     p.querySelector("#bNbLiga").style.display   = (nube.url && nube.anon) ? "" : "none";
+    p.querySelector("#bNbFija").style.display   = (nube.url && nube.anon) ? "" : "none";
+    /* Cómo se da de alta a alguien, dicho en la pantalla y no en un manual.
+       Marco no sabía que la liga existía: estaba perdida entre once botones. */
+    p.querySelector("#nbComoSeDaDeAlta").innerHTML = traeLaNubeDentro()
+      ? `<b>Este CRM ya trae la conexión del hotel adentro.</b> Quien abra la dirección
+         —<code>core-quartz.vercel.app</code>— cae directo en la pantalla de entrar: no hay
+         nada que configurar en ningún equipo. Para dar de alta a alguien basta con crearle
+         su cuenta en Supabase y mandarle la dirección.`
+      : `<b>¿Cómo se da de alta otro equipo?</b> Con <i>Copiar liga para otro equipo</i>: esa
+         liga ya lleva dentro la dirección y la llave, y a quien la abre sólo le pide su correo
+         y su contraseña. Es una liga por equipo nuevo, no algo de cada día.
+         <br><br>Y para no tener que mandar ninguna liga nunca más, <i>Copiar la línea del
+         hotel</i> deja la conexión dentro de la propia aplicación. Eso se hace
+         <b>únicamente con el repositorio en privado</b>; el botón lo explica antes de copiar.`;
     p.querySelector("#bNbFirmas").style.display = nube.sesion ? "" : "none";
     p.querySelector("#bNbQuitar").style.display = (nube.url || nube.anon) ? "" : "none";
 
@@ -10112,6 +10173,7 @@ function renderAjustes(){
     };
     p.querySelector("#bNbFirmas").onclick = buscarFirmasAhora;
     p.querySelector("#bNbLiga").onclick = copiarInvitacion;
+    p.querySelector("#bNbFija").onclick = copiarLineaDelHotel;
 
     p.querySelector("#bNbTodo").onclick = async e => {
       if (!nubeActiva()){ alert("Primero hay que entrar a la nube."); return; }

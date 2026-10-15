@@ -166,6 +166,10 @@ del equipo** — igual que la dirección del CRM.
 
 También se puede hacer a mano, repitiendo el paso 3 en cada equipo.
 
+> **Esto resuelve un equipo a la vez, y hay que acordarse de mandar la liga.** Para
+> acabar con el problema de raíz —que no haya nada que configurar en ningún equipo,
+> nunca— está *La conexión del hotel, dentro de la aplicación*, más abajo.
+
 ---
 
 ## Cómo se comporta ya conectado
@@ -750,7 +754,12 @@ preguntan por el papel de quien entra, pero lo hacen de una manera que no exige 
 `roles.sql` ya esté: mientras no lo esté, le abren a cualquiera que haya entrado con
 su cuenta, que es como trabajaba el CRM antes de que existieran los papeles.
 
-## La liga del hotel, dentro de la aplicación
+## La conexión del hotel, dentro de la aplicación
+
+**Ésta es la forma buena de dar de alta al equipo**, y la que hace que no haya que
+configurar nada nunca más: la aplicación publicada trae adentro la dirección y la
+llave, así que quien abre <https://core-quartz.vercel.app> no ve más que la pantalla
+de entrar. Ni ligas, ni dictar nada, ni soporte remoto en un celular.
 
 Arriba de todo en `index.html` hay dos líneas:
 
@@ -760,16 +769,45 @@ window.CORE_NUBE = { url:"", anon:"" };
 </script>
 ```
 
-Llenarlas hace que **cualquier equipo que abra la liga caiga directo en la pantalla
-de contraseña**, sin configurar nada y sin ver un solo dato. Vacías, cada equipo se
-configura con su liga de alta, como hasta ahora.
+Vacías, cada equipo se configura solo con su liga de alta, como hasta ahora.
+
+### Cómo se llenan
+
+1. **Primero, el repositorio en privado.** En GitHub: *Settings* → hasta abajo,
+   *Danger Zone* → **Change repository visibility** → *Make private*. Vercel sigue
+   publicando igual.
+2. Ya en privado, desde un equipo conectado: **Ajustes → Nube y equipo → Copiar la
+   línea del hotel**. Copia la línea ya armada, con la dirección y la llave de este
+   hotel, sin que nadie tenga que teclearlas.
+3. Pégala en GitHub encima de la línea que dice `CORE_NUBE` —búscala con Ctrl+F— y
+   guarda. Vercel vuelve a publicar solo.
+4. Compruébalo en un equipo que nunca haya entrado, o en una ventana de incógnito:
+   tiene que salir la pantalla de entrar, nada más.
+
+Después de eso, dar de alta a alguien es **crearle su cuenta en Supabase y mandarle
+la dirección**. Nada más.
+
+### El orden importa
+
+**Primero privado, después la línea.** Si se pega con el repositorio público, la
+dirección del proyecto del hotel queda publicada e indexada para siempre, y el
+historial de Git no se borra con deshacerlo. Ajustes lo advierte antes de copiar.
 
 La llave `anon` está hecha para ser pública —viaja al navegador de cualquiera que
 abra la página— y por sí sola no alcanza ni una fila: quien manda es la sesión y
-las reglas de `roles.sql`. Aun así, esto se llena **únicamente con el repositorio en
-privado**, porque la dirección del proyecto no tiene por qué andar publicada.
+las reglas de `roles.sql`. Aun así, la dirección del proyecto no tiene por qué andar
+publicada, y por eso la regla de arriba.
+
+Si algún día el repositorio tuviera que volver a ser público, hay que quitar la
+línea **y** rotar la llave en Supabase (*Project Settings → API → JWT Settings*);
+ojo, rotar la llave apaga los enlaces de firma que anden circulando.
 
 Nunca, en ningún caso, la llave `service_role`.
+
+### Un equipo que ya estaba conectado no se toca
+
+La línea sólo la adopta un equipo **sin nada guardado**. A quien ya entró, o a quien
+apunta a un proyecto de pruebas, no se le cambia el servidor por detrás.
 
 ## Lo que queda pendiente
 
