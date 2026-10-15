@@ -1,5 +1,5 @@
 /* ===========================================================================
-   TARIFAS COMISIONABLES: QUE SEA UNA OPCIÓN
+   LAS OPCIONES DEL CONTRATO: COMISIÓN Y DESAYUNO
 
    Marco, pasando lo que le pidió su ejecutiva de ventas: «en los contratos de
    ventas sé que te pasé uno que no es comisionable, pero me pidió la ejecutiva
@@ -22,7 +22,13 @@
    · y el grupo de control: la CARTA-CONVENIO no se tocó. Marco escogió «sólo
      en el contrato», y si esto se pone rojo es que se cambió de más.
 
-   Cómo correrla:  node pruebas/navegador/tarifas-comisionables.mjs
+   Y lo mismo con el desayuno, que Marco pidió después: «ayúdame a agregar en
+   contratos la opción de con o sin desayuno». Ahí el cuidado está en el estado
+   de EN MEDIO —no decir nada—, que es como se han comportado todos los
+   contratos hasta hoy: sin él, el día que esto se publique, todos los que ya
+   andan por ahí empezarían a decir algo que nadie decidió.
+
+   Cómo correrla:  node pruebas/navegador/opciones-del-contrato.mjs
 
    TODO lo de aquí es inventado: el repositorio es público.
    =========================================================================== */
@@ -208,6 +214,62 @@ await bloque('7 · la carta-convenio NO se tocó', async () => {
   afirma('sigue diciendo «Tarifas NO COMISIONABLES»', /NO COMISIONABLES/i.test(r));
   afirma('y no le salió ninguna opción de comisión',
     !/TARIFAS COMISIONABLES/.test(r));
+});
+
+/* --- 8 --------------------------------------------------------------------
+   Con o sin desayuno. Vive en el mismo rincón del editor y del documento que
+   la comisión, así que se prueba aquí mismo.
+
+   Lo primero y más importante es el estado de en medio: por omisión el
+   documento NO dice nada del desayuno. Si dijera «no incluye» por su cuenta,
+   todos los contratos que ya andan por ahí cambiarían de texto el día que
+   esto se publique, sin que nadie lo hubiera decidido. */
+await bloque('8 · con o sin desayuno: por omisión, el documento no lo menciona', async () => {
+  const r = await documento({});
+  afirma('no habla de desayuno', !/desayuno/i.test(r.texto));
+  afirma('y el contrato no carga el campo', !r.llaves.includes('desayuno'));
+});
+
+await bloque('9 · escogido, el documento lo dice', async () => {
+  const si = await documento({ desayuno:'si' });
+  afirma('«La tarifa incluye desayuno.»', /La tarifa incluye desayuno\./.test(si.texto));
+  afirma('y no dice lo contrario', !/no incluye desayuno/i.test(si.texto));
+  const no = await documento({ desayuno:'no' });
+  afirma('«La tarifa no incluye desayuno.»', /La tarifa no incluye desayuno\./.test(no.texto));
+  /* Va con la propuesta de hospedaje: es lo que la tarifa incluye o no. */
+  afirma('va junto a los totales con impuestos',
+    si.texto.indexOf('incluye desayuno') > si.texto.indexOf('impuestos incluidos'));
+});
+
+await bloque('10 · un valor raro no se cuela al documento', async () => {
+  const r = await documento({ desayuno:'quizá' });
+  afirma('se trata como si no se hubiera escogido', !/desayuno/i.test(r.texto));
+  afirma('y no se guarda', !('desayuno' in r.guardado));
+});
+
+await bloque('11 · el desplegable está en el editor y guarda lo que se escoge', async () => {
+  await p.evaluate(() => {
+    document.querySelectorAll('.overlay').forEach(o => o.remove());
+    state.contratos = []; guardar();
+    editarContrato(null, 'c1');
+  });
+  await p.locator('#ctDes').waitFor({ timeout:8000 });
+  afirma('arranca en «no decirlo»', await p.locator('#ctDes').inputValue() === '');
+  await p.selectOption('#ctDes', 'si');
+  await p.fill('#tHosp tbody tr:first-child .h-desc', '10 habitaciones King');
+  await p.fill('#tHosp tbody tr:first-child .h-noches', '2');
+  await p.fill('#tHosp tbody tr:first-child .h-precio', '1800');
+  await p.locator('#bOkCt').click();
+  await p.waitForTimeout(400);
+  const r = await p.evaluate(() => {
+    const k = state.contratos[0];
+    if (!k) return { guardado:'(no se guardó)', texto:'' };
+    const caja = document.createElement('div');
+    caja.innerHTML = `<div class="doc-contenido">${cuerpoContrato(k, cliente('c1'))}</div>`;
+    return { guardado:k.desayuno, texto:caja.innerText };
+  });
+  afirma('se guardó lo que escogió', r.guardado === 'si');
+  afirma('y el documento lo dice', /La tarifa incluye desayuno\./.test(r.texto));
 });
 
 await br.close(); srv.close();

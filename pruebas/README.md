@@ -47,7 +47,7 @@ node pruebas/navegador/copia-local.mjs              # la copia vive en IndexedDB
 node pruebas/navegador/salones.mjs                  # el salón y su renta por rato
 node pruebas/navegador/contrato-de-banquetes.mjs    # las 19 cláusulas, completas
 node pruebas/navegador/contratos-en-papel.mjs       # el contrato no se firma en pantalla
-node pruebas/navegador/tarifas-comisionables.mjs    # la opción de comisión del contrato
+node pruebas/navegador/opciones-del-contrato.mjs    # comisión y desayuno
 node pruebas/navegador/la-liga-del-hotel.mjs        # un equipo nuevo no configura nada
 node pruebas/navegador/editar-antes-de-la-firma.mjs # se corrige hasta que firme el cliente
 ```
@@ -66,10 +66,11 @@ pero **conserva su folio**, que ya se apartó en el contador y no se gasta otro 
 Es lo que sostiene el alta de todo el equipo: si se rompe en silencio, cada quien vuelve a pegar
 la dirección y la llave a mano.
 
-`tarifas-comisionables.mjs` cuida las dos mitades de una opción nueva: que marcada diga lo que
-se negoció, y que **sin marcar el documento diga exactamente lo de siempre** —quien no la use no
-tiene por qué notar nada—. Lleva su grupo de control: la carta-convenio, que Marco pidió dejar
-quieta.
+`opciones-del-contrato.mjs` cuida las opciones que se le fueron agregando al contrato de
+ventas —comisión y desayuno— y en las dos mide lo mismo: que **sin tocarlas el documento diga
+exactamente lo de siempre**. Quien no las use no tiene por qué notar nada, y los contratos que
+ya andan por ahí tampoco pueden cambiar de texto solos. Lleva su grupo de control: la
+carta-convenio, que Marco pidió dejar quieta.
 
 `contratos-en-papel.mjs` cuida lo que pidió el departamento legal del hotel: que a un
 **contrato** no se le pueda sacar una firma por ningún camino —ni el lienzo, ni el enlace, ni

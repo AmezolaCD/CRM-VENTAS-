@@ -1024,7 +1024,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.15-2";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.15-3";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3495,6 +3495,16 @@ function saneaContrato(k){
      El porcentaje se cae con la casilla: no se queda un 10% colgando de una
      opción apagada, esperando a confundir a alguien el día que la vuelva a
      prender. */
+  /* Con o sin desayuno. TRES estados, y el de en medio importa: vacío quiere
+     decir «no decirlo», que es como se comportaron todos los contratos hasta
+     hoy. Si la casilla fuera de dos estados, el día que se publicara esto
+     TODOS los contratos que ya andan por ahí empezarían a decir «no incluye
+     desayuno» sin que nadie lo hubiera decidido. Nace al escogerse, como los
+     demás. */
+  if (o.desayuno !== undefined){
+    o.desayuno = ["si","no"].includes(o.desayuno) ? o.desayuno : "";
+    if (!o.desayuno) delete o.desayuno;
+  }
   if (o.comisionable !== undefined){
     o.comisionable = !!o.comisionable;
     if (!o.comisionable) delete o.comisionable;
@@ -14587,6 +14597,10 @@ const TEXTOS_CT = {
  * dice sólo «TARIFAS COMISIONABLES»: más vale eso que un «AL %» suelto,
  * porque el porcentaje a veces se negocia aparte.
  */
+/** Lo que el contrato dice del desayuno. Vacío: no dice nada, como siempre. */
+const textoDesayuno = k => k.desayuno === "si" ? "La tarifa incluye desayuno."
+                         : k.desayuno === "no" ? "La tarifa no incluye desayuno." : "";
+
 /** Lo que dice la ayuda del editor, que cambia al prender la casilla. */
 const ayudaComision = on => on
   ? "El porcentaje que se le reconoce a la agencia. Vacío imprime sólo «TARIFAS COMISIONABLES»."
@@ -14734,7 +14748,8 @@ function cuerpoContrato(k, c){
             <td class="num"><b>${esc(mon(cu.subtotal))}</b></td>
             <td class="num"><b>${esc(mon(cu.total))}</b></td></tr></tbody></table>
       <div class="inc">Totales con ${esc(String(k.impuestos))}% de impuestos incluidos
-        (IVA e impuesto sobre hospedaje).</div>` : ""}
+        (IVA e impuesto sobre hospedaje).</div>
+      ${textoDesayuno(k) ? `<div class="inc">${esc(textoDesayuno(k))}</div>` : ""}` : ""}
 
     ${k.eventos.length ? `
       <h2>Salones y eventos</h2>
@@ -14922,6 +14937,13 @@ function editarContrato(id, clientePre, alCerrar){
           <div><label class="lbl">Impuestos (%)</label>
             <input class="field" id="ctImp" inputmode="decimal" value="${esc(String(k.impuestos))}">
             <div class="hint">8% de IVA más 5% sobre hospedaje.</div></div>
+          <div><label class="lbl">Desayuno</label>
+            <select class="field" id="ctDes">
+              <option value=""${k.desayuno ? "" : " selected"}>No decirlo en el documento</option>
+              <option value="si"${k.desayuno === "si" ? " selected" : ""}>La tarifa incluye desayuno</option>
+              <option value="no"${k.desayuno === "no" ? " selected" : ""}>La tarifa no incluye desayuno</option>
+            </select>
+            <div class="hint">Sale debajo de la propuesta de hospedaje.</div></div>
           <div><label class="lbl">Comisión</label>
             <div style="display:flex;gap:8px;align-items:center;min-height:38px">
               <!-- La pastilla va en su propia caja: el CSS de .opciones esconde
@@ -15115,6 +15137,7 @@ function editarContrato(id, clientePre, alCerrar){
         concepto: tr.querySelector(".x-concepto").value, costo: tr.querySelector(".x-costo").value
       })).filter(x => x.concepto || x.costo),
       notas: q("#ctNotas").value.trim(),
+      desayuno: q("#ctDes").value,
       comisionable: q("#ctComOn").checked,
       comision: Number(q("#ctComPct").value) || 0,
       updatedAt: new Date().toISOString()
@@ -15122,6 +15145,7 @@ function editarContrato(id, clientePre, alCerrar){
     /* `Object.assign` suma, no quita. Los dos campos de la comisión nacen al
        marcarse —ver saneaContrato—, así que aquí se van en cuanto dejan de
        valer, y no al recargar: un contrato sin comisión no carga las llaves. */
+    if (!k.desayuno) delete k.desayuno;
     if (!k.comisionable) delete k.comisionable;
     if (!k.comision || !k.comisionable) delete k.comision;
     if (!existente){ k.createdAt = new Date().toISOString(); state.contratos.push(k); }
