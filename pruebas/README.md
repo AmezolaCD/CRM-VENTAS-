@@ -49,10 +49,17 @@ node pruebas/navegador/contrato-de-banquetes.mjs    # las 19 cláusulas, complet
 node pruebas/navegador/contratos-en-papel.mjs       # el contrato no se firma en pantalla
 node pruebas/navegador/tarifas-comisionables.mjs    # la opción de comisión del contrato
 node pruebas/navegador/la-liga-del-hotel.mjs        # un equipo nuevo no configura nada
+node pruebas/navegador/editar-antes-de-la-firma.mjs # se corrige hasta que firme el cliente
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
 servidor rechaza su firma, no ve letra de técnico ni se le encarga nada.
+
+`editar-antes-de-la-firma.mjs` cuida las dos mitades de una misma regla en las **tres**
+familias de documentos —convenios, contratos de hospedaje y banquetes—: que se pueda corregir
+mientras el cliente no haya firmado, y que no se pueda en cuanto firmó, por pantalla o en papel.
+Y lo que cuesta corregir: el documento vuelve a borrador, pierde la firma del hotel y el enlace,
+pero **conserva su folio**, que ya se apartó en el contador y no se gasta otro por una coma.
 
 `la-liga-del-hotel.mjs` sirve **dos copias del mismo `index.html`** —una con la línea de
 `CORE_NUBE` llena y otra sin ella— y mira qué hace un navegador recién estrenado con cada una.

@@ -1024,7 +1024,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.15-1";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.15-2";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3238,6 +3238,14 @@ function saneaCertificado(c){
     o.folioRepetido = String(o.folioRepetido || "");
     if (!o.folioRepetido) delete o.folioRepetido;
   }
+  /* «Ya salió alguna vez»: lo pone `reabrirParaCorregir` y no se quita nunca,
+     porque el folio tampoco se devuelve. Nace al escribirse, como los demás:
+     un campo nuevo en todos los renglones los haría verse editados y se
+     volverían a subir enteros en la primera sincronización. */
+  if (o.yaSalio !== undefined){
+    o.yaSalio = !!o.yaSalio;
+    if (!o.yaSalio) delete o.yaSalio;
+  }
   return o;
 }
 
@@ -3325,6 +3333,14 @@ function saneaEvento(e){
   if ("folioRepetido" in o){
     o.folioRepetido = String(o.folioRepetido || "");
     if (!o.folioRepetido) delete o.folioRepetido;
+  }
+  /* «Ya salió alguna vez»: lo pone `reabrirParaCorregir` y no se quita nunca,
+     porque el folio tampoco se devuelve. Nace al escribirse, como los demás:
+     un campo nuevo en todos los renglones los haría verse editados y se
+     volverían a subir enteros en la primera sincronización. */
+  if (o.yaSalio !== undefined){
+    o.yaSalio = !!o.yaSalio;
+    if (!o.yaSalio) delete o.yaSalio;
   }
   /* La clave del enlace con el que el cliente firma en su pantalla, lo que él
      escribió ahí, y si el ejecutivo ya lo vio.
@@ -3454,6 +3470,14 @@ function saneaContrato(k){
   if ("folioRepetido" in o){
     o.folioRepetido = String(o.folioRepetido || "");
     if (!o.folioRepetido) delete o.folioRepetido;
+  }
+  /* «Ya salió alguna vez»: lo pone `reabrirParaCorregir` y no se quita nunca,
+     porque el folio tampoco se devuelve. Nace al escribirse, como los demás:
+     un campo nuevo en todos los renglones los haría verse editados y se
+     volverían a subir enteros en la primera sincronización. */
+  if (o.yaSalio !== undefined){
+    o.yaSalio = !!o.yaSalio;
+    if (!o.yaSalio) delete o.yaSalio;
   }
   /* ¿Las tarifas son comisionables, y a qué porcentaje?
 
@@ -4812,6 +4836,86 @@ async function copiarLineaDelHotel(){
   }catch(e){
     prompt(comoSeUsa, linea);
   }
+}
+
+/* ==========================================================================
+   HASTA QUE FIRME EL CLIENTE
+
+   Antes, un documento se cerraba en cuanto dejaba de ser borrador: el
+   ejecutivo firmaba —o, en un contrato en papel, lo emitía— y ya no había modo
+   de corregirle una coma. Y entre ese momento y la firma del cliente pueden
+   pasar días. Marco: «quiero que se pueda modificar los contratos y convenios
+   por parte de los ejecutivos antes de que lo firme el cliente; una vez
+   firmado por el cliente ya no se puede editar».
+
+   Lo que cierra el documento es LA FIRMA DEL CLIENTE, no la del hotel. Cuál es
+   ese campo lo dice el descriptor de cada familia —`firmaEmpresa` en los
+   convenios, `firmaCliente` en los demás—, que ya era la única verdad sobre
+   el asunto; aquí no se vuelve a decidir. Y `firmaManual` es lo mismo por el
+   otro camino: el escaneado del papel que el cliente ya firmó.
+
+   Un documento cancelado tampoco se toca, y uno externo ni siquiera lo arma
+   esta aplicación: de ésos lo único que hay es el escaneado.
+   ========================================================================== */
+function sePuedeEditar(doc, tipo){
+  if (!doc) return true;                       // uno nuevo
+  if (doc.externo) return false;
+  if (doc.estado === "cancelado") return false;
+  if (doc.firmaManual) return false;           // llegó firmado en papel
+  const info = DOCS_FIRMABLES[tipo];
+  return !(info && doc[info.campoFirma]);
+}
+
+/**
+ * El documento vuelve a ser un borrador para poder corregirlo.
+ *
+ * Tres cosas se caen, y las tres a propósito:
+ *
+ *   · LA FIRMA DEL HOTEL. Si se quedara, la firma del ejecutivo estaría
+ *     encima de un texto que cambió después de firmarla, que es justo lo que
+ *     una firma no puede significar. Se vuelve a poner con un clic.
+ *   · EL ENLACE. El que ya se le mandó al cliente deja de servir: lo que iba a
+ *     firmar ya no es lo que tiene enfrente. Hay que volver a mandárselo.
+ *   · EL «ENVIADO». La columna dice que el cliente tiene el documento, y de
+ *     esta versión no lo tiene. Vuelve a decir que falta mandarlo.
+ *
+ * El FOLIO no: se conserva. Ya se apartó en el contador del hotel y gastar
+ * otro dejaría un hueco en la serie por una corrección.
+ */
+function reabrirParaCorregir(doc, tipo, quien){
+  if (!doc || doc.estado === "borrador") return false;
+  const info = DOCS_FIRMABLES[tipo];
+  doc.estado = "borrador";
+  doc.firmaHotel = null;
+  doc.enviado = null;
+  /* Queda dicho que este documento ya salió una vez. Vuelve a ser borrador en
+     todo menos en una cosa: su folio ya se apartó en el contador del hotel y
+     puede andar impreso, así que nadie se lo puede renumerar por detrás. Ver
+     `folioIntocable`. */
+  doc.yaSalio = true;
+  if ("tokenFirma" in doc) doc.tokenFirma = "";   // en eventos nace al escribirse
+  else delete doc.tokenFirma;
+  registrarAuto(doc.clienteId, `${doc.folio || "El documento"} se reabrió para corregirlo`,
+    "Se le quitó la firma del hotel y el enlace dejó de servir. Hay que volver a firmarlo y " +
+    "a mandárselo al cliente. El folio se conserva.", quien || miNombre());
+  return true;
+}
+
+/**
+ * El aviso ANTES de empezar a teclear, no después de guardar.
+ *
+ * Quien abre a corregir un documento que ya salió tiene que saber lo que va a
+ * costarle: volver a firmarlo y volver a mandarlo. Dicho al final, ya es tarde.
+ */
+function avisaQueSeReabre(doc){
+  if (!doc || doc.estado === "borrador") return true;
+  const cuando = doc.enviado && doc.enviado.fecha
+    ? `\n\nYa se le mandó al cliente el ${fechaHora(doc.enviado.fecha)}.` : "";
+  return confirm(
+    `Este documento ya salió de borrador.${cuando}\n\n` +
+    "Si lo corriges volverá a quedar como BORRADOR: hay que firmarlo otra vez y volver a " +
+    "mandárselo al cliente, y el enlace que ya le hayas mandado dejará de servir.\n\n" +
+    "El folio se conserva.\n\n¿Lo abrimos para corregir?");
 }
 
 /** Deja la liga en el portapapeles, o a la vista si el navegador no deja. */
@@ -11098,8 +11202,15 @@ const SERIES_FOLIO = {
 
 /* Un documento ya firmado o ya enviado NO se renumera solo: su folio va
    impreso en un PDF que anda en el correo de un cliente. Ésos se marcan para
-   que alguien decida. */
-const folioIntocable = d => d.estado !== "borrador" || d.enviado || d.firmaHotel;
+   que alguien decida.
+
+   `yaSalio` entra en la lista, y es lo que sostiene al documento que se REABRIÓ
+   para corregirlo: ése vuelve a ser borrador, se le quita la firma y se le
+   limpia el enviado —ver `reabrirParaCorregir`—, así que las otras tres
+   preguntas contestan que no y sin esto se volvería renumerable. Su número ya
+   se apartó en el contador del hotel y puede andar impreso en el correo de
+   alguien. Un borrador que NUNCA salió sí se renumera solo, como siempre. */
+const folioIntocable = d => d.estado !== "borrador" || d.enviado || d.firmaHotel || d.yaSalio;
 
 /**
  * Dos ejecutivos capturando a la vez, cada uno en su equipo, pueden tomar el
@@ -11216,11 +11327,13 @@ function editarConvenio(id, clientePre, alCerrar){
   const existente = id ? state.convenios.find(v => v.id === id) : null;
 
   if (existente && existente.externo){ verConvenioExterno(existente, alCerrar); return; }
-  if (existente && existente.estado !== "borrador"){
-    alert("Este convenio ya está firmado y no se puede editar.\n\nSe abrirá la carta en modo lectura.");
+  if (existente && !sePuedeEditar(existente, "convenios")){
+    alert("Este convenio ya lo firmó el cliente y no se puede editar.\n\n" +
+          "Se abrirá la carta en modo lectura.");
     verConvenio(existente.id, alCerrar);
     return;
   }
+  if (existente && !avisaQueSeReabre(existente)){ verConvenio(existente.id, alCerrar); return; }
 
   const finAnio = new Date().getFullYear() + "-12-31";
   const v = existente || saneaConv({
@@ -11570,6 +11683,7 @@ function editarConvenio(id, clientePre, alCerrar){
       updatedAt: new Date().toISOString()
     });
     if (!existente){ v.createdAt = new Date().toISOString(); state.convenios.push(v); }
+    else reabrirParaCorregir(v, "convenios", ejecutivoDe(v));
 
     /* Lo que se GUARDA es la tarifa pública viva del catálogo, no la que se
        estaba viendo en pantalla. Si alguien tuvo el editor abierto mientras el
@@ -14727,11 +14841,13 @@ function editarContrato(id, clientePre, alCerrar){
   const existente = id ? state.contratos.find(k => k.id === id) : null;
 
   if (existente && existente.externo){ verContratoExterno(existente, alCerrar); return; }
-  if (existente && existente.estado !== "borrador"){
-    alert("Este documento ya está firmado y no se puede editar.\n\nSe abrirá en modo lectura.");
+  if (existente && !sePuedeEditar(existente, "contratos")){
+    alert("Este documento ya lo firmó el cliente y no se puede editar.\n\n" +
+          "Se abrirá en modo lectura.");
     verContrato(existente.id, alCerrar);
     return;
   }
+  if (existente && !avisaQueSeReabre(existente)){ verContrato(existente.id, alCerrar); return; }
 
   const k = existente || saneaContrato({
     clienteId: clientePre || "",
@@ -15009,6 +15125,7 @@ function editarContrato(id, clientePre, alCerrar){
     if (!k.comisionable) delete k.comisionable;
     if (!k.comision || !k.comisionable) delete k.comision;
     if (!existente){ k.createdAt = new Date().toISOString(); state.contratos.push(k); }
+    else reabrirParaCorregir(k, "contratos", ejecutivoDeCt(k));
     guardar(); render();
     return true;
   }
@@ -15055,7 +15172,7 @@ function verContrato(id, alCerrar, pedirFirma){
       <div class="modal-foot">
         <button class="btn" id="bPrintCt">Imprimir</button>
         <button class="btn" id="bPdfCt">Descargar PDF</button>
-        ${k.estado === "borrador" ? `<button class="btn" id="bEditCt">Editar</button>` : ""}
+        ${sePuedeEditar(k, "contratos") ? `<button class="btn" id="bEditCt">Editar</button>` : ""}
         <div class="spacer"></div>
         ${!emitido ? (papel
           ? `<button class="btn ok" id="bCtEmitir">Emitir y numerar</button>`
@@ -15393,7 +15510,7 @@ function verConvenio(id, alCerrar, pedirFirma){
       <div class="modal-foot">
         <button class="btn" id="bPrint">Imprimir</button>
         <button class="btn" id="bPdfC">Descargar PDF</button>
-        ${v.estado === "borrador" ? `<button class="btn" id="bEdit">Editar</button>` : ""}
+        ${sePuedeEditar(v, "convenios") ? `<button class="btn" id="bEdit">Editar</button>` : ""}
         ${v.folioRepetido ? `<button class="btn danger" id="bRenum">Darle un folio nuevo</button>` : ""}
         <div class="spacer"></div>
         ${!v.firmaHotel ? `<button class="btn ok" id="bF1">Firmar como ejecutivo</button>` : ""}
@@ -16462,11 +16579,13 @@ function editarEvento(id, tipoPre, alCerrar){
   const existente = id ? state.eventos.find(x => x.id === id) : null;
 
   if (existente && existente.externo){ verEventoExterno(existente, alCerrar); return; }
-  if (existente && existente.estado !== "borrador"){
-    alert("Este documento ya salió y no se puede editar.\n\nSe abrirá en modo lectura.");
+  if (existente && !sePuedeEditar(existente, "eventos")){
+    alert("Este documento ya lo firmó el cliente y no se puede editar.\n\n" +
+          "Se abrirá en modo lectura.");
     verEvento(existente.id, alCerrar);
     return;
   }
+  if (existente && !avisaQueSeReabre(existente)){ verEvento(existente.id, alCerrar); return; }
 
   const tipo = existente ? existente.tipo : (tipoPre || "cotizacion");
   const e = existente || saneaEvento({
@@ -17165,6 +17284,7 @@ function editarEvento(id, tipoPre, alCerrar){
       updatedAt: new Date().toISOString()
     });
     if (!existente){ e.createdAt = new Date().toISOString(); state.eventos.push(e); }
+    else reabrirParaCorregir(e, "eventos", ejecutivoDeEv(e));
     tocaBanquetes(e);
     guardar(); render();
     return true;
@@ -17677,7 +17797,7 @@ function verEvento(id, alCerrar, pedirFirma){
       <div class="modal-foot">
         <button class="btn" id="bPrintEv">Imprimir</button>
         <button class="btn" id="bPdfEv">Descargar PDF</button>
-        ${e.estado === "borrador" ? `<button class="btn" id="bEditEv">Editar</button>` : ""}
+        ${sePuedeEditar(e, "eventos") ? `<button class="btn" id="bEditEv">Editar</button>` : ""}
         <div class="spacer"></div>
         ${e.tipo === "cotizacion" && !yaTieneContrato
           ? `<button class="btn" id="bAContrato">Pasar a contrato</button>` : ""}
