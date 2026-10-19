@@ -34,6 +34,11 @@ bandeja, un chatbot, cualquier cosa que hoy reciba los mensajes—, apuntarlo al
 quita**. WhatsApp manda cada mensaje a un solo lugar. Revísalo en el Hub de 360dialog antes de
 tocar nada; si hay algo conectado, hay que decidir qué se hace con eso primero.
 
+Si eso que está conectado **tiene que seguir funcionando**, el Hub tiene una opción de *varios
+webhooks por número* —hasta tres además del principal, cada uno con su nombre— y por ahí se
+agrega el CRM sin quitarle el suyo a nadie. Cuesta que los mensajes tarden un poco más en
+llegar, porque hay que entregarlos a todos. Es la salida, no el camino normal.
+
 ---
 
 ## Los seis pasos, una sola vez
@@ -75,11 +80,39 @@ respuesta, no un prospecto.
 
 Y en seguida, lo que más se olvida:
 
-> **Edge Functions → wa-hook → Settings → apagar «Verify JWT».**
+> **Edge Functions → `wa-hook` → la configuración de la función → apagar
+> «Verify JWT with legacy secret».**
+
+Ese interruptor cambia de nombre y de lugar cada tanto. La sección sale como **Settings**, como
+**Function Configuration** o detrás del engrane de arriba a la derecha, y la etiqueta hoy dice
+«Verify JWT **with legacy secret**», no «Verify JWT» a secas. **Es el único interruptor de esa
+pantalla que menciona JWT**: si la pantalla no se parece a lo de arriba, es ése.
 
 360dialog no trae una sesión de Supabase, así que con eso prendido el portón rechaza todo antes
 de llegar a la función. La función comprueba por su cuenta quién toca —con la llave del paso
 2—, así que apagarlo no abre nada.
+
+> **Y se vuelve a prender solo.** Las funciones nuevas **y las editadas** salen de Supabase con
+> ese interruptor encendido. Cada vez que se suba una versión nueva de `wa-hook`, hay que
+> apagarlo otra vez. Esto no avisa de ninguna manera: los mensajes simplemente dejan de entrar,
+> sin error que ver. Si los WhatsApp se cortan justo después de que alguien tocó la función, es
+> esto, casi seguro.
+
+**Compruébalo antes de seguir**, que son treinta segundos. En esa misma pantalla Supabase enseña
+la dirección de la función; pégala en el navegador y dale Enter:
+
+| Lo que contesta | Qué significa |
+|---|---|
+| la palabra **`ok`** | listo, la puerta está abierta: sigue al paso 4 |
+| `Missing authorization header`, o `UNAUTHORIZED_NO_AUTH_HEADER` | el interruptor sigue prendido: vuelve arriba |
+| `404`, o «function not found» | no se subió, o el nombre no es exactamente `wa-hook` |
+
+Si ya lo apagaste y sigue saliendo lo mismo, ábrela en una **ventana privada**: el navegador se
+guarda la respuesta vieja. No hay que volver a subir nada, el interruptor pega de inmediato.
+
+Que conteste `ok` sin pedir nada **no es un hueco**: la cerradura se exige para *mandar*
+mensajes, y eso es un POST. Abrir la dirección con el navegador es un GET, y a eso 360dialog
+también le pega antes de empezar, así que tiene que contestar `ok`.
 
 ### 4. Volver a subir `meta-sync`
 
@@ -104,12 +137,29 @@ Es lo único que se hace fuera de Supabase. La dirección es:
 https://TU-PROYECTO.supabase.co/functions/v1/wa-hook
 ```
 
-En el **Hub de 360dialog**, en la configuración del número, se pone esa dirección y **una
-cabecera propia**:
+Que esa dirección conteste `ok` en el navegador —la comprobación del paso 3— **antes** de tocar
+el Hub. Si no contesta `ok`, lo que se configure aquí no va a entregar nada.
+
+En el **Hub de 360dialog**: se entra al número del hotel y se busca la sección **API Settings**
+—en Hubs más viejos, *WhatsApp Channel → Channel Webhook*—. Ahí hay **dos** webhooks y hay que
+escoger bien:
+
+- **Channel webhook** ← **éste**. Es el de ese número.
+- *WABA webhook*: manda los eventos de **todos** los números de la cuenta a una sola dirección.
+  El día que el hotel tenga un segundo número, ése se los revuelve.
+
+Se pone la dirección de arriba y **una cabecera propia**:
 
 | Cabecera | Valor |
 |---|---|
 | `x-crm-llave` | la misma cadena del paso 2 |
+
+Tiene que ser **idéntica**, sin un espacio pegado al final. Es el error más común, y la función
+no lo dice: contesta `No.` a secas, a propósito, para no ayudarle a quien esté probando la
+puerta.
+
+Es probable que al guardar pida un **código de verificación que llega por correo** a la cuenta
+del Hub. Ten el correo abierto antes de darle guardar.
 
 Si su Hub no deja poner cabeceras desde la pantalla, se hace con una llamada. El comando es
 éste, y **los dos huecos los llenas tú**:
@@ -122,12 +172,17 @@ curl -X POST "https://waba.360dialog.io/v1/configs/webhook" \
        "headers":{"x-crm-llave":"LA_CADENA_DEL_PASO_2"}}'
 ```
 
-Dos avisos sobre eso:
+Tres avisos sobre eso:
 
 - **La llave de 360dialog no se manda por chat ni se escribe en ningún archivo.** Es la que abre
   el WhatsApp del hotel. Si alguna vez se escribió en algún lado, se regenera desde el Hub.
+- **Regenerar esa llave borra el webhook.** No avisa: los mensajes dejan de llegar y ya. Si
+  alguna vez se regenera, hay que volver a hacer este paso 5 completo.
 - El dominio puede ser `waba-v2.360dialog.io` si el número está en su plataforma nueva. El Hub
   dice cuál es; si el comando contesta un error de dirección, es ése.
+
+La dirección tampoco admite guiones bajos en el dominio ni un puerto escrito. La de Supabase no
+los trae, así que se pega tal cual se copia, sin agregarle nada al final.
 
 ### 6. Prender la atribución
 
@@ -167,7 +222,9 @@ El CRM **nunca adivina**: si no puede resolverlo, deja el lead sin campaña. Un 
 campaña equivocada ensucia el costo por lead de las dos, y eso no se nota hasta que alguien toma
 una decisión con el número malo.
 
-**No entra nada.** Revisa, en este orden: que *Verify JWT* esté apagado; que la cabecera
+**No entra nada.** Revisa, en este orden: que *«Verify JWT with legacy secret»* esté apagado
+—y que **no se haya vuelto a prender solo** al subir la última versión de la función, que es lo
+que pasa—; que la cabecera
 `x-crm-llave` del webhook sea **idéntica** a `WA_SECRET` —un espacio de más cuenta—; y en
 Supabase → Edge Functions → **wa-hook → Logs**, si dice *«tocaron sin la llave buena»* es la
 cabecera.

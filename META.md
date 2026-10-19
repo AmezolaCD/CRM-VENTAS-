@@ -205,14 +205,23 @@ El renglón de la llamada que falló lo dice:
 |---|---|
 | `jwt expired` | la sesión del CRM caducó; salir y volver a entrar |
 | `Missing authorization header` | la llamada salió sin sesión; recargar con Ctrl+Shift+R para tomar la última versión del CRM |
-| `Invalid JWT` una y otra vez | es el interruptor de *Verify JWT*: ver abajo |
+| `Invalid JWT` una y otra vez | es el interruptor de *«Verify JWT with legacy secret»*: ver abajo |
+| `UNAUTHORIZED_NO_AUTH_HEADER` | el mismo interruptor, y se vuelve a prender solo al redesplegar |
 | no aparece la llamada | la función no es de este proyecto: la dirección en *Ajustes → Nube y equipo* tiene que ser la del proyecto donde está subida `meta-sync` |
 
 #### Apagar «Verify JWT» es seguro aquí
 
 Supabase revisa la sesión **antes** de pasarle la llamada a la función. Cuando esa revisión
 falla una y otra vez —aunque la sesión sea buena y el resto del CRM funcione—, se apaga en
-**Edge Functions → meta-sync → Settings → Verify JWT**, y se vuelve a intentar.
+**Edge Functions → `meta-sync` → la configuración de la función → «Verify JWT with legacy
+secret»**, y se vuelve a intentar.
+
+Ese interruptor cambia de nombre y de lugar cada tanto: la sección sale como **Settings**, como
+**Function Configuration** o detrás del engrane de arriba a la derecha, y la etiqueta hoy dice
+«Verify JWT **with legacy secret**». Es el único de esa pantalla que menciona JWT.
+
+Y **se vuelve a prender solo**: las funciones nuevas y las editadas salen de Supabase con él
+encendido. Cada vez que se suba una versión nueva de `meta-sync`, hay que apagarlo otra vez.
 
 Eso **no abre nada**, y conviene entender por qué: `meta-sync` comprueba la sesión por su
 cuenta —le pregunta a Supabase quién es el que está llamando— y además exige que esa persona
