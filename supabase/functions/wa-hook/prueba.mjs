@@ -18,13 +18,13 @@ const ini = src.indexOf('//  LÓGICA PURA · empieza');
 const fin = src.indexOf('//  LÓGICA PURA · termina');
 if (ini < 0 || fin < 0) { console.log('No se encontraron las marcas de la lógica pura.'); process.exit(1); }
 
-const { llaveOk, mensajesDe, textoDe, anuncioDe, campanaDe } =
+const { llaveOk, retoDeMeta, firmaDeMetaOk, mensajesDe, textoDe, anuncioDe, campanaDe } =
   new Function(`
     ${src.slice(ini, fin)}
-    return { llaveOk, mensajesDe, textoDe, anuncioDe, campanaDe };
+    return { llaveOk, retoDeMeta, firmaDeMetaOk, mensajesDe, textoDe, anuncioDe, campanaDe };
   `)();
 
-// Un aviso como el que manda 360dialog, en formato de Meta.
+// Un aviso como el que manda Meta.
 const aviso = (...mensajes) => ({
   object: 'whatsapp_business_account',
   entry: [{ id: '1', changes: [{ field: 'messages', value: {
@@ -65,6 +65,70 @@ console.log('\n== La cerradura ==');
      !llaveOk('', '') && !llaveOk('lo que sea', ''));
   ok('y un secreto corto se trata como no puesto',
      !llaveOk('corto', 'corto'));
+}
+
+console.log('\n== El saludo de Meta ==');
+/* Meta no manda un solo mensaje hasta que la dirección le devuelva su
+   acertijo. Si esto no funciona, el alta ni siquiera se puede guardar: no es
+   que lleguen mal los leads, es que no llega nada y la pantalla de Meta dice
+   que la dirección no se pudo verificar. */
+{
+  const palabra = 'la-palabra-convenida-con-meta';
+  const saludo = (extra = {}) => Object.assign({
+    'hub.mode': 'subscribe', 'hub.verify_token': palabra, 'hub.challenge': '1158201444',
+  }, extra);
+
+  ok('CON LA PALABRA BUENA SE LE DEVUELVE EL ACERTIJO',
+     retoDeMeta(saludo(), palabra) === '1158201444');
+  ok('CON OTRA PALABRA NO SE LE DEVUELVE NADA',
+     retoDeMeta(saludo({ 'hub.verify_token': 'otra-cosa-igual-de-larga-x' }), palabra) === null);
+  ok('ni con la palabra vacía',
+     retoDeMeta(saludo({ 'hub.verify_token': '' }), palabra) === null);
+  ok('ni si en el servidor no hay palabra puesta',
+     retoDeMeta(saludo(), '') === null);
+  ok('un GET que no es el saludo no contesta acertijo',
+     retoDeMeta({ 'hub.challenge': '123' }, palabra) === null);
+  ok('y un saludo sin acertijo no inventa uno',
+     retoDeMeta(saludo({ 'hub.challenge': '' }), palabra) === null);
+
+  /* En vivo llega como URLSearchParams, no como objeto. */
+  ok('TAMBIÉN LEE LOS PARÁMETROS COMO LLEGAN DE VERDAD',
+     retoDeMeta(new URLSearchParams(saludo()), palabra) === '1158201444');
+}
+
+console.log('\n== La firma de Meta ==');
+/* La cabecera secreta dice QUIÉN toca; la firma dice además QUE EL CUERPO NO
+   VIENE CAMBIADO. Por eso se calcula sobre el texto crudo: si alguien le
+   agrega un mensaje al aviso en el camino, la firma deja de cuadrar. */
+{
+  const appSecret = 'el-secreto-de-la-app-de-meta-00';
+  const cuerpo = JSON.stringify(aviso(texto()));
+  const firmar = async (txt, secreto) => {
+    const cod = new TextEncoder();
+    const k = await crypto.subtle.importKey(
+      'raw', cod.encode(secreto), { name:'HMAC', hash:'SHA-256' }, false, ['sign']);
+    const mac = await crypto.subtle.sign('HMAC', k, cod.encode(txt));
+    return 'sha256=' + [...new Uint8Array(mac)]
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+  const buena = await firmar(cuerpo, appSecret);
+
+  ok('LA FIRMA DE META ABRE LA PUERTA',
+     await firmaDeMetaOk(buena, cuerpo, appSecret));
+  ok('EL MISMO AVISO CON EL CUERPO CAMBIADO, NO — que es el punto de firmar',
+     !await firmaDeMetaOk(buena, cuerpo.replace('Rosa Vega', 'Otra Persona'), appSecret));
+  ok('una firma hecha con otro secreto tampoco',
+     !await firmaDeMetaOk(await firmar(cuerpo, 'otro-secreto-cualquiera-x'), cuerpo, appSecret));
+  ok('y en el servidor sin WA_APP_SECRET no pasa nadie',
+     !await firmaDeMetaOk(buena, cuerpo, ''));
+
+  ok('SIN CABECERA DE FIRMA NO PASA', !await firmaDeMetaOk('', cuerpo, appSecret));
+  ok('una cabecera con otra forma tampoco, y no truena',
+     !await firmaDeMetaOk('sha1=abc', cuerpo, appSecret) &&
+     !await firmaDeMetaOk('sha256=', cuerpo, appSecret) &&
+     !await firmaDeMetaOk('sha256=no-es-hexadecimal', cuerpo, appSecret));
+  ok('mayúsculas o espacios alrededor no la invalidan: Meta no promete el caso',
+     await firmaDeMetaOk('  ' + buena.toUpperCase() + '  ', cuerpo, appSecret));
 }
 
 console.log('\n== Qué es un lead y qué no ==');
@@ -162,9 +226,38 @@ console.log('\n== De qué campaña del CRM es ==');
 
 console.log('\n== Lo que el archivo promete ==');
 {
-  ok('NO MIRA EL CUERPO HASTA COMPROBAR LA LLAVE',
-     src.indexOf('llaveOk(traida, secreto)') < src.indexOf('await req.json()'),
-     'la comprobación va después de leer el cuerpo');
+  /* Esta promesa cambió de forma cuando el número pasó a estar directo con
+     Meta, y vale la pena dejar escrito por qué.
+
+     Antes decía: la llave se comprueba ANTES de leer el cuerpo. Con una
+     cabecera secreta eso se podía. Con la firma de Meta no: la firma es el
+     HMAC del cuerpo crudo, así que para comprobarla hay que tener el texto en
+     la mano. Leerlo es inevitable.
+
+     Lo que sí se sostiene, y es lo que de verdad protegía, es que ese texto
+     NO SE INTERPRETE NI SE USE hasta que la puerta abra: no se parsea, no se
+     anota en la bitácora, no se toca la base. Un texto sin parsear es un
+     montón de bytes; es cuando se vuelve un objeto y se guarda cuando puede
+     hacer daño. Eso es lo que se vigila ahora. */
+  {
+    const abre = src.indexOf('if (!pasa) {');
+    const parsea = src.indexOf('JSON.parse(crudo)');
+    ok('NO INTERPRETA EL CUERPO HASTA COMPROBAR LA LLAVE',
+       abre > 0 && parsea > abre,
+       'el JSON.parse va antes de cerrar la puerta');
+    const entre = src.slice(src.indexOf('const crudo = await req.text()'), abre);
+    ok('y entre leerlo y abrir no toca la base ni la bitácora',
+       abre > 0 && entre.length > 0 &&
+       !entre.includes('admin.from') && !entre.includes('anota('),
+       'algo se escribe antes de comprobar la llave');
+    ok('LA FIRMA SE CALCULA SOBRE EL TEXTO CRUDO, no sobre el JSON rearmado',
+       /firmaDeMetaOk\(firma, crudo, secretoApp\)/.test(src) &&
+       src.indexOf('const crudo = await req.text()') < src.indexOf('firmaDeMetaOk(firma'));
+    ok('EL SALUDO DE META SE CONTESTA EN TEXTO PELADO, no en JSON',
+       /return new Response\(reto, \{[\s\S]{0,120}text\/plain/.test(src));
+    ok('y la palabra equivocada no recibe acertijo',
+       /if \(!reto\)[\s\S]{0,200}status: 403/.test(src));
+  }
   ok('el secreto sale de los secretos del proyecto, no está escrito aquí',
      src.includes('Deno.env.get("WA_SECRET")') &&
      !/WA_SECRET\s*=\s*["'][^"']{8,}/.test(src));

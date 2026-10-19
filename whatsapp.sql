@@ -6,8 +6,8 @@
 --  lo capturaba a mano, o se perdía. Por eso los conjuntos de anuncios salen
 --  con inversión y con cero leads.
 --
---  Con esto, el proveedor de WhatsApp —360dialog— le avisa al servidor cada
---  vez que entra un mensaje, y el CRM lo vuelve un lead. Y cuando el mensaje
+--  Con esto, Meta le avisa al servidor cada vez que entra un mensaje, y el
+--  CRM lo vuelve un lead. Y cuando el mensaje
 --  viene de un anuncio de clic-a-WhatsApp, TRAE EL ID DEL ANUNCIO: de ahí se
 --  sube al conjunto y del conjunto a la campaña, así que el lead cae ya
 --  amarrado a lo que lo trajo.
@@ -26,8 +26,8 @@
 --     CRM con leads inventados es peor que uno vacío, porque se actúa sobre
 --     ellos—.
 --
---  2. `mensaje_id` ES ÚNICO, y eso no es de adorno. Meta y 360dialog REINTENTAN
---     cuando no reciben un 200 a tiempo. Sin esta restricción, un reintento
+--  2. `mensaje_id` ES ÚNICO, y eso no es de adorno. META REINTENTA cuando no
+--     recibe un 200 a tiempo. Sin esta restricción, un reintento
 --     crearía un segundo renglón del mismo mensaje y el CRM levantaría dos
 --     leads de la misma persona. Con ella, el reintento choca y se ignora, que
 --     es exactamente lo que debe pasar.
@@ -236,8 +236,8 @@ grant execute on function public.crm_wa_limpia() to authenticated;
 --    La función crm_del_equipo() NO se tira aquí: la comparten firmas.sql,
 --    archivos.sql, folios.sql, prospectos.sql y meta.sql.
 --
---    Y acuérdate de quitar el webhook en el Hub de 360dialog, o el proveedor
---    seguirá tocando una puerta que ya no abre nadie.
+--    Y acuérdate de quitar la dirección en la app de Meta, o Meta seguirá
+--    tocando una puerta que ya no abre nadie.
 -- ---------------------------------------------------------------------------
 
 commit;

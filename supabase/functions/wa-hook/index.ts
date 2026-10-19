@@ -1,9 +1,14 @@
 // ===========================================================================
 //  CRM CORE · La puerta por la que entran los mensajes de WhatsApp
 //
-//  Los anuncios del hotel son de MENSAJES: la gente da clic y escribe. El
-//  proveedor —360dialog— avisa aquí cada vez que entra uno, esta función lo
-//  deja en el buzón crm_wa, y el CRM lo recoge y lo vuelve un lead.
+//  Los anuncios del hotel son de MENSAJES: la gente da clic y escribe. Meta
+//  avisa aquí cada vez que entra uno, esta función lo deja en el buzón crm_wa,
+//  y el CRM lo recoge y lo vuelve un lead.
+//
+//  El número del hotel está DIRECTO EN LA CLOUD API DE META, sin proveedor de
+//  por medio. Aun así la puerta acepta las dos formas de tocar —la firma de
+//  Meta y la cabecera secreta que usan los proveedores— porque el formato del
+//  aviso es el mismo y un cambio de casa no debería costar reescribir esto.
 //
 //  Lo que hace valiosa esta puerta: cuando el mensaje viene de un anuncio de
 //  clic-a-WhatsApp, trae un objeto `referral` CON EL ID DEL ANUNCIO. De ahí el
@@ -13,26 +18,30 @@
 //  Cómo se sube, sin terminal: en supabase.com → Edge Functions →
 //  "Deploy a new function" → "Via Editor", con el nombre exacto "wa-hook", y
 //  se pega este archivo completo. Después, en la configuración de la función,
-//  HAY QUE APAGAR "Verify JWT": 360dialog no trae sesión de Supabase y si se
+//  HAY QUE APAGAR "Verify JWT": Meta no trae sesión de Supabase y si se
 //  deja prendido el portón rechaza todo antes de llegar aquí.
 //
 //  Secretos que necesita:
 //
-//      WA_SECRET   una cadena larga que se inventa una vez. Es la cerradura.
-//                  La misma se pone en la cabecera del webhook de 360dialog.
+//      WA_SECRET       una cadena larga que se inventa una vez. Es la palabra
+//                      con la que Meta da de alta la dirección —el
+//                      "verify token"—, y también sirve de cabecera secreta si
+//                      algún día entra por un proveedor.
+//
+//      WA_APP_SECRET   la clave secreta de la app de Meta. Con ella se
+//                      comprueba la firma de cada aviso. Sin ella, los avisos
+//                      de Meta no pasan.
 //
 //  ---------------------------------------------------------------------------
 //  POR QUÉ LA CERRADURA NO ES OPCIONAL
 //  ---------------------------------------------------------------------------
-//  Con "Verify JWT" apagado, esta dirección la puede tocar cualquiera. Las
-//  cuentas de CLIENTE de 360dialog no firman sus webhooks —la firma
-//  x-360dialog-signature es de las cuentas de socio—, así que la única defensa
-//  es una cabecera secreta que sólo el proveedor manda.
+//  Con "Verify JWT" apagado, esta dirección la puede tocar cualquiera. Lo
+//  único que distingue un aviso de Meta de uno inventado es la firma del
+//  cuerpo, y por eso NO SE MIRA EL CUERPO hasta comprobarla.
 //
-//  Por eso NO SE MIRA EL CUERPO hasta comprobarla. Sin esto, cualquiera que
-//  adivine la dirección puede inventar leads, y un CRM con leads inventados es
-//  peor que uno vacío: se actúa sobre ellos, se les asigna gente, se reporta
-//  que la campaña funcionó.
+//  Sin esto, cualquiera que adivine la dirección puede inventar leads, y un
+//  CRM con leads inventados es peor que uno vacío: se actúa sobre ellos, se
+//  les asigna gente, se reporta que la campaña funcionó.
 //
 //  Todo el detalle, en WHATSAPP.md.
 // ===========================================================================
@@ -64,6 +73,60 @@ function llaveOk(dada, esperada) {
   let dif = 0;
   for (let i = 0; i < a.length; i++) dif |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return dif === 0;
+}
+
+/**
+ * El saludo de Meta, contestado.
+ *
+ * Meta no acepta una dirección hasta que ésta le devuelva un acertijo: manda
+ * un GET con `hub.mode=subscribe`, una palabra convenida en `hub.verify_token`
+ * y un número en `hub.challenge`, y espera el número de vuelta, a secas. Si no
+ * se lo devuelve, la dirección no queda dada de alta y no llega un solo
+ * mensaje.
+ *
+ * La palabra se compara con la misma comparación en tiempo constante de
+ * arriba: si no, midiendo cuánto tarda en contestar se adivina letra por
+ * letra, y quien la tenga puede desviar el alta a su propia dirección.
+ */
+function retoDeMeta(params, esperada) {
+  const p = params || {};
+  const leer = (k) => String((typeof p.get === "function" ? p.get(k) : p[k]) || "");
+  if (leer("hub.mode") !== "subscribe") return null;
+  if (!llaveOk(leer("hub.verify_token"), esperada)) return null;
+  return leer("hub.challenge") || null;
+}
+
+/**
+ * ¿El aviso lo firmó Meta?
+ *
+ * Meta no manda cabeceras inventadas —eso lo hacen los proveedores—, así que
+ * `x-crm-llave` nunca va a llegar por aquí. Lo que Meta sí hace es FIRMAR cada
+ * aviso: `X-Hub-Signature-256: sha256=…`, que es el HMAC-SHA256 del cuerpo con
+ * el secreto de la app.
+ *
+ * Firmar es mejor que una cabecera secreta, y por una razón concreta: la
+ * cabecera sólo dice quién toca, la firma dice además QUE EL CUERPO NO VIENE
+ * CAMBIADO. Por eso se calcula sobre el texto crudo, tal como llegó: volver a
+ * armar el JSON cambia una coma y la firma deja de cuadrar.
+ */
+async function firmaDeMetaOk(cabecera, crudo, secretoApp) {
+  const dada = String(cabecera || "").trim().toLowerCase();
+  const secreto = String(secretoApp || "");
+  if (!secreto || !dada.startsWith("sha256=")) return false;
+  try {
+    const cod = new TextEncoder();
+    const llave = await crypto.subtle.importKey(
+      "raw", cod.encode(secreto), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+    );
+    const mac = await crypto.subtle.sign("HMAC", llave, cod.encode(String(crudo || "")));
+    const mía = [...new Uint8Array(mac)]
+      .map((b) => b.toString(16).padStart(2, "0")).join("");
+    /* Son dos hexadecimales del mismo largo: llaveOk sirve igual, y compara en
+       tiempo constante. El mínimo de 16 que exige lo cumple de sobra: 64. */
+    return llaveOk(dada.slice(7), mía);
+  } catch {
+    return false;   /* un secreto imposible de importar no abre la puerta */
+  }
 }
 
 /**
@@ -167,21 +230,58 @@ Deno.serve(async (req) => {
       status: code, headers: { "Content-Type": "application/json" },
     });
 
-  /* 360dialog verifica la dirección con un GET antes de mandar nada. Se
-     contesta 200 a secas: no hay nada que enseñar aquí. */
-  if (req.method === "GET") return new Response("ok", { status: 200 });
-  if (req.method !== "POST") return responde(405, { error: "Sólo POST." });
-
   const url = Deno.env.get("SUPABASE_URL") || "";
   const servicio = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   const secreto = Deno.env.get("WA_SECRET") || "";
+  const secretoApp = Deno.env.get("WA_APP_SECRET") || "";
 
-  /* LA CERRADURA, ANTES DE MIRAR EL CUERPO. No se lee el JSON, no se anota
-     nada, no se toca la base: se cierra la puerta y ya. Y el mensaje de vuelta
-     no dice qué faltó, porque eso le ayudaría a quien está probando. */
+  if (req.method === "GET") {
+    /* Dos GET distintos llegan aquí y hay que no confundirlos.
+
+       El de Meta, dando de alta la dirección, trae los `hub.*` y espera su
+       acertijo de vuelta en texto pelón: un JSON, o cualquier otra cosa
+       alrededor, y no la acepta.
+
+       El otro es el de quien abre la dirección en el navegador para ver si la
+       puerta responde —está en WHATSAPP.md y es la comprobación con la que se
+       descubre que "Verify JWT" quedó prendido—. A ése se le contesta `ok`,
+       que no enseña nada. */
+    const hub = new URL(req.url).searchParams;
+    if (hub.get("hub.mode")) {
+      const reto = retoDeMeta(hub, secreto);
+      if (!reto) {
+        console.log("wa-hook: saludo de Meta con la palabra equivocada");
+        return new Response("No.", { status: 403 });
+      }
+      return new Response(reto, {
+        status: 200, headers: { "Content-Type": "text/plain" },
+      });
+    }
+    return new Response("ok", { status: 200 });
+  }
+  if (req.method !== "POST") return responde(405, { error: "Sólo POST." });
+
+  /* EL CUERPO SE LEE CRUDO, y no se parsea todavía. La firma de Meta se
+     calcula sobre el texto tal como llegó: volver a armar el JSON cambia un
+     espacio y la firma deja de cuadrar. */
+  const crudo = await req.text();
+
+  /* LA CERRADURA, ANTES DE MIRAR EL CUERPO. No se interpreta el JSON, no se
+     anota nada, no se toca la base: se cierra la puerta y ya. Y el mensaje de
+     vuelta no dice qué faltó, porque eso le ayudaría a quien está probando.
+
+     Se aceptan dos llaves y es a propósito. Meta firma —es como entra hoy—, y
+     un proveedor como 360dialog no firma pero sí puede mandar una cabecera
+     secreta. Las dos son secretos que sólo tiene quien debe, así que admitir
+     cualquiera de las dos no afloja nada, y el día que el número se mueva de
+     casa la puerta ya sabe recibirlo sin volver a tocar esto. */
   const traida = req.headers.get("x-crm-llave") ||
                  req.headers.get("X-Crm-Llave") || "";
-  if (!llaveOk(traida, secreto)) {
+  const firma = req.headers.get("x-hub-signature-256") ||
+                req.headers.get("X-Hub-Signature-256") || "";
+  const pasa = llaveOk(traida, secreto) ||
+               await firmaDeMetaOk(firma, crudo, secretoApp);
+  if (!pasa) {
     console.log("wa-hook: tocaron sin la llave buena");
     return responde(401, { error: "No." });
   }
@@ -201,12 +301,13 @@ Deno.serve(async (req) => {
   };
 
   try {
-    const cuerpo = await req.json().catch(() => ({}));
+    let cuerpo: any = {};
+    try { cuerpo = JSON.parse(crudo) || {}; } catch { cuerpo = {}; }
     const míos = mensajesDe(cuerpo, Deno.env.get("WA_NUMERO") || "");
 
     if (!míos.length) {
       /* Casi todo el tráfico es esto: acuses de entregado y leído. Se contesta
-         200 igual, porque si no 360dialog reintenta el mismo aviso una y otra
+         200 igual, porque si no Meta reintenta el mismo aviso una y otra
          vez creyendo que algo falló. */
       await anota("acuse", true, "");
       return responde(200, { ok: true, mensajes: 0 });
@@ -237,7 +338,7 @@ Deno.serve(async (req) => {
       return { ...m, conjunto, campana_id: campanaDe(campanas, conjunto), aplicada: false };
     });
 
-    /* Se inserta ignorando los repetidos. Meta y 360dialog REINTENTAN cuando
+    /* Se inserta ignorando los repetidos. META REINTENTA cuando
        no reciben el 200 a tiempo, y sin esto un reintento levantaría un segundo
        lead de la misma persona. El índice único de mensaje_id es quien lo
        impide; aquí sólo se le dice que el choque no es un error. */
@@ -252,7 +353,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     /* Se anota y se contesta 200 DE TODOS MODOS.
 
-       Suena mal y es lo correcto: si se contesta error, 360dialog reintenta el
+       Suena mal y es lo correcto: si se contesta error, Meta reintenta el
        mismo aviso durante horas y tapa la cola con algo que no va a mejorar
        solo. Queda en la bitácora, que es donde se ve. */
     console.log("wa-hook: falló ::", String(e));

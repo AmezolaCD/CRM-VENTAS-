@@ -27,17 +27,17 @@ falta, se arma aparte.
 
 ## Antes de empezar
 
-El número del hotel ya está en la API con **360dialog**. Eso es lo difícil y ya está hecho.
+El número del hotel está **directo en la Cloud API de Meta**, sin proveedor de por medio. Eso es
+lo difícil y ya está hecho: la app de Meta existe y el número ya está dado de alta en ella.
 
-**Una advertencia que hay que leer completa:** si ese número **ya tiene un webhook puesto** —una
-bandeja, un chatbot, cualquier cosa que hoy reciba los mensajes—, apuntarlo al CRM **se la
-quita**. WhatsApp manda cada mensaje a un solo lugar. Revísalo en el Hub de 360dialog antes de
-tocar nada; si hay algo conectado, hay que decidir qué se hace con eso primero.
+**Una advertencia que hay que leer completa:** la app de Meta entrega los mensajes a **una sola
+dirección**, y hoy esa dirección **apunta a Odoo**. Al apuntarla al CRM, **Odoo deja de
+recibir**. Nadie está trabajando ahí los WhatsApp, así que está bien —pero antes de borrarla,
+**cópiala a un lado**, por si alguna vez hay que devolverla.
 
-Si eso que está conectado **tiene que seguir funcionando**, el Hub tiene una opción de *varios
-webhooks por número* —hasta tres además del principal, cada uno con su nombre— y por ahí se
-agrega el CRM sin quitarle el suyo a nadie. Cuesta que los mensajes tarden un poco más en
-llegar, porque hay que entregarlos a todos. Es la salida, no el camino normal.
+Si algún día el número se mueve a un proveedor —360dialog, Twilio, el que sea—, la puerta ya
+sabe recibirlo: acepta la firma de Meta **y** la cabecera secreta que usan los proveedores, y el
+formato del aviso es el mismo. No habría que reescribir nada de esto.
 
 ---
 
@@ -53,9 +53,12 @@ de *Edge Functions*: si sale una pantalla con `import`, es el equivocado.
 Van a salir renglones azules que dicen **NOTICE: … skipping**. Eso está bien: es el archivo
 diciendo «esto ya existía». Lo que importa es que termine en **Success**. Se puede repetir.
 
-### 2. Inventar la llave, y guardarla
+### 2. Los tres secretos
 
-Es la cerradura de la puerta. Una cadena larga, que no signifique nada. Por ejemplo:
+Uno se inventa, uno se copia de Meta y uno se escribe.
+
+**El que inventas** es la palabra con la que Meta da de alta la dirección. Una cadena larga, que
+no signifique nada. Por ejemplo:
 
 ```
 qz-wa-7f3a9c2e5b1d8460a7e2c9f4b6d013a8
@@ -63,15 +66,26 @@ qz-wa-7f3a9c2e5b1d8460a7e2c9f4b6d013a8
 
 **Cámbiale algunos caracteres**: ésta ya está escrita aquí, en un archivo público.
 
-En Supabase → **Edge Functions** → **Secrets**, se agrega:
+**El que copias** es la *clave secreta de la app* de Meta: en
+[developers.facebook.com](https://developers.facebook.com) → la app del hotel →
+**Configuración → Básica** → *Clave secreta de la app* → **Mostrar**. Con ella la función
+comprueba que cada aviso lo firmó Meta de verdad y no alguien que adivinó la dirección.
+
+En Supabase → **Edge Functions** → **Secrets**, se agregan los tres:
 
 | Nombre | Valor |
 |---|---|
 | `WA_SECRET` | la cadena que acabas de inventar |
+| `WA_APP_SECRET` | la clave secreta de la app de Meta |
 | `WA_NUMERO` | el número del hotel, sólo dígitos, con lada de país: `526641234567` |
 
 `WA_NUMERO` sirve para que los mensajes que **manda** el hotel no se cuenten como leads: son la
 respuesta, no un prospecto.
+
+> Ninguno de los dos secretos se manda por correo, ni por chat, ni se escribe en un archivo del
+> repositorio. Viven en los secretos de Supabase y en ningún otro lado. La clave de la app es
+> la que firma por Meta; si alguna vez se escribe en algún lugar, se regenera desde ahí mismo
+> —y entonces hay que volver a guardarla en Supabase—.
 
 ### 3. Subir la función `wa-hook`
 
@@ -88,8 +102,8 @@ Ese interruptor cambia de nombre y de lugar cada tanto. La sección sale como **
 «Verify JWT **with legacy secret**», no «Verify JWT» a secas. **Es el único interruptor de esa
 pantalla que menciona JWT**: si la pantalla no se parece a lo de arriba, es ése.
 
-360dialog no trae una sesión de Supabase, así que con eso prendido el portón rechaza todo antes
-de llegar a la función. La función comprueba por su cuenta quién toca —con la llave del paso
+Meta no trae una sesión de Supabase, así que con eso prendido el portón rechaza todo antes
+de llegar a la función. La función comprueba por su cuenta quién toca —con la firma del paso
 2—, así que apagarlo no abre nada.
 
 > **Y se vuelve a prender solo.** Las funciones nuevas **y las editadas** salen de Supabase con
@@ -111,8 +125,9 @@ Si ya lo apagaste y sigue saliendo lo mismo, ábrela en una **ventana privada**:
 guarda la respuesta vieja. No hay que volver a subir nada, el interruptor pega de inmediato.
 
 Que conteste `ok` sin pedir nada **no es un hueco**: la cerradura se exige para *mandar*
-mensajes, y eso es un POST. Abrir la dirección con el navegador es un GET, y a eso 360dialog
-también le pega antes de empezar, así que tiene que contestar `ok`.
+mensajes, y eso es un POST. Abrir la dirección con el navegador es un GET pelón, y lo único que
+recibe es esa palabra. El GET con el que Meta da de alta la dirección es otro —trae el acertijo
+y la palabra del paso 2—, y ése sí se comprueba antes de contestar.
 
 ### 4. Volver a subir `meta-sync`
 
@@ -129,7 +144,7 @@ función.
 
 No hay que volver a correr `meta.sql`: la tabla ya tiene dónde guardarlos.
 
-### 5. Apuntar el webhook en 360dialog
+### 5. Apuntar el webhook en Meta
 
 Es lo único que se hace fuera de Supabase. La dirección es:
 
@@ -138,51 +153,45 @@ https://TU-PROYECTO.supabase.co/functions/v1/wa-hook
 ```
 
 Que esa dirección conteste `ok` en el navegador —la comprobación del paso 3— **antes** de tocar
-el Hub. Si no contesta `ok`, lo que se configure aquí no va a entregar nada.
+nada aquí. Si no contesta `ok`, lo que se configure no va a entregar un solo mensaje.
 
-En el **Hub de 360dialog**: se entra al número del hotel y se busca la sección **API Settings**
-—en Hubs más viejos, *WhatsApp Channel → Channel Webhook*—. Ahí hay **dos** webhooks y hay que
-escoger bien:
+**Antes de escribir nada: copia a un lado la dirección que ya está puesta.** Es la de Odoo. Al
+guardar la nueva, Odoo deja de recibir, y si algún día hay que devolvérsela, esa dirección es
+la única forma de hacerlo sin adivinar.
 
-- **Channel webhook** ← **éste**. Es el de ese número.
-- *WABA webhook*: manda los eventos de **todos** los números de la cuenta a una sola dirección.
-  El día que el hotel tenga un segundo número, ése se los revuelve.
+En [developers.facebook.com](https://developers.facebook.com) → la app del hotel →
+**WhatsApp → Configuración**, en el recuadro de *Webhook*, **Editar**:
 
-Se pone la dirección de arriba y **una cabecera propia**:
-
-| Cabecera | Valor |
+| Campo | Qué va |
 |---|---|
-| `x-crm-llave` | la misma cadena del paso 2 |
+| URL de devolución de llamada | la dirección de arriba |
+| Token de verificación | **la misma cadena del paso 2** (`WA_SECRET`) |
 
-Tiene que ser **idéntica**, sin un espacio pegado al final. Es el error más común, y la función
-no lo dice: contesta `No.` a secas, a propósito, para no ayudarle a quien esté probando la
-puerta.
+→ **Verificar y guardar**.
 
-Es probable que al guardar pida un **código de verificación que llega por correo** a la cuenta
-del Hub. Ten el correo abierto antes de darle guardar.
+En ese momento Meta le pega a la dirección y le pide un acertijo. Si la cadena coincide, la
+función se lo devuelve y la pantalla acepta el cambio. Si no coincide, Meta dice que no pudo
+verificar la dirección —y entonces es que la cadena no es idéntica a la que quedó en Supabase,
+o que el secreto no se guardó—.
 
-Si su Hub no deja poner cabeceras desde la pantalla, se hace con una llamada. El comando es
-éste, y **los dos huecos los llenas tú**:
+**Y falta la mitad que todos olvidan.** Guardar la dirección no hace que lleguen mensajes:
+además hay que decirle a Meta **qué** mandar. En el mismo recuadro, **Administrar**, y se
+palomea el campo:
 
-```bash
-curl -X POST "https://waba.360dialog.io/v1/configs/webhook" \
-  -H "D360-API-KEY: TU_LLAVE_DE_360DIALOG" \
-  -H "Content-Type: application/json" \
-  -d '{"url":"https://TU-PROYECTO.supabase.co/functions/v1/wa-hook",
-       "headers":{"x-crm-llave":"LA_CADENA_DEL_PASO_2"}}'
-```
+| Campo | |
+|---|---|
+| `messages` | ← **éste**. Es el único que hace falta |
 
-Tres avisos sobre eso:
+Sin esa palomita la dirección queda verificada y perfecta, y no entra nada nunca. Si más
+adelante parece que «todo está bien pero no llega», es casi siempre esto.
 
-- **La llave de 360dialog no se manda por chat ni se escribe en ningún archivo.** Es la que abre
-  el WhatsApp del hotel. Si alguna vez se escribió en algún lado, se regenera desde el Hub.
-- **Regenerar esa llave borra el webhook.** No avisa: los mensajes dejan de llegar y ya. Si
-  alguna vez se regenera, hay que volver a hacer este paso 5 completo.
-- El dominio puede ser `waba-v2.360dialog.io` si el número está en su plataforma nueva. El Hub
-  dice cuál es; si el comando contesta un error de dirección, es ése.
+Dos cosas más:
 
-La dirección tampoco admite guiones bajos en el dominio ni un puerto escrito. La de Supabase no
-los trae, así que se pega tal cual se copia, sin agregarle nada al final.
+- **La clave secreta de la app no se manda por chat ni se escribe en ningún archivo.** Es con
+  la que Meta firma. Si alguna vez se regenera, hay que volver a guardarla en Supabase o los
+  avisos dejan de pasar.
+- La dirección no admite guiones bajos en el dominio ni un puerto escrito. La de Supabase no
+  los trae, así que se pega tal cual se copia, sin agregarle nada al final.
 
 ### 6. Prender la atribución
 
@@ -222,12 +231,17 @@ El CRM **nunca adivina**: si no puede resolverlo, deja el lead sin campaña. Un 
 campaña equivocada ensucia el costo por lead de las dos, y eso no se nota hasta que alguien toma
 una decisión con el número malo.
 
-**No entra nada.** Revisa, en este orden: que *«Verify JWT with legacy secret»* esté apagado
-—y que **no se haya vuelto a prender solo** al subir la última versión de la función, que es lo
-que pasa—; que la cabecera
-`x-crm-llave` del webhook sea **idéntica** a `WA_SECRET` —un espacio de más cuenta—; y en
-Supabase → Edge Functions → **wa-hook → Logs**, si dice *«tocaron sin la llave buena»* es la
-cabecera.
+**No entra nada.** Revisa, en este orden:
+
+1. Que el campo **`messages`** esté palomeado en la app de Meta. Es la causa número uno: la
+   dirección queda verificada, todo se ve bien, y Meta no manda nada porque nadie se lo pidió.
+2. Que *«Verify JWT with legacy secret»* esté apagado **y no se haya vuelto a prender solo** al
+   subir la última versión de la función.
+3. Que `WA_APP_SECRET` en Supabase sea la clave secreta de **esa** app de Meta, sin espacios. Si
+   la clave se regeneró alguna vez y no se volvió a guardar aquí, los avisos llegan y rebotan.
+
+En Supabase → Edge Functions → **wa-hook → Logs** se ve cuál de los tres es: si no aparece
+ninguna llamada, es el 1 o el 2; si aparece y dice *«tocaron sin la llave buena»*, es el 3.
 
 **Entran mensajes que no son leads.** Los acuses de «entregado» y «leído» se tiran solos, y lo
 que manda el hotel también, si `WA_NUMERO` está bien puesto. Si aparecen respuestas del propio
@@ -238,14 +252,17 @@ hotel como si fueran prospectos, ese secreto está mal.
 ## Por qué está hecho así
 
 **La cerradura no es opcional.** Con *Verify JWT* apagado, esa dirección la puede tocar
-cualquiera, y las cuentas de **cliente** de 360dialog no firman sus webhooks —la firma
-`x-360dialog-signature` es de las cuentas de socio—. Por eso la función **no mira el cuerpo**
-hasta comprobar la cabecera. Sin eso, cualquiera que adivine la dirección puede inventar leads, y
-un CRM con leads inventados es peor que uno vacío: se les asigna gente y se reporta que la
-campaña funcionó.
+cualquiera. Lo único que distingue un aviso de Meta de uno inventado es **la firma**:
+`X-Hub-Signature-256`, que es el cuerpo entero pasado por la clave secreta de la app. Por eso la
+función lee el cuerpo pero **no lo interpreta** hasta que la firma cuadra —un texto sin parsear
+es un montón de bytes; es al volverse un objeto y guardarse cuando puede hacer daño—.
 
-**El mensaje repetido no duplica.** Meta y 360dialog reintentan cuando no reciben respuesta a
-tiempo. El buzón tiene un índice único por `mensaje_id`: el reintento choca y se ignora.
+Firmar es mejor que una cabecera secreta, y por una razón concreta: la cabecera sólo dice quién
+toca, la firma dice **además que el cuerpo no viene cambiado**. Sin nada de esto, cualquiera que
+adivine la dirección puede inventar leads, y un CRM con leads inventados es peor que uno vacío:
+se les asigna gente y se reporta que la campaña funcionó.
+
+**El mensaje repetido no duplica.** Meta reintenta cuando no recibe respuesta a tiempo. El buzón tiene un índice único por `mensaje_id`: el reintento choca y se ignora.
 
 **La campaña se resuelve en el servidor, no en el navegador.** El catálogo de Meta sólo lo puede
 leer marketing, y las campañas no le bajan a ventas. Si lo resolviera quien sincroniza, bastaría
@@ -260,7 +277,7 @@ pasar a la cartera, el mensaje nuevo se le anexa a las notas.
 
 ## Para deshacerlo
 
-Quitar el webhook en el Hub de 360dialog —o los mensajes seguirán tocando una puerta que ya no
+Quitar la dirección en la app de Meta —o los mensajes seguirán tocando una puerta que ya no
 abre nadie—, borrar la función, y al final de `whatsapp.sql` están las líneas para tirar las
 tablas.
 
