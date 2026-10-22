@@ -104,13 +104,24 @@ await bloque('1 · qué le falta al servidor y qué le sobra', async () => {
  * botón acaba escribiendo en pantalla, y en qué orden hizo las cosas.
  */
 const preguntar = (aqui, respuesta) => p.evaluate(async ({ a, resp }) => {
+  /* Hace falta fingir la sesión: sin ella el botón contesta, con razón, que
+     este equipo no está escribiendo nada en el servidor, y no llegaría a
+     comparar listas. La dirección y la llave son inventadas y nadie las
+     llama: `sincronizar` y `jefesDeLaLiga` están sustituidos aquí abajo. */
+  nube.url    = 'https://ejemplodeproyecto.supabase.co';
+  nube.anon   = 'llave-de-mentiras';
+  nube.sesion = { user: { email: 'admin1@ejemplo.example' } };
+
   state.ajustes.hotel.jefes = saneaJefes(a);
   state.ajustes.hotel.tokenOdt = 'token-de-mentiras-0001';
   guardar();
 
   /* El orden importa y por eso se anota: subir va ANTES de preguntar. */
   const orden = [];
-  window.sincronizar   = async () => { orden.push('subir'); };
+  nube.rechazados = resp.rechazados || [];
+  nube.estado     = resp.estado || 'listo';
+  nube.error      = resp.error || '';
+  window.sincronizar = async () => { orden.push('subir'); };
   window.jefesDeLaLiga = async (token) => {
     orden.push('preguntar:' + token);
     return resp;
@@ -202,12 +213,112 @@ await bloque('6 · sube antes de preguntar, y pregunta con el token de la liga',
 await bloque('7 · es la MISMA función que usa el formulario', async () => {
   const src = fs.readFileSync(APP, 'utf8');
   const i = src.indexOf('#bVerJefes").onclick');
-  const trozo = src.slice(i, i + 2200);
+  /* El manejador entero, hasta el `finally` que lo cierra. Antes esto
+     recortaba a ojo y creció el manejador: la prueba se puso roja sin que el
+     código tuviera nada malo, que es la peor clase de falla porque enseña a
+     ignorarla. */
+  const fin = src.indexOf('finally{ boton.disabled = false; }', i);
+  const trozo = src.slice(i, fin > 0 ? fin : i + 6000);
   afirma('el botón llama a jefesDeLaLiga', /jefesDeLaLiga\(/.test(trozo));
   afirma('y NO se arma su propia consulta al servidor',
     !/crm_odt_jefes/.test(trozo) && !/rest\/v1/.test(trozo));
   afirma('el formulario de la liga sigue llamando a la misma',
     /jefesDeLaLiga\(datos\.token\)/.test(src));
+});
+
+/* --- 8 --------------------------------------------------------------------
+   LO QUE LE FALTABA AL BOTÓN, Y ES LO QUE DE VERDAD LE PASÓ A MARCO.
+
+   Si el servidor RECHAZA el renglón de ajustes, la lista no va a cuadrar por
+   más veces que se le dé. Decir «le faltan Administración» ahí es una
+   respuesta verdadera y completamente inútil: manda a esperar una subida que
+   no va a llegar nunca. El motivo ya venía del servidor; nada más no lo
+   estábamos leyendo. */
+await bloque('8 · si el servidor rechaza los ajustes, lo dice y dice por qué', async () => {
+  const r = await preguntar(TRES, { lista: TRES.slice(0, 2), motivo:'', estado:'rechazado',
+    rechazados:[{ id:'ajustes:global', tipo:'ajustes',
+                  motivo:'new row violates row-level security policy' }] });
+  afirma('NO se queda en «le faltan»', !/Le faltan/i.test(r.texto));
+  afirma('dice que el servidor no aceptó los ajustes',
+    /no acept[óo] los ajustes/i.test(r.texto));
+  afirma('Y REPITE LO QUE CONTESTÓ EL SERVIDOR, sin traducirlo mal',
+    /row-level security/i.test(r.texto));
+  afirma('y apunta a dónde se arregla', /roles\.sql/i.test(r.texto));
+  afirma('en rojo, porque esto no se arregla esperando', /var\(--bad\)/.test(r.borde));
+});
+
+/* --- 9 -------------------------------------------------------------------- */
+await bloque('9 · y si la sincronización truena, tampoco lo esconde', async () => {
+  const r = await preguntar(TRES, { lista: TRES.slice(0, 2), motivo:'',
+    estado:'error', error:'Failed to fetch' });
+  afirma('dice que no se pudo sincronizar', /no se pudo sincronizar/i.test(r.texto));
+  afirma('con lo que contestó', /Failed to fetch/.test(r.texto));
+  afirma('y avisa de la consecuencia: la liga sigue con la lista vieja',
+    /lista de antes/i.test(r.texto));
+});
+
+/* --- 10 -------------------------------------------------------------------
+   El caso raro: aquí está apuntado que ya subió y el servidor tiene otra
+   cosa. Mandarlo a «esperar un momento» sería mandarlo a esperar para
+   siempre. */
+await bloque('10 · si ya se dio por subido, no manda a esperar', async () => {
+  const r = await p.evaluate(async () => {
+    nube.url='https://ejemplodeproyecto.supabase.co'; nube.anon='llave-de-mentiras';
+    nube.sesion = { user: { email: 'admin1@ejemplo.example' } };
+    nube.rechazados=[]; nube.estado='listo';
+    state.ajustes.hotel.jefes = saneaJefes([{depto:'SPA',jefe:'A'},{depto:'RH',jefe:'B'}]);
+    state.ajustes.hotel.tokenOdt='token-de-mentiras-0001';
+    guardar();
+    /* Se apunta como ya subido, que es justo el estado desconcertante. */
+    const fila = filasDeEstado().find(f => f.id === 'ajustes:global');
+    sincronizado.set('ajustes:global', JSON.stringify(fila.datos));
+    window.sincronizar   = async () => {};
+    window.jefesDeLaLiga = async () => ({ lista:[{depto:'SPA',jefe:'A'}], motivo:'' });
+    renderAjustes();
+    document.querySelector('#bVerJefes').click();
+    for (let i=0;i<60;i++){ await new Promise(r=>setTimeout(r,50));
+      const t=document.querySelector('#loQueVeLaLiga').innerText;
+      if (t && !/preguntándole al servidor/i.test(t)) break; }
+    return document.querySelector('#loQueVeLaLiga').innerText;
+  });
+  afirma('sigue diciendo cuál falta', /Le faltan: RH/i.test(r), r);
+  afirma('PERO AVISA QUE VOLVER A DARLE NO VA A CAMBIAR NADA',
+    /no va a cambiar nada/i.test(r));
+  afirma('y no manda a esperar un momento', !/en un momento/i.test(r));
+});
+
+/* --- 11 -------------------------------------------------------------------
+   EL ESTADO QUE LO EXPLICA TODO Y QUE NO SE NOTA.
+
+   Sin sesión, la aplicación sigue andando y enseñándolo todo, y este botón
+   hasta alcanza a preguntarle al servidor —para preguntar basta la llave
+   pública—. Lo que no se puede sin sesión es ESCRIBIR: `sincronizar()` se
+   sale calladito. El botón diría «le faltan» una y otra vez, y ninguna de las
+   dos cosas sería mentira ni serviría de nada. */
+await bloque('11 · sin sesión lo dice, en vez de mandar a esperar', async () => {
+  const r = await p.evaluate(async () => {
+    nube.url='https://ejemplodeproyecto.supabase.co'; nube.anon='llave-de-mentiras';
+    nube.sesion = null;                   // justo lo que pasa cuando caduca
+    nube.rechazados=[]; nube.estado='listo';
+    state.ajustes.hotel.jefes = saneaJefes([{depto:'SPA',jefe:'A'},{depto:'RH',jefe:'B'}]);
+    state.ajustes.hotel.tokenOdt='token-de-mentiras-0001';
+    guardar();
+    let preguntó = false;
+    window.sincronizar   = async () => {};
+    window.jefesDeLaLiga = async () => { preguntó = true; return { lista:[], motivo:'' }; };
+    renderAjustes();
+    document.querySelector('#bVerJefes').click();
+    for (let i=0;i<60;i++){ await new Promise(r=>setTimeout(r,50));
+      const t=document.querySelector('#loQueVeLaLiga').innerText;
+      if (t && !/preguntándole al servidor/i.test(t)) break; }
+    return { texto: document.querySelector('#loQueVeLaLiga').innerText, preguntó };
+  });
+  afirma('DICE QUE NO HAY SESIÓN', /no tiene sesi[óo]n abierta/i.test(r.texto));
+  afirma('y que por eso no sube NADA, no sólo los departamentos',
+    /ni los usuarios/i.test(r.texto));
+  afirma('dice qué hacer: volver a entrar', /vuelve a entrar/i.test(r.texto));
+  afirma('y tranquiliza: lo escrito no se pierde', /no se pierde/i.test(r.texto));
+  afirma('ni se molesta en comparar listas, que no diría nada útil', !r.preguntó);
 });
 
 await br.close(); srv.close();

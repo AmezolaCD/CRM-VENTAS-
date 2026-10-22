@@ -1024,7 +1024,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.22-4";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.22-5";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -9909,7 +9909,53 @@ function renderAjustes(){
     boton.disabled = true;
     pinta("var(--muted)", "Subiendo lo de aquí y preguntándole al servidor…");
     try{
+      /* Lo primero, porque explica de golpe todo lo demás: SIN SESIÓN no se
+         sube nada. `sincronizar()` se sale calladito, y el botón diría «le
+         faltan» una y otra vez sin que ninguna de las dos cosas sea mentira ni
+         sirva de nada. Y es un estado fácil de no notar: la aplicación sigue
+         andando, enseña todo, y hasta este botón alcanza a preguntarle al
+         servidor, porque para preguntar basta la llave pública. Lo que no se
+         puede sin sesión es ESCRIBIR. */
+      if (!nubeActiva()){
+        pinta("var(--bad)",
+          `<b>Este equipo no tiene sesión abierta con el servidor.</b> Nada de lo que guardes ` +
+          `aquí está subiendo —ni los departamentos, ni los usuarios, ni los textos—, y la liga ` +
+          `va a seguir viendo la lista de antes.` +
+          `<br><span class="hint">Cierra sesión y vuelve a entrar con tu correo. Lo que tienes ` +
+          `escrito no se pierde: está guardado en este navegador y sube en cuanto haya sesión.</span>`);
+        return;
+      }
+      /* Con una vuelta ya en camino, `sincronizar()` se sale sin hacer nada.
+         Si no se esperara, el botón diría «le faltan» por no haber subido, y
+         mandaría a buscar el problema donde no está. */
+      for (let i = 0; i < 24 && sincronizando; i++)
+        await new Promise(r => setTimeout(r, 250));
       await sincronizar();
+
+      /* ANTES DE COMPARAR LISTAS, MIRAR SI LA SUBIDA SIQUIERA PASÓ.
+
+         Esto es lo que le faltaba al botón y es lo que de verdad le pasó a
+         Marco: si el servidor RECHAZA el renglón de ajustes —porque la cuenta
+         no tiene permiso de escribirlo, que es lo que decide roles.sql—, la
+         lista nunca va a cuadrar por más veces que le dé, y «le faltan
+         Administración» es una respuesta verdadera y completamente inútil.
+         El motivo ya venía del servidor; nada más no lo estábamos leyendo. */
+      const rechazo = (nube.rechazados || []).find(x => x.id === "ajustes:global");
+      if (rechazo){
+        pinta("var(--bad)",
+          `<b>El servidor no aceptó los ajustes, así que la lista no va a cambiar.</b>` +
+          `<br>Lo que contestó: <i>${esc(rechazo.motivo || "sin motivo")}</i>` +
+          `<br><span class="hint">Casi siempre es que esta cuenta no tiene permiso de ` +
+          `escribir los ajustes. Eso lo decide <b>roles.sql</b>: vuelve a correrlo en ` +
+          `Supabase y revisa que tu correo esté en Usuarios con el papel de administrador.</span>`);
+        return;
+      }
+      if (nube.estado === "error"){
+        pinta("var(--bad)", `<b>No se pudo sincronizar.</b> ${esc(nube.error || "")}` +
+          `<br><span class="hint">Mientras no suba, la liga va a seguir viendo la lista de antes.</span>`);
+        return;
+      }
+
       const r = await jefesDeLaLiga(tokenOdt());
       if (r.motivo){
         pinta("var(--bad)", `<b>La liga no está viendo la lista.</b> ${esc(PORQUE_NO_LA_VE[r.motivo] || "")}`);
@@ -9922,13 +9968,25 @@ function renderAjustes(){
           `que la cierre y la vuelva a abrir: la lista se baja al abrirla.`);
         return;
       }
+      /* El caso raro y el más desconcertante: este equipo tiene apuntado que
+         ya subió ese renglón, y el servidor tiene otra cosa. Entonces darle
+         otra vez al botón no va a servir de nada —no hay nada pendiente que
+         mandar—, y decirle «espera un momento» sería mandarlo a esperar para
+         siempre. */
+      const fila = filasDeEstado().find(f => f.id === "ajustes:global");
+      const creeQueYaSubio = !!fila &&
+        sincronizado.get("ajustes:global") === JSON.stringify(fila.datos);
+
       pinta("var(--warn)",
         `<b>La liga todavía no ve lo mismo que esta tabla.</b>` +
         (d.faltan.length ? `<br>Le faltan: <b>${esc(d.faltan.join(", "))}</b>.` : "") +
         (d.sobran.length ? `<br>Y sigue ofreciendo: <b>${esc(d.sobran.join(", "))}</b>, ` +
                            `que aquí ya no está.` : "") +
-        `<br><span class="hint">Si acabas de escribirlos, dale otra vez en un momento: ` +
-        `puede que la subida siguiera en camino.</span>`);
+        (creeQueYaSubio
+          ? `<br><span class="hint">Y ojo: este equipo tiene apuntado que ya lo subió, así ` +
+            `que volver a darle no va a cambiar nada. Pásame esta pantalla.</span>`
+          : `<br><span class="hint">Si acabas de escribirlos, dale otra vez en un momento: ` +
+            `puede que la subida siguiera en camino.</span>`));
     }catch(e){
       pinta("var(--bad)", "<b>No se pudo revisar.</b> " + esc(String(e && e.message ? e.message : e)));
     }finally{ boton.disabled = false; }
