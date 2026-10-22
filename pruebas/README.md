@@ -53,6 +53,7 @@ node pruebas/navegador/editar-antes-de-la-firma.mjs # se corrige hasta que firme
 node pruebas/navegador/beneficios-del-convenio.mjs  # el spa y la transportación, sin Care
 node pruebas/navegador/los-departamentos-de-la-liga.mjs # lo que ve la liga de las ODTs
 node pruebas/navegador/solo-las-ordenes.mjs         # el papel que sólo ve las ODTs
+node pruebas/navegador/politicas-del-contrato.mjs   # el contrato de ventas, completo
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
@@ -108,6 +109,15 @@ cada quien, y un papel que no esté ahí cae en la rama de ventas, que excluye l
 una cuenta que entra, ve su pestaña y la encuentra vacía para siempre, sin un solo error en
 pantalla. La mitad de ese cambio vive en un archivo que el hotel tiene que correr, y eso es lo
 que esta prueba impide que se nos olvide.
+
+`politicas-del-contrato.mjs` nace de un contrato de verdad que mandó Marco: «los contratos y
+cotizaciones en ventas son casi iguales, sin embargo los contratos tienen muchas más políticas»,
+y en seguida el recordatorio que fija el alcance: «el contrato de ventas y los de banquetes son
+distintos». El contrato de hospedaje pasó de tres secciones a veinte, y la prueba cuida sobre
+todo lo que NO debía moverse: que **la cotización siga igual** y no cargue ni una de las llaves
+nuevas, y que **el contrato de banquetes no se haya tocado** —ése es el grupo de control—.
+Además mide que lo que falta se imprima como una raya en vez de callarse, y que los datos del
+hotel salgan de Ajustes y no del código, porque el repositorio es público.
 
 `contratos-en-papel.mjs` cuida lo que pidió el departamento legal del hotel: que a un
 **contrato** no se le pueda sacar una firma por ningún camino —ni el lienzo, ni el enlace, ni

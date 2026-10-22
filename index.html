@@ -675,6 +675,9 @@
   .doc-body .inc{font-size:11.5px; color:#6d6634; white-space:pre-wrap; margin:0 0 12px;
     padding-left:9px; border-left:3px solid #b2aa6d}
   .doc-body .pol{white-space:pre-wrap; font-size:11.8px; color:#4c3b57; text-align:justify}
+  /* La carta de presentación es su propia hoja. En pantalla se ve una línea
+     punteada —el documento se lee de corrido—; al imprimir, corta. */
+  .doc-body .salto-hoja{border-top:1px dashed var(--line); margin:22px 0 4px}
   .doc-body .doc-res{margin-top:7px; font-size:12.5px; line-height:1.8}
   .doc-body .doc-res i{color:#6f6279; font-style:normal; display:inline-block; width:74px}
   .doc-cols{display:flex; gap:26px}
@@ -723,6 +726,7 @@
     .no-imprimir{display:none !important}
     .doc-body{padding:0; font-size:11.5px}
     .doc-body h2{page-break-after:avoid}
+    .doc-body .salto-hoja{page-break-after:always; border:0; margin:0}
     .firmas{page-break-inside:avoid}
     table.tar{page-break-inside:avoid}
   }
@@ -1024,7 +1028,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.22-5";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.22-6";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3539,6 +3543,44 @@ function saneaContrato(k){
         ubicacion:o.destinatario.ubicacion || "", telefono:o.destinatario.telefono || "",
         email:o.destinatario.email || "" }
     : null;
+  /* Lo que pide el CONTRATO de ventas y la cotización no: la fecha límite de
+     firma, el programa de pagos, el mínimo de habitaciones para la tarifa de
+     grupo, el depósito por habitación al registrarse, y quiénes quedan
+     autorizados a firmar la cuenta maestra.
+
+     TODOS NACEN AL USARSE, por lo mismo que `folioRepetido` de aquí abajo: un
+     campo nuevo en los valores por omisión le cambiaría la forma a todos los
+     contratos a la vez, la sincronización los tomaría por editados y este
+     equipo mandaría su copia encima de la de los demás. */
+  if (o.tipo !== "contrato"){
+    /* Una COTIZACIÓN no carga nunca las llaves del contrato, vengan de donde
+       vengan —de un documento al que le cambiaron el tipo, de un respaldo, de
+       la nube—. Mismo trato que `tokenFirma` de aquí arriba: el saneador es el
+       único lugar donde esto se puede garantizar de verdad. */
+    for (const kk of ["limiteFirma","minimoHab","depositoHab","firmanMaestra","pagos"])
+      delete o[kk];
+  }
+  if ("limiteFirma" in o){
+    o.limiteFirma = String(o.limiteFirma || "").trim();
+    if (!o.limiteFirma) delete o.limiteFirma;
+  }
+  for (const kk of ["minimoHab","depositoHab"]) if (kk in o){
+    o[kk] = Number(o[kk]) || 0;
+    if (!o[kk]) delete o[kk];
+  }
+  if ("pagos" in o){
+    o.pagos = (Array.isArray(o.pagos) ? o.pagos : [])
+      .map(x => ({ monto: Number((x && x.monto) || 0) || 0,
+                   fecha: String((x && x.fecha) || "").trim() }))
+      .filter(x => x.monto || x.fecha);
+    if (!o.pagos.length) delete o.pagos;
+  }
+  if ("firmanMaestra" in o){
+    o.firmanMaestra = (Array.isArray(o.firmanMaestra) ? o.firmanMaestra : [])
+      .map(x => String(x || "").trim()).filter(Boolean).slice(0, 6);
+    if (!o.firmanMaestra.length) delete o.firmanMaestra;
+  }
+
   /* `folioRepetido` no nace en todos los renglones a propósito: un campo nuevo
      en cada documento haría que TODOS se vean editados y se vuelvan a subir
      enteros en la primera sincronización. Sólo existe mientras el folio esté
@@ -14977,7 +15019,338 @@ function cuerpoContrato(k, c){
       </div>
     </div>`;
 
+  /* Lo que todavía no se sabe se imprime como una raya para llenarse a mano,
+     igual que en el contrato de banquetes. Un contrato con un hueco visible se
+     corrige; uno que calla el dato se firma así, y nadie se entera. */
+  const hueco = v => String(v || "").trim() || "________________";
+  const fechaHueco = f => String(f || "").trim() ? fechaTexto(f) : "________________";
+
+  /* El encabezado del hotel. La carta y el contrato lo repiten, porque son dos
+     hojas distintas y cada una tiene que poder leerse sola. */
+  const membrete = () => `
+    <div class="doc-hotel">
+      ${h.logo ? `<img class="doc-logo" src="${esc(h.logo)}" alt="${esc(h.nombre)}">`
+        : esQuartz(h.nombre) ? `<div class="doc-wordmark">${logoQuartz(MORADO_QUARTZ)}</div>`
+        : `<div class="doc-mono">${monogramaQ(MORADO_QUARTZ)}</div><b>${esc(h.nombre)}</b>`}
+    </div>
+    <div class="doc-regla"></div>`;
+
+  /* El correo de quien lleva el contrato, sacado de la lista de usuarios. Si
+     no está ahí, no se inventa: se queda sin ese renglón. */
+  const correoDelEjecutivo = (() => {
+    const n = String(ejecutivoDeCt(k) || "").trim().toLowerCase();
+    const u = n ? state.usuarios.find(x => String(x.nombre || "").trim().toLowerCase() === n) : null;
+    return u ? u.correo : "";
+  })();
+
+  /* LAS POLÍTICAS DEL CONTRATO DE VENTAS.
+
+     Marco: «los contratos y cotizaciones en ventas son casi iguales, sin
+     embargo los contratos tienen muchas más políticas». Esto es lo que las
+     separa, copiado del machote del hotel.
+
+     Va sólo en el CONTRATO —`enPapel`—: la cotización se queda corta, que es
+     lo que él escogió. Y no tiene nada que ver con el contrato de BANQUETES,
+     que es otro documento y vive en `cuerpoContratoBq`.
+
+     Lo del hotel —razón social, RFC, domicilio, banco— sale de Ajustes y
+     nunca está escrito aquí: el repositorio es público. Si falta, se imprime
+     la raya y se ve el hueco. */
+  const politicasDelContrato = () => {
+    if (!enPapel) return "";
+    const li = xs => `<ul class="ct-serv">${xs.map(x => `<li>${x}</li>`).join("")}</ul>`;
+    const ol = xs => `<ol class="ct-serv">${xs.map(x => `<li>${x}</li>`).join("")}</ol>`;
+    const raya = "________________________________________________________________";
+    const pagos = Array.isArray(k.pagos) ? k.pagos : [];
+    const firman = Array.isArray(k.firmanMaestra) ? k.firmanMaestra : [];
+
+    return `
+    <h2>Objeto</h2>
+    <div class="pol"><b>${esc(hueco(h.razonSocial))}</b> proporcionará al Cliente servicios de
+      hospedaje dentro de las instalaciones que opera (en adelante los “Servicios”), mismos que
+      serán destinados para la atención de determinado Grupo o Grupos de personas que el Cliente
+      autorizará según se especifican en el cuerpo del presente documento. En el caso de que
+      exista algún conflicto entre los términos de este Contrato y los términos del convenio,
+      prevalecerán los del convenio, únicamente respecto de los asuntos específicamente
+      contemplados en él.</div>
+
+    <h2>Servicio</h2>
+    <div class="pol"><b>${esc(hueco(h.razonSocial))}</b> se obliga a realizar todas aquellas
+      actividades, acciones y en general cuantos preparativos, reservaciones y trabajos sean
+      necesarios a efecto de cumplir con los alcances de los Servicios descritos, y que le
+      permitan al Cliente disposición de uso de las habitaciones y salones, en su caso, durante
+      todo el tiempo de vigencia de la estancia del Grupo o Grupos.</div>
+
+    <h2>Contraprestación</h2>
+    <div class="pol"><b>${esc(hueco(h.razonSocial))}</b> recibirá como contraprestación por
+      todos y cada uno de los Servicios convenidos, por lo que el Cliente se obliga a pagar en
+      moneda nacional o su equivalente en dólares de los Estados Unidos de Norteamérica, todos y
+      cada uno de los Servicios e impuestos que correspondan, en los plazos y montos que se
+      contienen en el presente documento, en ${esc(hueco(h.domicilioFiscal || h.direccion))} o
+      mediante los medios de pago que establezcan las partes, que de manera enunciativa y no
+      limitativa pudieran ser transferencia de fondos, cargo a cuenta de crédito o cualquier
+      otro autorizado en términos de ley.</div>
+
+    <h2>Condiciones del bloqueo</h2>
+    ${li([
+      "Los únicos tipos y número de habitaciones reservadas en este momento por el Cliente son " +
+      "las mencionadas en este documento. Si el Cliente solicita otro tipo de habitación o Suite, " +
+      "o habitaciones adicionales, deberá solicitarlo al Hotel y ser confirmado por escrito.",
+      "El Cliente acepta que las tarifas indicadas han sido negociadas solamente para el periodo " +
+      "o fechas establecidas en este contrato. En caso de requerir habitaciones antes o después " +
+      "de esas fechas, estarán sujetas a la categoría de habitación disponible al momento de " +
+      "recibir la solicitud.",
+      "En caso de que el número de habitaciones bloqueadas baje con relación a lo estipulado en " +
+      "el contrato, el Hotel se reserva el derecho de renegociar las tarifas."
+    ])}
+
+    <h2>Horarios de entrada y salida</h2>
+    ${li([
+      "<b>Hora de registro:</b> 3:00 p.m. La asignación de habitaciones previa a esta hora está " +
+      "sujeta a disponibilidad.",
+      "<b>Hora de salida:</b> 12:00 p.m. Las salidas después de esta hora están sujetas al cargo " +
+      "de un día completo.",
+      "<b>Early check in:</b> no está disponible.",
+      "<b>Late check out:</b> no está disponible.",
+      "En caso de requerirse cambios en las horas de entrada o salida, la solicitud se atenderá " +
+      "según la disponibilidad al momento, y puede generar el cargo de una renta completa por " +
+      "habitación."
+    ])}
+    ${k.depositoHab ? `<div class="pol">Por políticas del hotel se solicita un depósito de
+      <b>${esc(money(k.depositoHab, "USD"))}</b> por habitación a cada huésped al momento del
+      check-in, el cual será liberado por el hotel durante el check-out. Dependiendo del banco,
+      este proceso puede tardar de 3 a 5 días hábiles. En caso de que la empresa prefiera no
+      cobrar este depósito al huésped, será necesario que nos proporcione una carta de
+      autorización de cargos para cubrir cualquier posible daño.</div>` : ""}
+
+    <h2>Propinas</h2>
+    <div class="pol">Propina a camarista, a consideración del cliente.</div>
+
+    <h2>Notas adicionales</h2>
+    ${li([
+      (k.minimoHab
+        ? `El Hotel requiere de un mínimo de <b>${esc(String(k.minimoHab))}</b> habitaciones para ` +
+          `poder aplicar la tarifa de grupo. En caso de que el bloqueo se reduzca por debajo de ` +
+          `ese número, la tarifa aplicable será la tarifa comercial vigente a la fecha.`
+        : "El Hotel requiere de un mínimo de habitaciones para poder aplicar la tarifa de grupo. " +
+          "En caso de que el bloqueo se reduzca por debajo de ese número, la tarifa aplicable " +
+          "será la tarifa comercial vigente a la fecha."),
+      "El Hotel aceptará hasta dos menores de 12 años compartiendo habitación con dos adultos sin " +
+      "cargo adicional. En caso de requerir camas adicionales a las existentes dentro de la " +
+      "habitación, puede proceder un cargo por este servicio."
+    ])}
+
+    <h2>Obligaciones del cliente</h2>
+    <div class="pol">El Cliente se obliga, en los plazos y términos convenidos, a facilitar y
+      entregar las especificaciones, datos e información relativa a la estancia del Grupo o
+      Grupos, así como a respetar los reglamentos y ordenamientos de las instalaciones del Hotel,
+      asumiendo la responsabilidad que corresponda ante el incumplimiento de esto. Para los
+      efectos de esta cláusula las partes convienen adicionalmente lo siguiente:</div>
+    ${ol([
+      "<b>Programa del Grupo.</b> A fin de que el Coordinador de Grupos y Convenciones del " +
+      "Hotel, quien será el contacto con el Cliente durante la estancia del grupo, proceda a " +
+      "hacer los arreglos necesarios, es absolutamente necesario que el Cliente entregue al " +
+      "Hotel el programa definitivo, así como la lista de los participantes, a más tardar el " +
+      `<b>${esc(fechaHueco(k.limiteFirma))}</b>. En caso de vencer este plazo, el Hotel no ` +
+      "garantiza el acomodo solicitado para su grupo.",
+
+      "<b>Seguridad.</b> El Hotel no asumirá responsabilidad alguna por daño o pérdida de " +
+      "mercancías o artículos introducidos al Hotel, o por objetos olvidados por el Cliente o " +
+      "por los miembros del grupo, que no hayan sido puestos bajo la custodia del Hotel en la " +
+      "oficina de Recepción o en las cajas de seguridad, cuando se trate de objetos valiosos, " +
+      "alhajas, joyas o dinero en efectivo. Mediante previo aviso, el Coordinador de Grupos y " +
+      "Convenciones podrá asistir al Cliente en la contratación de personal de seguridad.",
+
+      "<b>Anuncios y letreros.</b> No se permite colocar anuncios y letreros de ninguna especie " +
+      "en el vestíbulo o en áreas públicas del Hotel. Los letreros sólo podrán colocarse en el " +
+      "área de convenciones y su tamaño deberá establecerse de mutuo acuerdo con el Hotel.",
+
+      "<b>Subcontratistas.</b> El Cliente se compromete a hacer que sus subcontratistas " +
+      "—compañías participantes, decoradores, audiovisual, compañías de producción— se sujeten " +
+      "a las reglas y reglamentos del Hotel. La decoración o material de exposición que se " +
+      "introduzca al Hotel deberá ser autorizado antes de su llegada para evitar daños al " +
+      "mobiliario y accesorios. No se podrán fijar objetos a paredes, pisos, ventanas, puertas " +
+      "o techos permanentes utilizando clavos, grapas, cinta u otras substancias; el Cliente " +
+      "será responsable de los daños que tales materiales causen. Las instalaciones se " +
+      "entregarán libres de basura o desechos del material de exhibición, a más tardar en la " +
+      "fecha y hora de salida pactadas. Si al término de un evento se requiere que el personal " +
+      "del Hotel retire el material de exhibición o desechos pesados, se cobrará el tiempo y la " +
+      "mano de obra utilizados.",
+
+      "<b>Paquetes y cajas.</b> El Cliente deberá comunicarse con la oficina de Grupos y " +
+      "Convenciones del Hotel en caso de que desee manejar paquetería o envío de material por " +
+      "anticipado que será utilizado para su evento.",
+
+      "<b>Área de la convención.</b> El espacio para las convenciones y actos dentro de las " +
+      "instalaciones del Hotel se asigna con base en el tipo de evento y al número de " +
+      "asistentes. El Hotel no podrá garantizar salones específicos, por lo que están sujetos a " +
+      "cambios. Si las cifras de asistencia definitivas son inferiores a las estipuladas, el " +
+      "Hotel se reserva la libertad de efectuar ajustes al espacio, de común acuerdo con el " +
+      "Cliente. Los cambios solicitados después de recibido el convenio se efectuarán conforme " +
+      "a la disponibilidad de espacio a la fecha de la solicitud.",
+
+      "<b>Decoración.</b> El Cliente deberá contratar la decoración especial de los salones " +
+      "directamente con el Hotel. En el caso de solicitar una decoración de terceros que no se " +
+      "tenga disponible en el Hotel, éste cobrará una renta del salón a la compañía decoradora. " +
+      "Se evaluará el consumo de energía eléctrica generado por el tipo de montaje y equipo " +
+      "audiovisual, y de ser fuera de lo habitual se realizará un cargo al Cliente a las " +
+      "tarifas vigentes.",
+
+      "<b>Misceláneos.</b> Los actos de entretenimiento que el Cliente lleve a cabo en las áreas " +
+      "externas del Hotel, así como las fiestas o eventos privados que tengan que extenderse del " +
+      "horario establecido, deberán estar autorizados en este contrato."
+    ])}
+
+    <h2>Instrucciones de pago</h2>
+    <div class="pol">Se marca a qué cuenta se carga cada concepto.</div>
+    <table class="tar"><thead><tr>
+        <th>Concepto</th>
+        <th style="width:110px;text-align:center">Maestra</th>
+        <th style="width:110px;text-align:center">Individual</th></tr></thead>
+      <tbody>${[
+        "Habitación e impuestos",
+        "Cargos de alimentos y bebidas programados",
+        "Cargos de alimentos y bebidas no incluidos en el programa",
+        "Cargos de teléfono",
+        "Cargos personales",
+        "Lavandería",
+        "Depósito por daño a la habitación"
+      ].map(x => `<tr><td>${esc(x)}</td>
+        <td style="text-align:center">☐</td>
+        <td style="text-align:center">☐</td></tr>`).join("")}</tbody></table>
+
+    <h2>Liquidación de cuentas</h2>
+    ${li([
+      "<b>Individual:</b> a la salida del grupo.",
+      "<b>Maestra:</b> prepagada antes de la llegada del grupo.",
+      "Las cuentas individuales deberán ser liquidadas en su totalidad antes de la salida del " +
+      "grupo. La revisión del importe del cierre de la cuenta que se envíe será en un plazo no " +
+      "mayor de 5 días hábiles; en caso de no haber respuesta por parte del cliente en ese " +
+      "periodo, el hotel da por entendido que la cuenta ha sido aceptada."
+    ])}
+    <div class="pol" style="margin-top:8px">La(s) persona(s) autorizada(s) por el Cliente para
+      firmar consumos y cargos diversos a la cuenta maestra es (son):</div>
+    <div class="pol" style="line-height:2.4">${
+      (firman.length ? firman : ["", "", ""])
+        .map(n => n ? `<b>${esc(n)}</b>` : raya).join("<br>")}</div>
+
+    <h2>Programa de pagos</h2>
+    <div class="pol">A fin de considerar el bloqueo de habitaciones, el Hotel deberá recibir el
+      presente contrato con firma del Cliente <b>en cada una de sus hojas</b> a más tardar el
+      <b>${esc(fechaHueco(k.limiteFirma))}</b>, así como el primer depósito, que <b>no es
+      reembolsable</b>. Los siguientes pagos deberán recibirse de acuerdo con el siguiente
+      calendario:</div>
+    <table class="tar"><thead><tr>
+        <th style="width:90px">Pago</th>
+        <th class="num" style="width:160px">Importe</th>
+        <th>Fecha límite</th></tr></thead>
+      <tbody>${(pagos.length ? pagos : [{ monto:0, fecha:"" }]).map((x, i) => `<tr>
+        <td>${i + 1}</td>
+        <td class="num">${x.monto ? esc(mon(x.monto)) : raya.slice(0, 18)}</td>
+        <td>${x.fecha ? esc(fechaTexto(x.fecha)) : raya.slice(0, 26)}</td></tr>`).join("")}
+      </tbody></table>
+    <div class="ct-mon" style="margin-top:10px">TODA TRANSFERENCIA DEBERÁ SER EN PESOS; DE LO
+      CONTRARIO SE COBRARÁ ADICIONALMENTE LA DIFERENCIA GENERADA POR EL TIPO DE CAMBIO QUE TOME
+      EL BANCO${k.tipoCambio ? `, YA QUE EL HOTEL LO TOMA A ${esc(k.tipoCambio)} AL DÍA DE HOY` : ""},
+      SUJETO A CAMBIOS SIN PREVIO AVISO.</div>
+    ${li([
+      "En caso de surgir cualquier cargo extra durante la estancia del grupo, éste será cargado " +
+      "a la tarjeta de crédito que deberá dejarse como garantía al momento de efectuar el " +
+      "registro de entrada al Hotel. Para poder realizar dicho cargo es necesario recibir del " +
+      "titular de la tarjeta una carta de autorización firmada, así como copia por ambos lados " +
+      "de la tarjeta de crédito e identificación oficial.",
+      "Las habitaciones estarán sujetas a cancelación sin responsabilidad para el Hotel si los " +
+      "depósitos solicitados no se reciben de acuerdo con las políticas y en los plazos " +
+      "estipulados.",
+      "El saldo final será determinado de acuerdo con el bloqueo de habitaciones original, y las " +
+      "políticas de cancelación aplicarán de igual manera."
+    ])}
+
+    <h2>Datos para el pago</h2>
+    <div class="pol">El pago podrá realizarse con tarjeta de crédito corporativa, transferencia
+      bancaria o cheque certificado a nombre de <b>${esc(hueco(h.razonSocial))}</b>, RFC
+      <b>${esc(hueco(h.rfc))}</b>.</div>
+    <table class="tar"><tbody>
+      <tr><td style="width:150px">Banco</td><td><b>${esc(hueco(h.banco))}</b></td></tr>
+      <tr><td>Cuenta</td><td><b>${esc(hueco(h.cuenta))}</b></td></tr>
+      <tr><td>CLABE</td><td><b>${esc(hueco(h.clabe))}</b></td></tr>
+      <tr><td>Moneda</td><td>${esc(nombreMoneda(k.moneda))} (${esc(k.moneda)})</td></tr>
+    </tbody></table>
+    <div class="pol" style="margin-top:8px">En el caso de que el Cliente incumpla las
+      obligaciones contenidas en este contrato y sus anexos, el Hotel estará facultado para
+      exigir la desocupación inmediata de las instalaciones o habitaciones asignadas, así como
+      para retener el equipaje, en su caso, en garantía del pago de las cantidades no pagadas
+      hasta esa fecha.</div>
+
+    <h2>Políticas de cancelación · hospedaje</h2>
+    <div class="pol">Después del <b>${esc(fechaHueco(k.limiteFirma))}</b>, toda cancelación
+      causará el cargo correspondiente al <b>100% del total del grupo</b>.</div>
+
+    <h2>No show y salida anticipada</h2>
+    ${li([
+      "Por cada <b>No Show</b> se cobrará la habitación por la estancia completa. Por “No Show” " +
+      "se entiende que la persona o personas a cuyo nombre se encuentra una reservación " +
+      "determinada no se presentan el día programado de llegada, sin previa cancelación.",
+      "Por <b>salida anticipada</b> se entiende la reservación cuyo registro de salida se realice " +
+      "antes de la fecha confirmada en la reservación original, sin previo aviso. En este caso " +
+      "el Hotel cobrará el total de las noches contratadas originalmente."
+    ])}
+
+    <h2>Imposibilidad de cumplimiento</h2>
+    <div class="pol">Queda expresamente entendido que cada parte estará liberada del
+      cumplimiento de las obligaciones de este contrato en el caso de que éste sea impedido
+      total o parcialmente por causas de fuerza mayor, incluyendo sin limitación actos de la
+      naturaleza, actos u órdenes de las autoridades gubernamentales, actos de guerra,
+      disturbios populares, huelgas o paros laborales, fuego, inundación o explosión,
+      reparaciones de emergencia, y cualquier otra situación fuera del control de las partes.</div>
+
+    <h2>Acuerdo total</h2>
+    <div class="pol">Este documento constituye el contrato completo entre las partes respecto de
+      los asuntos que se incluyen en el mismo, y cancela y sustituye cualquier entendimiento o
+      convenio, verbal o escrito, que previamente hubieren acordado las partes respecto de las
+      mismas. Las partes aceptan expresamente que en el presente contrato no ha existido engaño,
+      dolo, mala fe o cualquier otro vicio del consentimiento.</div>
+
+    <h2>Jurisdicción</h2>
+    <div class="pol">Para todo lo relativo a la interpretación, cumplimiento o resolución del
+      presente contrato, las partes se someten a la competencia de la Procuraduría Federal del
+      Consumidor y de los Tribunales del Fuero Común${h.registroProfeco
+        ? `. Registro PROFECO del contrato: <b>${esc(h.registroProfeco)}</b>` : ""}.</div>`;
+  };
+
+  /* LA CARTA DE PRESENTACIÓN: primera hoja, y sólo del contrato. La cotización
+     no la lleva —Marco pidió que quedara igual que siempre—, y por eso se
+     cuelga de `enPapel`, que es lo que distingue a un contrato. */
+  const carta = () => !enPapel ? "" : `
+    ${membrete()}
+    <div class="doc-fecha">${esc(h.ciudad)} a ${esc(fechaTexto(k.fecha || hoyISO()))}</div>
+    ${c && c.empresa ? `<div class="doc-dest"><b>${esc(c.empresa)}</b>${
+      k.titulo ? "<br>" + esc(k.titulo.toUpperCase()) : ""}</div>` : ""}
+    <p>Estimado ${esc((c && c.contacto) || "señor(a)")},</p>
+    <p style="white-space:pre-wrap">Es un placer enterarnos que está considerando a ${
+      esc(h.nombre)}, como sede para el grupo de referencia.</p>
+    <p style="white-space:pre-wrap">Adjunto encontrará el contrato que detalla los términos y
+      condiciones a los que estamos preparados para comprometernos, siempre y cuando recibamos
+      este contrato firmado a más tardar el día <b>${esc(fechaHueco(k.limiteFirma))}</b>.</p>
+    <p style="white-space:pre-wrap">Le rogamos sea tan amable de leer cuidadosamente estos
+      términos y condiciones. Si existe alguna condición que requiera de revisión, le rogamos
+      nos contacte para realizar, en su caso, las modificaciones correspondientes. Por el
+      momento hemos reservado el espacio, y lo mantendremos tentativamente hasta el día de su
+      fecha límite, de forma tal, que usted pueda revisar este documento y regresar una copia
+      firmada a nuestra atención.</p>
+    <p style="white-space:pre-wrap">Esperamos tener la oportunidad de trabajar con usted, si
+      tiene alguna duda o comentario, no dude en hacérnoslo saber. Estamos a sus órdenes en
+      cualquier momento.</p>
+    <p style="margin-top:18px">Atentamente,<br><b>${esc(h.nombre)}</b></p>
+    <div class="pol" style="margin-top:4px">
+      <b>${esc(ejecutivoDeCt(k) || "________________")}</b><br>
+      Ejecutivo de ventas${h.telefono ? "<br>Tel. " + esc(h.telefono) : ""}${
+      correoDelEjecutivo ? "<br>" + esc(correoDelEjecutivo) : ""}
+    </div>
+    <div class="salto-hoja"></div>`;
+
   return `
+    ${carta()}
     <div class="doc-hotel">
       ${h.logo ? `<img class="doc-logo" src="${esc(h.logo)}" alt="${esc(h.nombre)}">`
         : esQuartz(h.nombre) ? `<div class="doc-wordmark">${logoQuartz(MORADO_QUARTZ)}</div>`
@@ -15062,6 +15435,8 @@ function cuerpoContrato(k, c){
       k.tipo === "contrato" ? TEXTOS_CT.vigenciaCtr : TEXTOS_CT.vigenciaCot))}</div>
 
     <div class="ct-mon" style="margin-top:12px">${esc(TEXTOS_CT.pago)}</div>
+
+    ${politicasDelContrato()}
 
     ${k.notas ? `<h2>Observaciones</h2><div class="pol">${esc(k.notas)}</div>` : ""}
 
@@ -15244,6 +15619,47 @@ function editarContrato(id, clientePre, alCerrar){
             <div class="hint" id="ctComAyuda">${esc(ayudaComision(k.comisionable))}</div></div>
         </div>
 
+        <!-- Sólo el CONTRATO lleva políticas; la cotización se queda corta, que
+             es lo que escogió Marco. Por eso esta sección se esconde cuando el
+             tipo es cotización, y se enseña sola al cambiarlo. -->
+        <div id="ctSoloContrato"${k.tipo === "contrato" ? "" : ' style="display:none"'}>
+          <h3 class="sec">Condiciones del contrato</h3>
+          <div class="note">Lo que cambia de un contrato a otro. Lo que se deje vacío se imprime
+            como una raya, para llenarlo a mano: más vale un hueco visible que un dato
+            inventado.</div>
+          <div class="grid">
+            <div><label class="lbl">Fecha límite de firma</label>
+              <input class="field" type="date" id="ctLimite" value="${esc(k.limiteFirma || "")}">
+              <div class="hint">Sale tres veces: en la carta, en el programa del grupo y en la
+                política de cancelación.</div></div>
+            <div><label class="lbl">Mínimo de habitaciones</label>
+              <input class="field" id="ctMinHab" inputmode="numeric"
+                value="${k.minimoHab ? esc(String(k.minimoHab)) : ""}" placeholder="10">
+              <div class="hint">Debajo de ese número se aplica la tarifa comercial.</div></div>
+            <div><label class="lbl">Depósito por habitación (USD)</label>
+              <input class="field" id="ctDepHab" inputmode="decimal"
+                value="${k.depositoHab ? esc(String(k.depositoHab)) : ""}" placeholder="200">
+              <div class="hint">El que se pide al registrarse y se libera al salir. Vacío: no se
+                menciona.</div></div>
+            <div class="full"><label class="lbl">Autorizados a firmar la cuenta maestra</label>
+              <textarea class="field" id="ctFirman" style="width:100%;min-height:64px"
+                placeholder="Un nombre por renglón. Vacío imprime rayas para llenarlas a mano."
+                >${esc((k.firmanMaestra || []).join("\n"))}</textarea></div>
+            <div class="full"><label class="lbl">Programa de pagos</label>
+              <table class="data"><thead><tr><th style="width:70px">Pago</th>
+                  <th style="width:180px">Importe</th><th>Fecha límite</th></tr></thead>
+                <tbody>${[0,1,2].map(i => { const x = (k.pagos || [])[i] || {}; return `<tr>
+                  <td>${i + 1}</td>
+                  <td><input class="field pg-monto" inputmode="decimal"
+                        value="${x.monto ? esc(String(x.monto)) : ""}" style="width:100%"></td>
+                  <td><input class="field pg-fecha" type="date"
+                        value="${esc(x.fecha || "")}" style="width:100%"></td></tr>`; }).join("")}
+                </tbody></table>
+              <div class="hint">El primer depósito no es reembolsable. Los renglones vacíos no se
+                imprimen.</div></div>
+          </div>
+        </div>
+
         <h3 class="sec">Hospedaje</h3>
         <div class="note">Una línea por tipo de habitación. El subtotal y el total con
           impuestos se calculan solos.</div>
@@ -15323,6 +15739,11 @@ function editarContrato(id, clientePre, alCerrar){
 
   q("#ctTipo").onchange = e => {
     q("#ctTipoAyuda").textContent = infoTipoCt(e.target.value).ayuda;
+    /* Las condiciones del contrato se asoman al escoger «contrato» y se
+       guardan al escoger «cotización». No se borra lo escrito: si se vuelve a
+       cambiar de opinión sigue ahí, y al guardar una cotización esas llaves
+       se caen solas —ver el final de `recoger`—. */
+    q("#ctSoloContrato").style.display = e.target.value === "contrato" ? "" : "none";
   };
   /* El porcentaje sólo se asoma si las tarifas son comisionables: un campo de
      porcentaje a la vista en un contrato que no lo es invita a llenarlo.
@@ -15423,6 +15844,14 @@ function editarContrato(id, clientePre, alCerrar){
       desayuno: q("#ctDes").value,
       comisionable: q("#ctComOn").checked,
       comision: Number(q("#ctComPct").value) || 0,
+      limiteFirma: q("#ctLimite").value,
+      minimoHab: Number(q("#ctMinHab").value) || 0,
+      depositoHab: Number(q("#ctDepHab").value) || 0,
+      firmanMaestra: q("#ctFirman").value.split("\n").map(x => x.trim()).filter(Boolean),
+      pagos: [...ov.querySelectorAll("#ctSoloContrato tbody tr")].map(tr => ({
+        monto: Number(tr.querySelector(".pg-monto").value) || 0,
+        fecha: tr.querySelector(".pg-fecha").value
+      })).filter(x => x.monto || x.fecha),
       updatedAt: new Date().toISOString()
     });
     /* `Object.assign` suma, no quita. Los dos campos de la comisión nacen al
@@ -15431,6 +15860,22 @@ function editarContrato(id, clientePre, alCerrar){
     if (!k.desayuno) delete k.desayuno;
     if (!k.comisionable) delete k.comisionable;
     if (!k.comision || !k.comisionable) delete k.comision;
+    /* Lo mismo con las condiciones del contrato: nacen al escribirse. Una
+       cotización no carga ninguna de estas llaves, y un contrato al que se le
+       borra un dato lo suelta en vez de guardarlo en cero. */
+    const soloDelContrato = ["limiteFirma","minimoHab","depositoHab","firmanMaestra","pagos"];
+    if (k.tipo !== "contrato"){
+      /* Una COTIZACIÓN no carga ninguna de estas llaves, aunque alguien las
+         haya tecleado antes de cambiar el tipo: los campos siguen en pantalla
+         —escondidos— y se leen de todos modos. */
+      for (const kk of soloDelContrato) delete k[kk];
+    } else {
+      if (!k.limiteFirma) delete k.limiteFirma;
+      if (!k.minimoHab) delete k.minimoHab;
+      if (!k.depositoHab) delete k.depositoHab;
+      if (!k.firmanMaestra || !k.firmanMaestra.length) delete k.firmanMaestra;
+      if (!k.pagos || !k.pagos.length) delete k.pagos;
+    }
     if (!existente){ k.createdAt = new Date().toISOString(); state.contratos.push(k); }
     else reabrirParaCorregir(k, "contratos", ejecutivoDeCt(k));
     guardar(); render();
