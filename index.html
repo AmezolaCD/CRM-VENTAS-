@@ -1024,7 +1024,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.15-3";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.22-1";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1490,7 +1490,9 @@ Anteponiendo un cordial saludo y agradeciendo su preferencia, nos complace prese
 2.- Internet Inalámbrico en todas las áreas del hotel en cortesía
 3.- Acceso a Gimnasio
 4.- Mini bar
-5.- Cajas de seguridad en habitaciones`,
+5.- Cajas de seguridad en habitaciones
+6.- 20% de descuento en SENSES SPA
+7.- Transportación Hotel - Empresa - Hotel (sujeta a disponibilidad)`,
 
   servicios:
 `1.- Restaurante
@@ -1538,6 +1540,41 @@ Sin más por el momento, agradecemos las atenciones brindadas al portador de est
 
 Confiando que el presente convenio sea totalmente de su agrado. Sin otro particular por el momento me despido de usted.`
 };
+
+/**
+ * Los «valores agregados» como estaban antes de octubre de 2026.
+ *
+ * Marco se dio cuenta de que el 20% del spa y la transportación
+ * Hotel-Empresa-Hotel sólo salían en los convenios que llevaban una habitación
+ * Care: vivían en el bloque Recovery, y el documento no imprime ese bloque si
+ * el convenio no tiene habitaciones de ahí. Pero no son beneficios de la
+ * habitación de recuperación —la transportación es para los empleados de la
+ * empresa con convenio—, así que ahora van arriba, en los valores agregados,
+ * y salen siempre.
+ *
+ * Esta copia existe porque cambiar el texto de fábrica NO ALCANZA: los ajustes
+ * guardados le ganan al de fábrica —`Object.assign({}, TEXTOS_DEF, lo que hay
+ * guardado)`—, así que un hotel que ya trabajó seguiría viendo el de antes
+ * para siempre. Con esto, al cargar se cambia el texto únicamente si está
+ * IDÉNTICO al de antes, es decir si nadie lo tocó. Al que le haya escrito su
+ * propia versión no se le pisa: su redacción es suya.
+ *
+ * Cuando ya no quede ningún equipo con la versión vieja, esto se puede borrar.
+ */
+const VALORES_ANTES =
+`1.- Habitaciones Smart (chapas inteligentes, cortinas automatizadas, teléfono con pantalla touch, escenarios de luz).
+2.- Internet Inalámbrico en todas las áreas del hotel en cortesía
+3.- Acceso a Gimnasio
+4.- Mini bar
+5.- Cajas de seguridad en habitaciones`;
+
+/* Para comparar dos textos como los lee una persona: sin espacios de sobra al
+   final de los renglones y sin importar si el archivo traía saltos de Windows.
+   Sin esto, un texto que nadie tocó pero que pasó por un copiar-y-pegar se
+   vería distinto y la migración no lo alcanzaría. */
+const mismoTexto = (a, b) =>
+  String(a || "").replace(/\r\n/g, "\n").split("\n").map(l => l.trimEnd()).join("\n").trim() ===
+  String(b || "").replace(/\r\n/g, "\n").split("\n").map(l => l.trimEnd()).join("\n").trim();
 
 /* Una fila del archivo = un huésped = una carta. Dos huéspedes pueden
    compartir habitación y aun así cada uno lleva la suya. */
@@ -2454,7 +2491,16 @@ function sanear(s){
         h.jefes = saneaJefes(h.jefes);
         return h;
       })(),
-      textos: Object.assign({}, TEXTOS_DEF, (s.ajustes && s.ajustes.textos) || {}),
+      textos: (() => {
+        const t = Object.assign({}, TEXTOS_DEF, (s.ajustes && s.ajustes.textos) || {});
+        /* El 20% del spa y la transportación se subieron a los valores
+           agregados, porque abajo sólo salían con habitación Care. Lo guardado
+           le gana a lo de fábrica, así que sin esto el hotel que ya trabajó no
+           los vería nunca. Se cambia SÓLO si nadie había tocado ese texto; al
+           que escribió el suyo no se le pisa. */
+        if (mismoTexto(t.valores, VALORES_ANTES)) t.valores = TEXTOS_DEF.valores;
+        return t;
+      })(),
       grupos: saneaGrupos(s.ajustes && s.ajustes.grupos),
       moneda: (s.ajustes && s.ajustes.moneda) || "MXN",
       ladaPais: (s.ajustes && s.ajustes.ladaPais) || "52"

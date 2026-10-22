@@ -50,6 +50,7 @@ node pruebas/navegador/contratos-en-papel.mjs       # el contrato no se firma en
 node pruebas/navegador/opciones-del-contrato.mjs    # comisión y desayuno
 node pruebas/navegador/la-liga-del-hotel.mjs        # un equipo nuevo no configura nada
 node pruebas/navegador/editar-antes-de-la-firma.mjs # se corrige hasta que firme el cliente
+node pruebas/navegador/beneficios-del-convenio.mjs  # el spa y la transportación, sin Care
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
@@ -71,6 +72,17 @@ ventas —comisión y desayuno— y en las dos mide lo mismo: que **sin tocarlas
 exactamente lo de siempre**. Quien no las use no tiene por qué notar nada, y los contratos que
 ya andan por ahí tampoco pueden cambiar de texto solos. Lleva su grupo de control: la
 carta-convenio, que Marco pidió dejar quieta.
+
+`beneficios-del-convenio.mjs` nace de algo que Marco vio en un convenio ya hecho: el 20% del
+spa y la transportación *Hotel - Empresa - Hotel* sólo salían si el convenio traía una
+habitación **Care**, porque vivían en el bloque Recovery y ese bloque no se imprime sin
+habitaciones de ahí. No son beneficios de la habitación de recuperación, así que subieron a los
+valores agregados. Lo que la prueba cuida de verdad no es el texto: es la **migración**. Los
+ajustes guardados le ganan al texto de fábrica, así que un hotel que ya trabajó no habría visto
+el cambio nunca; y el contrapeso, que a quien escribió su propia versión **no se le pise**, que
+sería peor que la falla que se arregla. Mide además que un convenio ya hecho no cambie solo:
+cada uno guarda su copia de los textos, y un documento que ya está en manos del cliente no se
+mueve debajo de él.
 
 `contratos-en-papel.mjs` cuida lo que pidió el departamento legal del hotel: que a un
 **contrato** no se le pueda sacar una firma por ningún camino —ni el lienzo, ni el enlace, ni
