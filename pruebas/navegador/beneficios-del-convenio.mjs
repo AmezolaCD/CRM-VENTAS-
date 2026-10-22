@@ -93,11 +93,21 @@ const CARE     = [{ grupo:'recovery', codigo:'CARE', nombre:'Care',        publi
 /* --- 1 --------------------------------------------------------------------
    El caso exacto que reportó Marco: un convenio normal, sin Care. */
 await bloque('1 · un convenio SIN habitación Care ya ofrece los beneficios', async () => {
-  const t = await documento(DELUXE);
+  const t = await documento(DELUXE, { desayunos:['americano'] });
   afirma('ofrece el 20% en SENSES SPA',         /20% de descuento en SENSES SPA/i.test(t));
   afirma('OFRECE LA TRANSPORTACIÓN, que era la que nunca salía',
     /Transportaci[óo]n Hotel - Empresa - Hotel/i.test(t));
   afirma('y dice que está sujeta a disponibilidad', /sujeta a disponibilidad/i.test(t));
+
+  /* Donde Marco los quiere: pegados al desayuno, debajo de la tabla, NO en la
+     lista numerada de valores agregados. */
+  const i = t.indexOf('Desayuno incluido');
+  const j = t.indexOf('20% de descuento en SENSES SPA');
+  const k = t.indexOf('VALORES AGREGADOS');
+  afirma('VAN JUNTO AL DESAYUNO INCLUIDO', i >= 0 && j > i && (k < 0 || j < k));
+  afirma('y NO en la lista numerada de valores agregados',
+    !/6\.- 20% de descuento/.test(t) && !/7\.- Transportaci/.test(t));
+
   afirma('el gimnasio sigue donde siempre estuvo', /Acceso a Gimnasio/i.test(t));
   /* Sin Recovery no debe aparecer nada de la habitación de recuperación. */
   afirma('y no se coló nada de Recovery',
@@ -112,6 +122,19 @@ await bloque('2 · el convenio CON Care no perdió nada', async () => {
   afirma('con su enfermería y médico',          /Enfermer[íi]a y m[ée]dico/i.test(t));
   afirma('sigue ofreciendo el 20% del spa',     /20% de descuento en SENSES SPA/i.test(t));
   afirma('y la transportación',                 /Transportaci[óo]n/i.test(t));
+  /* El bloque Recovery trae esas dos palomitas escritas desde siempre. Ahora
+     que salen arriba para todos, abajo ya no se repiten: un documento que
+     ofrece dos veces lo mismo se lee como un descuido.
+
+     Se mide que desaparezcan las PALOMITAS. Lo que dice la columna «Habitación
+     Surgery Recovery» se queda como está: no es una repetición, es la lista de
+     lo que trae ese paquete, y ahí el spa está en su lugar. */
+  afirma('SIN REPETIR LAS PALOMITAS, que el bloque Recovery traía',
+    !/✓\s*20% de descuento/i.test(t) && !/✓\s*Transportaci/i.test(t));
+  afirma('y la transportación se ofrece una sola vez en todo el documento',
+    (t.match(/Transportaci[óo]n Hotel/gi) || []).length === 1);
+  afirma('pero el gimnasio de Recovery sigue en su bloque',
+    /Incluye acceso a gimnasio/i.test(t));
 });
 
 /* --- 3 --------------------------------------------------------------------
@@ -121,15 +144,18 @@ await bloque('3 · al hotel que YA TRABAJÓ también le llega', async () => {
   const r = await p.evaluate(() => {
     /* Así se ve un ajuste guardado de antes del cambio. */
     const viejo = JSON.parse(JSON.stringify(state));
-    viejo.ajustes.textos.valores = VALORES_ANTES;
-    const puesto = sanear(viejo);
-    return { valores: puesto.ajustes.textos.valores };
+    const salida = [];
+    for (const x of VALORES_VIEJOS){
+      viejo.ajustes.textos.valores = x;
+      salida.push(sanear(viejo).ajustes.textos.valores);
+    }
+    return salida;
   });
-  afirma('el texto guardado se actualiza solo',
-    /20% de descuento en SENSES SPA/.test(r.valores) &&
-    /Transportaci[óo]n Hotel - Empresa - Hotel/.test(r.valores));
-  afirma('y conserva lo que ya decía',
-    /Habitaciones Smart/.test(r.valores) && /Cajas de seguridad/.test(r.valores));
+  afirma('las dos versiones que repartimos quedan en los cinco puntos',
+    r.length === 2 && r.every(x => /Cajas de seguridad en habitaciones$/.test(x.trim())));
+  afirma('y a ninguna le quedan los beneficios colgados de la lista',
+    r.every(x => !/SENSES SPA/.test(x) && !/Transportaci/.test(x)));
+  afirma('conservando lo que ya decían', r.every(x => /Habitaciones Smart/.test(x)));
 });
 
 /* --- 4 --------------------------------------------------------------------
@@ -154,13 +180,16 @@ await bloque('5 · un convenio YA HECHO no cambia solo', async () => {
     const v = saneaConv({ id:'v9', clienteId:'c1', ejecutivo:'Sistemas',
       fecha:'2026-09-01', habitaciones:[{ grupo:'deluxe', codigo:'DLX',
         nombre:'Deluxe King', publica:2500, convenio:1900 }],
-      textos: Object.assign({}, state.ajustes.textos, { valores: VALORES_ANTES }) });
+      /* Así se ve el guardado de un convenio nacido antes: trae sus textos,
+         pero el renglón de beneficios no existía todavía. */
+      textos: (() => { const x = Object.assign({}, state.ajustes.textos);
+                       delete x.beneficios; return x; })() });
     const caja = document.createElement('div');
     caja.innerHTML = `<div class="doc-contenido">${cuerpoConvenio(v, cliente('c1'))}</div>`;
     return caja.innerText;
   });
-  afirma('el que nació antes sigue imprimiendo lo de antes',
-    !/20% de descuento en SENSES SPA/.test(t));
+  afirma('UNA CARTA YA FIRMADA NO EMPIEZA A OFRECER ALGO QUE NADIE LE OFRECIÓ',
+    !/20% de descuento en SENSES SPA/.test(t) && !/Transportaci[óo]n Hotel/.test(t));
   afirma('y no se rompió: sigue siendo un convenio completo',
     /Habitaciones Smart/.test(t) && /Especificaciones de tarifas/.test(t));
 });
@@ -173,6 +202,30 @@ await bloque('6 · y el convenio nuevo nace ya con los beneficios', async () => 
   afirma('el convenio nuevo los trae', /20% de descuento en SENSES SPA/.test(t));
   const dosVeces = (t.match(/20% de descuento en SENSES SPA/gi) || []).length;
   afirma('y sin Care los ofrece una sola vez, no repetidos', dosVeces === 1);
+});
+
+/* --- 7 --------------------------------------------------------------------
+   Lo que destraba el caso real: Marco corrigió el texto y su borrador seguía
+   diciendo lo de antes. Un borrador que nadie ha mandado se pone al día solo
+   al abrirlo, igual que ya pasaba con la tarifa pública del catálogo. */
+await bloque('7 · un BORRADOR se pone al día al abrirlo', async () => {
+  const r = await p.evaluate(() => {
+    const viejo = saneaConv({ id:'v7', clienteId:'c1', ejecutivo:'Sistemas',
+      estado:'borrador', fecha:'2026-10-22',
+      habitaciones:[{ grupo:'deluxe', codigo:'DLX', nombre:'Deluxe King',
+                      publica:2500, convenio:1900 }],
+      textos: (() => { const x = Object.assign({}, state.ajustes.textos);
+                       delete x.beneficios; return x; })() });
+    state.convenios = [viejo]; guardar();
+    const antes = viejo.textos.beneficios;
+    editarConvenio('v7');
+    const despues = state.convenios[0].textos.beneficios;
+    document.querySelector('.modal [data-close]')?.click();
+    return { antes, despues };
+  });
+  afirma('antes de abrirlo no los traía', !r.antes);
+  afirma('ABRIRLO LE COPIA LOS TEXTOS DEL HOTEL',
+    /20% de descuento en SENSES SPA/.test(r.despues || ''));
 });
 
 await br.close(); srv.close();

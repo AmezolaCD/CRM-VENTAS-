@@ -1024,7 +1024,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.22-1";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.22-2";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1490,9 +1490,17 @@ Anteponiendo un cordial saludo y agradeciendo su preferencia, nos complace prese
 2.- Internet Inalámbrico en todas las áreas del hotel en cortesía
 3.- Acceso a Gimnasio
 4.- Mini bar
-5.- Cajas de seguridad en habitaciones
-6.- 20% de descuento en SENSES SPA
-7.- Transportación Hotel - Empresa - Hotel (sujeta a disponibilidad)`,
+5.- Cajas de seguridad en habitaciones`,
+
+  /* Los beneficios del convenio, los que valen para cualquier estancia.
+     Marco: «necesito que esos beneficios sean en general para cualquier tipo
+     de estancia (…), estos beneficios deben venir junto con el desayuno
+     incluido en el caso de que lo tenga». Por eso NO van en la lista numerada
+     de valores agregados, sino en la tira de abajo de la tabla de tarifas,
+     pegados al renglón del desayuno, que es donde se leen. */
+  beneficios:
+`20% de descuento en SENSES SPA
+Transportación Hotel - Empresa - Hotel (sujeta a disponibilidad)`,
 
   servicios:
 `1.- Restaurante
@@ -1542,31 +1550,40 @@ Confiando que el presente convenio sea totalmente de su agrado. Sin otro particu
 };
 
 /**
- * Los «valores agregados» como estaban antes de octubre de 2026.
+ * Las versiones de los «valores agregados» que hay que dejar atrás.
  *
- * Marco se dio cuenta de que el 20% del spa y la transportación
- * Hotel-Empresa-Hotel sólo salían en los convenios que llevaban una habitación
- * Care: vivían en el bloque Recovery, y el documento no imprime ese bloque si
- * el convenio no tiene habitaciones de ahí. Pero no son beneficios de la
- * habitación de recuperación —la transportación es para los empleados de la
- * empresa con convenio—, así que ahora van arriba, en los valores agregados,
- * y salen siempre.
+ * Por qué hace falta esta lista: cambiar el texto de fábrica NO ALCANZA. Los
+ * ajustes guardados le ganan —`Object.assign({}, TEXTOS_DEF, lo guardado)`—,
+ * así que un hotel que ya trabajó se queda con su copia para siempre. Al
+ * cargar se cambia el texto únicamente si está IDÉNTICO a alguna de éstas, es
+ * decir si nadie lo tocó a mano. Al que escribió su propia redacción no se le
+ * pisa: es suya.
  *
- * Esta copia existe porque cambiar el texto de fábrica NO ALCANZA: los ajustes
- * guardados le ganan al de fábrica —`Object.assign({}, TEXTOS_DEF, lo que hay
- * guardado)`—, así que un hotel que ya trabajó seguiría viendo el de antes
- * para siempre. Con esto, al cargar se cambia el texto únicamente si está
- * IDÉNTICO al de antes, es decir si nadie lo tocó. Al que le haya escrito su
- * propia versión no se le pisa: su redacción es suya.
+ * Son dos porque hubo un intento de en medio. El 20% del spa y la
+ * transportación Hotel-Empresa-Hotel sólo salían en los convenios con
+ * habitación Care —vivían en el bloque Recovery, que no se imprime sin
+ * habitaciones de ahí—, y primero se subieron a esta lista numerada como los
+ * puntos 6 y 7. Marco los quería en otro lado: en la tira de abajo de la
+ * tabla, junto al desayuno. Así que la lista vuelve a sus cinco puntos y los
+ * beneficios viven ahora en su propio texto, `beneficios`. Al equipo que
+ * alcanzó a cargar la versión de en medio hay que regresarle la lista, o se
+ * le quedaría repetida en dos lugares.
  *
- * Cuando ya no quede ningún equipo con la versión vieja, esto se puede borrar.
+ * Cuando ya no quede ningún equipo con una versión vieja, esto se puede borrar.
  */
-const VALORES_ANTES =
+const VALORES_CINCO =
 `1.- Habitaciones Smart (chapas inteligentes, cortinas automatizadas, teléfono con pantalla touch, escenarios de luz).
 2.- Internet Inalámbrico en todas las áreas del hotel en cortesía
 3.- Acceso a Gimnasio
 4.- Mini bar
 5.- Cajas de seguridad en habitaciones`;
+
+const VALORES_VIEJOS = [
+  VALORES_CINCO,
+  VALORES_CINCO + `
+6.- 20% de descuento en SENSES SPA
+7.- Transportación Hotel - Empresa - Hotel (sujeta a disponibilidad)`
+];
 
 /* Para comparar dos textos como los lee una persona: sin espacios de sobra al
    final de los renglones y sin importar si el archivo traía saltos de Windows.
@@ -2493,12 +2510,12 @@ function sanear(s){
       })(),
       textos: (() => {
         const t = Object.assign({}, TEXTOS_DEF, (s.ajustes && s.ajustes.textos) || {});
-        /* El 20% del spa y la transportación se subieron a los valores
-           agregados, porque abajo sólo salían con habitación Care. Lo guardado
-           le gana a lo de fábrica, así que sin esto el hotel que ya trabajó no
-           los vería nunca. Se cambia SÓLO si nadie había tocado ese texto; al
+        /* Lo guardado le gana a lo de fábrica, así que sin esto el hotel que
+           ya trabajó se quedaría con su copia para siempre. Se cambia SÓLO si
+           el texto está idéntico a alguna versión que repartimos nosotros; al
            que escribió el suyo no se le pisa. */
-        if (mismoTexto(t.valores, VALORES_ANTES)) t.valores = TEXTOS_DEF.valores;
+        if (VALORES_VIEJOS.some(x => mismoTexto(t.valores, x)))
+          t.valores = TEXTOS_DEF.valores;
         return t;
       })(),
       grupos: saneaGrupos(s.ajustes && s.ajustes.grupos),
@@ -3587,7 +3604,16 @@ function saneaConv(c){
   o.ejecutivo = String(o.ejecutivo || "").trim();
   o.id = o.id || nuevoId("v");
   if (!ESTADOS_CONV[o.estado]) o.estado = "borrador";
+  /* Un convenio que YA EXISTÍA no gana solo un texto que no tenía.
+     El relleno con TEXTOS_DEF está para que no falte nada al dibujar, pero
+     con un texto NUEVO —los beneficios del convenio— se convierte en otra
+     cosa: una carta firmada hace tres meses empezaría a ofrecer algo que
+     nadie le ofreció a ese cliente. Si el convenio traía sus textos y ese
+     renglón no estaba, nació antes y se queda sin él. Los borradores sí lo
+     reciben: al abrirlos, el editor les vuelve a copiar los textos del hotel. */
+  const textosQueTraia = (o.textos && typeof o.textos === "object") ? o.textos : null;
   o.textos = Object.assign({}, TEXTOS_DEF, o.textos || {});
+  if (textosQueTraia && !("beneficios" in textosQueTraia)) o.textos.beneficios = "";
   o.firmaHotel   = saneaFirma(o.firmaHotel);
   o.firmaEmpresa = saneaFirma(o.firmaEmpresa);
   o.enviado      = saneaEnvio(o.enviado);
@@ -9528,6 +9554,10 @@ function renderAjustes(){
       <div class="grid">
         ${areaTexto("saludo", "Párrafo de apertura", 120)}
         ${areaTexto("especificaciones", "ESPECIFICACIONES DE TARIFAS", 210)}
+        ${areaTexto("beneficios", "Beneficios del convenio", 80,
+          "Salen debajo de la tabla de tarifas, junto al renglón del desayuno, en " +
+          "<b>todos</b> los convenios. Un renglón por beneficio. Vacío no imprime nada, y lo " +
+          "que se escriba aquí deja de repetirse abajo si el bloque Recovery ya lo decía.")}
         <div><label class="lbl">VALORES AGREGADOS EN LA TARIFA COMERCIAL</label>
           <textarea class="field mono" data-t="valores" style="width:100%;min-height:130px">${esc(t.valores)}</textarea></div>
         <div><label class="lbl">NUESTROS SERVICIOS</label>
@@ -11400,6 +11430,19 @@ function editarConvenio(id, clientePre, alCerrar){
     vigenciaHasta: finAnio,
     textos: Object.assign({}, state.ajustes.textos)
   });
+
+  /* Y los TEXTOS de la carta también se refrescan, con la misma idea y la
+     misma condición: mientras el convenio no haya salido, se pone al día solo.
+     Un convenio guarda su copia de los textos el día que nace —así un
+     documento que ya está en manos del cliente no se mueve debajo de él—, y
+     eso está bien para el que ya se mandó; para un borrador que nadie ha visto
+     era nada más un estorbo: Marco corregía un texto en Ajustes y el borrador
+     seguía diciendo lo de antes, sin manera de enterarse más que comparando.
+     `folioIntocable` es la misma frontera que decide si el folio se puede
+     mover: borrador, sin enviar, sin firma del hotel y que no haya salido
+     nunca. Y se exige además que el cliente no haya firmado. */
+  if (existente && !folioIntocable(v) && !v.firmaEmpresa)
+    v.textos = Object.assign({}, state.ajustes.textos);
 
   /* En borrador la tarifa pública se refresca desde el catálogo; el precio
      convenio se conserva.
@@ -14500,14 +14543,48 @@ function cuerpoConvenio(v, c){
    * Sin desayunos escogidos no cambia nada: el texto del bloque sale igual que
    * siempre.
    */
+  /* Los beneficios que valen para cualquier estancia, tal como los quiere
+     Marco: en la tira de abajo de la tabla, junto al «Desayuno incluido», no
+     en la lista numerada de valores agregados. Se imprimen UNA sola vez en
+     todo el documento, porque son del convenio y no de un tipo de habitación.
+     `yaSalieron` es lo que lo garantiza aunque el convenio traiga los dos
+     bloques. */
+  let yaSalieron = false;
+  const tiraBeneficios = () => {
+    if (yaSalieron) return "";
+    const txt = String(T("beneficios") || "").trim();
+    if (!txt) return "";
+    yaSalieron = true;
+    return txt;
+  };
+
+  /* Para no decir dos veces lo mismo en un documento: el bloque Recovery trae
+     escritas desde siempre las palomitas del spa y la transportación, y ahora
+     que salen arriba —para todos— se leerían repetidas en un convenio que
+     lleve Care. Se comparan sin acentos, sin palomitas y sin asteriscos,
+     porque las dos redacciones no son idénticas pero dicen lo mismo. */
+  const claveDeRenglon = s =>
+    String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9%]+/g, "");
+  const yaDichoArriba = new Set(
+    String(t.beneficios || "").split("\n").map(claveDeRenglon).filter(Boolean));
+
   const incluyeDelBloque = (g, gid, v) => {
     const suyos = (gid === "deluxe" && v.desayunos && v.desayunos.length) ? v.desayunos : null;
     const texto = String(g.incluye || "")
       .split("\n")
       .filter(l => !(suyos && /desayuno/i.test(l)))
+      .filter(l => !yaDichoArriba.has(claveDeRenglon(l)))
       .join("\n").trim();
-    return (texto ? `<div class="inc">${esc(texto)}</div>` : "") +
-      (suyos ? `<div class="inc">Desayuno incluido: ${esc(listaDesayunos(suyos))}</div>` : "");
+    /* Todo en UNA sola tira, no en varias pegadas. Cada `.inc` lleva su
+       barrita al margen, y tres seguidas se leen como tres avisos sueltos
+       cuando son una sola cosa: lo que incluye esta tarifa. */
+    const lineas = [];
+    if (texto) lineas.push(texto);
+    if (suyos) lineas.push(`Desayuno incluido: ${listaDesayunos(suyos)}`);
+    const ben = tiraBeneficios();
+    if (ben) lineas.push(ben);
+    return lineas.length ? `<div class="inc">${esc(lineas.join("\n"))}</div>` : "";
   };
 
   /* La tabla y su «incluye» se piden por separado porque en Recovery no van
