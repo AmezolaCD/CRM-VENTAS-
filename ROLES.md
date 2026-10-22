@@ -29,9 +29,18 @@ El CRM tiene nueve papeles:
 | **Coordinación de marketing** | Tablero de marketing, Campañas, Leads y Formulario | Las campañas del área y los prospectos de todos. **No alcanza la cartera** |
 | **Marketing** | Las mismas que su coordinación | Lo mismo: las campañas son del área, no de una persona |
 | **Sólo prospección** | Únicamente *Formulario* | Sólo los prospectos que esa cuenta capturó |
+| **Órdenes de trabajo** | Únicamente *Órdenes de trabajo* | La bandeja de lo que los departamentos le piden a marketing: recibir, mover y cerrar. **Nada más**: ni cartera, ni campañas, ni prospectos, ni Ajustes |
 
 Un ejecutivo ve además **las actividades que él mismo registró**, aunque sean de un cliente de
 otro: a veces se cubre a un compañero y esa llamada es suya de todos modos.
+
+
+> **El papel «Órdenes de trabajo» necesita que `roles.sql` esté al día.** No basta con
+> escogerlo en Ajustes: el servidor decide por su cuenta qué le manda a cada papel, y un papel
+> que su copia de `roles.sql` no conozca cae en la rama de ventas, que **excluye las órdenes de
+> trabajo**. El resultado sería una cuenta que entra, ve su pestaña y la encuentra vacía para
+> siempre, sin un solo error. Si se va a usar este papel, hay que volver a correr `roles.sql`
+> en Supabase; se puede repetir sin hacer daño.
 
 ## La pantalla de departamento
 

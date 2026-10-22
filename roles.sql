@@ -220,6 +220,20 @@ using (
     when public.crm_rol() in ('marketing','gte_marketing')
       then tipo in ('ajustes','usuarios','campanas','prospectos','odts')
 
+    -- Quien lleva las órdenes de trabajo y nada más. Marketing ya las ve, pero
+    -- de pilón ve las campañas, las ligas y los prospectos; esto es sólo la
+    -- bandeja.
+    --
+    -- `ajustes` y `usuarios` no son de adorno: de los ajustes sale la lista de
+    -- departamentos con su jefe —la misma que ofrece la liga— y los datos del
+    -- hotel, y de `usuarios` saca el propio servidor el papel de quien
+    -- pregunta. Sin esos dos, esta cuenta entraría a una pantalla en blanco.
+    --
+    -- Escribir no necesita renglón propio: una orden no lleva dueño, y la
+    -- regla de edición ya deja tocar lo que no lo tiene.
+    when public.crm_rol() = 'odts'
+      then tipo in ('ajustes','usuarios','odts')
+
     -- Ventas: todo menos los eventos de banquetes y las campañas.
     else tipo not in ('eventos','campanas','odts')
      and (tipo in ('ajustes','habitaciones','usuarios')

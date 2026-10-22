@@ -52,6 +52,7 @@ node pruebas/navegador/la-liga-del-hotel.mjs        # un equipo nuevo no configu
 node pruebas/navegador/editar-antes-de-la-firma.mjs # se corrige hasta que firme el cliente
 node pruebas/navegador/beneficios-del-convenio.mjs  # el spa y la transportación, sin Care
 node pruebas/navegador/los-departamentos-de-la-liga.mjs # lo que ve la liga de las ODTs
+node pruebas/navegador/solo-las-ordenes.mjs         # el papel que sólo ve las ODTs
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
@@ -97,6 +98,16 @@ la respuesta valga: que **suba antes de preguntar** —si no, contestaría «te 
 razón que no importa—, que pregunte con **la misma función que usa el formulario** y no con una
 consulta parecida escrita aparte, y que distinga «falta correr odts.sql» de «el servidor no
 contestó», que se arreglan de maneras muy distintas.
+
+`solo-las-ordenes.mjs` cuida el papel **Órdenes de trabajo**, que Marco pidió para la
+asistencia de dirección: una sola pestaña y nada más. Mide que no se cuele de más —se le dio a
+alguien precisamente para que no viera la cartera—, que no le pidan escoger departamento al
+entrar, y que los demás papeles no se hayan movido. Pero el bloque que de verdad importa es el
+último: **que `roles.sql` nombre el papel**. El servidor decide por su cuenta qué le manda a
+cada quien, y un papel que no esté ahí cae en la rama de ventas, que excluye las órdenes; sería
+una cuenta que entra, ve su pestaña y la encuentra vacía para siempre, sin un solo error en
+pantalla. La mitad de ese cambio vive en un archivo que el hotel tiene que correr, y eso es lo
+que esta prueba impide que se nos olvide.
 
 `contratos-en-papel.mjs` cuida lo que pidió el departamento legal del hotel: que a un
 **contrato** no se le pueda sacar una firma por ningún camino —ni el lienzo, ni el enlace, ni
