@@ -51,6 +51,7 @@ node pruebas/navegador/opciones-del-contrato.mjs    # comisión y desayuno
 node pruebas/navegador/la-liga-del-hotel.mjs        # un equipo nuevo no configura nada
 node pruebas/navegador/editar-antes-de-la-firma.mjs # se corrige hasta que firme el cliente
 node pruebas/navegador/beneficios-del-convenio.mjs  # el spa y la transportación, sin Care
+node pruebas/navegador/los-departamentos-de-la-liga.mjs # lo que ve la liga de las ODTs
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
@@ -86,6 +87,16 @@ cada uno guarda su copia de los textos, y un documento que ya está en manos del
 mueve debajo de él — pero un **borrador** sí se pone al día al abrirlo, igual que ya pasaba con
 la tarifa pública del catálogo, que es lo que destraba el caso real: corregir un texto en Ajustes
 y que el borrador en curso se entere.
+
+`los-departamentos-de-la-liga.mjs` sale de un reporte de Marco: agregó un departamento para
+las órdenes de trabajo y no le aparecía en la liga. No era un error: el formulario que abren los
+jefes de área **no lee la tabla de Ajustes de esa computadora, se la pide al servidor**, así que
+un departamento recién escrito no existe para la liga hasta que ese renglón sube — y el CRM no
+lo decía en ninguna parte. Ahora se puede preguntar, y lo que la prueba cuida es lo que hace que
+la respuesta valga: que **suba antes de preguntar** —si no, contestaría «te falta» por la única
+razón que no importa—, que pregunte con **la misma función que usa el formulario** y no con una
+consulta parecida escrita aparte, y que distinga «falta correr odts.sql» de «el servidor no
+contestó», que se arreglan de maneras muy distintas.
 
 `contratos-en-papel.mjs` cuida lo que pidió el departamento legal del hotel: que a un
 **contrato** no se le pueda sacar una firma por ningún camino —ni el lienzo, ni el enlace, ni

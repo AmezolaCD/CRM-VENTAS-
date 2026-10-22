@@ -1024,7 +1024,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.22-2";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.22-3";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -9383,7 +9383,13 @@ function renderAjustes(){
         <thead><tr><th>Departamento</th><th>Jefe que firma</th><th></th></tr></thead>
         <tbody></tbody></table></div>
       <p style="margin:10px 0 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <button class="btn" id="bAddJefe">+ Agregar departamento</button></p>
+        <button class="btn" id="bAddJefe">+ Agregar departamento</button>
+        <button class="btn" id="bVerJefes">Ver la lista como la ve la liga</button></p>
+      <div class="hint" style="margin-top:6px">La liga <b>no lee esta tabla de aquí: se la pide
+        al servidor</b>. Un departamento recién escrito no existe para quien abre la liga hasta
+        que este equipo lo sube. El botón de arriba lo sube y luego le pregunta al servidor qué
+        está viendo, que es la única manera de saberlo sin adivinar.</div>
+      <div id="loQueVeLaLiga" style="margin-top:8px"></div>
       <p class="hint" style="margin:6px 0 0">Se guarda con el botón del final de la pantalla.
         Los cambios llegan a la liga <b>después de sincronizar</b>: el formulario baja esta
         lista del servidor, no de esta computadora.</p>
@@ -9869,6 +9875,50 @@ function renderAjustes(){
     recogerAjustes();
     h.jefes.push({ depto:"", jefe:"" });
     guardar(); renderAjustes();
+  };
+
+  /* La pregunta que antes no se podía hacer: ¿qué lista está viendo quien abre
+     la liga? Se le pregunta al servidor CON LA MISMA FUNCIÓN que usa el
+     formulario —`jefesDeLaLiga`—, no con una consulta parecida escrita aquí:
+     dos caminos distintos acabarían contestando cosas distintas y entonces
+     esto no serviría para averiguar nada.
+
+     Y antes de preguntar se sube lo que está en pantalla. Sin eso, el botón
+     contestaría «le falta tu departamento» por la única razón que no importa:
+     que todavía no sale de aquí. */
+  p.querySelector("#bVerJefes").onclick = async () => {
+    const boton = p.querySelector("#bVerJefes");
+    const caja  = p.querySelector("#loQueVeLaLiga");
+    const pinta = (color, html) =>
+      caja.innerHTML = `<div class="note" style="border-left:3px solid ${color}">${html}</div>`;
+
+    recogerAjustes(); guardar();
+    boton.disabled = true;
+    pinta("var(--muted)", "Subiendo lo de aquí y preguntándole al servidor…");
+    try{
+      await sincronizar();
+      const r = await jefesDeLaLiga(tokenOdt());
+      if (r.motivo){
+        pinta("var(--bad)", `<b>La liga no está viendo la lista.</b> ${esc(PORQUE_NO_LA_VE[r.motivo] || "")}`);
+        return;
+      }
+      const d = difieren(h.jefes, r.lista);
+      if (!d.faltan.length && !d.sobran.length){
+        pinta("var(--ok)", `<b>La liga ya ve los mismos ${r.lista.length} departamentos.</b> ` +
+          `Quien la abra ahorita escoge entre éstos. Si alguien la tenía abierta desde antes, ` +
+          `que la cierre y la vuelva a abrir: la lista se baja al abrirla.`);
+        return;
+      }
+      pinta("var(--warn)",
+        `<b>La liga todavía no ve lo mismo que esta tabla.</b>` +
+        (d.faltan.length ? `<br>Le faltan: <b>${esc(d.faltan.join(", "))}</b>.` : "") +
+        (d.sobran.length ? `<br>Y sigue ofreciendo: <b>${esc(d.sobran.join(", "))}</b>, ` +
+                           `que aquí ya no está.` : "") +
+        `<br><span class="hint">Si acabas de escribirlos, dale otra vez en un momento: ` +
+        `puede que la subida siguiera en camino.</span>`);
+    }catch(e){
+      pinta("var(--bad)", "<b>No se pudo revisar.</b> " + esc(String(e && e.message ? e.message : e)));
+    }finally{ boton.disabled = false; }
   };
   p.querySelectorAll("[data-delj]").forEach(b => b.onclick = () => {
     /* Se quita de lo que está EN PANTALLA, no de la lista ya guardada. Recoger
@@ -12639,6 +12689,45 @@ async function jefesDeLaLiga(token){
     return { lista, motivo: lista.length ? "" : "sin-lista" };
   }catch(e){ return { lista:[], motivo:"sin-respuesta" }; }
 }
+
+/**
+ * Qué departamentos le faltan al servidor y cuáles le sobran.
+ *
+ * Se comparan por el nombre del departamento, sin mayúsculas ni espacios de
+ * más, porque es lo único que el formulario usa para armar su desplegable: el
+ * nombre del jefe puede cambiar sin que a la liga le importe.
+ */
+function difieren(aqui, alla){
+  const clave = l => new Set((l || []).map(x =>
+    String((x && x.depto) || "").trim().toLowerCase()).filter(Boolean));
+  const a = clave(aqui), b = clave(alla);
+  const nombre = (l, k) => (l || []).find(x =>
+    String((x && x.depto) || "").trim().toLowerCase() === k);
+  return {
+    faltan: [...a].filter(k => !b.has(k)).map(k => nombre(aqui, k).depto),
+    sobran: [...b].filter(k => !a.has(k)).map(k => nombre(alla, k).depto)
+  };
+}
+
+/**
+ * Lo que hay que decirle a QUIEN ADMINISTRA cuando la liga no ve su lista.
+ *
+ * No es lo mismo que AVISO_SIN_JEFES: aquél es para el jefe de área que está
+ * llenando la hoja y no puede arreglar nada, así que se le dice que escriba a
+ * mano. A éste sí se le dice qué falta y quién lo arregla, porque es él.
+ */
+const PORQUE_NO_LA_VE = {
+  "sin-nube":      "Este equipo no está conectado a la nube, así que no hay liga que revisar. " +
+                   "La lista sólo viaja si hay servidor.",
+  "sin-funcion":   "El servidor todavía no sabe contestar esta pregunta: falta correr " +
+                   "odts.sql en Supabase. Hasta entonces, quien abra la liga escribe su " +
+                   "departamento a mano.",
+  "sin-lista":     "El servidor no tiene guardado ni un departamento todavía. Vuelve a " +
+                   "intentarlo en un momento; si sigue igual, revisa que este equipo esté " +
+                   "sincronizando.",
+  "sin-respuesta": "No se pudo preguntarle al servidor en este momento. No quiere decir que " +
+                   "esté mal: vuelve a intentarlo."
+};
 
 /**
  * Por qué no salió la lista de departamentos.
