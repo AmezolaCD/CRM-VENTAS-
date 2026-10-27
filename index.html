@@ -1039,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.27-4";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.27-5";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1512,9 +1512,20 @@ Anteponiendo un cordial saludo y agradeciendo su preferencia, nos complace prese
      de estancia (…), estos beneficios deben venir junto con el desayuno
      incluido en el caso de que lo tenga». Por eso NO van en la lista numerada
      de valores agregados, sino en la tira de abajo de la tabla de tarifas,
-     pegados al renglón del desayuno, que es donde se leen. */
+     pegados al renglón del desayuno, que es donde se leen.
+
+     El gimnasio llegó después y por el mismo camino: vivía sólo dentro del
+     bloque Recovery, así que en un convenio sin Care no salía, y en uno con
+     Care salía solo —en una tira para él—, porque el spa y la transportación
+     ya se decían arriba y el de-duplicador se las llevaba. Marco: «el incluye
+     acceso a gimnasio sólo sale cuando se agrega una recovery, haz que salga
+     junto con las otras». Va primero, en el orden en que venían en Recovery.
+
+     Sigue además como punto 3 de `valores`, a propósito: ahí la lista habla de
+     lo que es el hotel, y aquí de lo que trae esta tarifa. */
   beneficios:
-`20% de descuento en SENSES SPA
+`Acceso a gimnasio
+20% de descuento en SENSES SPA
 Transportación Hotel - Empresa - Hotel (sujeta a disponibilidad)`,
 
   servicios:
@@ -1598,6 +1609,22 @@ const VALORES_VIEJOS = [
   VALORES_CINCO + `
 6.- 20% de descuento en SENSES SPA
 7.- Transportación Hotel - Empresa - Hotel (sujeta a disponibilidad)`
+];
+
+/**
+ * Lo mismo para los beneficios, que también crecieron después de repartirse.
+ *
+ * Salieron con dos renglones —el spa y la transportación— y ahora llevan tres:
+ * el gimnasio se les sumó porque suelto, dentro del bloque Recovery, no salía
+ * en los convenios sin Care. Al equipo que ya guardó sus ajustes hay que
+ * alcanzarlo, o el cambio no le llega nunca: lo guardado le gana a lo de
+ * fábrica.
+ *
+ * Cuando ya no quede ningún equipo con una versión vieja, esto se puede borrar.
+ */
+const BENEFICIOS_VIEJOS = [
+`20% de descuento en SENSES SPA
+Transportación Hotel - Empresa - Hotel (sujeta a disponibilidad)`
 ];
 
 /* Para comparar dos textos como los lee una persona: sin espacios de sobra al
@@ -2544,6 +2571,8 @@ function sanear(s){
            que escribió el suyo no se le pisa. */
         if (VALORES_VIEJOS.some(x => mismoTexto(t.valores, x)))
           t.valores = TEXTOS_DEF.valores;
+        if (BENEFICIOS_VIEJOS.some(x => mismoTexto(t.beneficios, x)))
+          t.beneficios = TEXTOS_DEF.beneficios;
         return t;
       })(),
       grupos: saneaGrupos(s.ajustes && s.ajustes.grupos),
@@ -14827,13 +14856,20 @@ function cuerpoConvenio(v, c){
   };
 
   /* Para no decir dos veces lo mismo en un documento: el bloque Recovery trae
-     escritas desde siempre las palomitas del spa y la transportación, y ahora
-     que salen arriba —para todos— se leerían repetidas en un convenio que
-     lleve Care. Se comparan sin acentos, sin palomitas y sin asteriscos,
-     porque las dos redacciones no son idénticas pero dicen lo mismo. */
+     escritas desde siempre las palomitas del gimnasio, el spa y la
+     transportación, y ahora que salen arriba —para todos— se leerían
+     repetidas en un convenio que lleve Care. Se comparan sin acentos, sin
+     palomitas y sin asteriscos, porque las dos redacciones no son idénticas
+     pero dicen lo mismo.
+
+     Y sin un «incluye» al principio, que es lo único que distinguía
+     «✓ Incluye acceso a gimnasio» de «Acceso a gimnasio»: sin quitarlo, el
+     renglón del bloque no casaba con el de arriba y el gimnasio se imprimía
+     dos veces. */
   const claveDeRenglon = s =>
     String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
-      .replace(/[^a-z0-9%]+/g, "");
+      .replace(/[^a-z0-9%]+/g, "")
+      .replace(/^incluye/, "");
   const yaDichoArriba = new Set(
     String(t.beneficios || "").split("\n").map(claveDeRenglon).filter(Boolean));
 

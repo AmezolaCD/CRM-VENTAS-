@@ -7,9 +7,15 @@
 
    Tenía razón, y la causa era que esos tres renglones vivían en el bloque
    Recovery, que el documento sólo imprime si el convenio trae una habitación
-   de ese grupo —la Care—. El gimnasio de todos modos salía, porque ya estaba
-   en los valores agregados y en los servicios; los que de plano no aparecían
-   nunca eran el 20% del spa y la transportación.
+   de ese grupo —la Care—. Primero subieron dos: el 20% del spa y la
+   transportación, que eran los que de plano no aparecían nunca.
+
+   El gimnasio se quedó abajo, y eso se vio en el siguiente convenio de
+   verdad. Marco: «el incluye acceso a gimnasio sólo sale cuando se agrega una
+   recovery, haz que salga junto con las otras». Se había vuelto un caso peor
+   que el original: en un convenio sin Care no salía, y en uno con Care salía
+   SOLO —en una tira para él—, porque sus dos compañeros ya se decían arriba y
+   el de-duplicador se los llevaba. El bloque 8 es el suyo.
 
    Y no son beneficios de la habitación de recuperación: la transportación
    *Hotel - Empresa - Hotel* es para los empleados de la empresa con convenio.
@@ -133,8 +139,11 @@ await bloque('2 · el convenio CON Care no perdió nada', async () => {
     !/✓\s*20% de descuento/i.test(t) && !/✓\s*Transportaci/i.test(t));
   afirma('y la transportación se ofrece una sola vez en todo el documento',
     (t.match(/Transportaci[óo]n Hotel/gi) || []).length === 1);
-  afirma('pero el gimnasio de Recovery sigue en su bloque',
-    /Incluye acceso a gimnasio/i.test(t));
+  /* El gimnasio ya tampoco: subió con los otros dos, y el renglón de Recovery
+     —«✓ Incluye acceso a gimnasio»— se de-duplica contra él. Sin esto, el
+     bloque Recovery quedaba imprimiendo una tira con un solo renglón. */
+  afirma('Y TAMPOCO LA DEL GIMNASIO, que era la que quedaba suelta',
+    !/✓\s*Incluye acceso a gimnasio/i.test(t));
 });
 
 /* --- 3 --------------------------------------------------------------------
@@ -226,6 +235,113 @@ await bloque('7 · un BORRADOR se pone al día al abrirlo', async () => {
   afirma('antes de abrirlo no los traía', !r.antes);
   afirma('ABRIRLO LE COPIA LOS TEXTOS DEL HOTEL',
     /20% de descuento en SENSES SPA/.test(r.despues || ''));
+});
+
+/* --- 8 --------------------------------------------------------------------
+   EL GIMNASIO. El caso que reportó Marco con la hoja delante.
+
+   Ojo al contar: «Acceso a Gimnasio» también es el punto 3 de la lista de
+   VALORES AGREGADOS, y ahí se queda a propósito —ahí la lista habla de lo que
+   es el hotel; en la tira, de lo que trae esta tarifa—. Así que no se buscan
+   coincidencias sueltas en el texto: se cuentan RENGLONES que digan
+   exactamente eso, que son los de la tira. */
+await bloque('8 · el acceso a gimnasio sale con los demás beneficios', async () => {
+  /** Cuántos renglones del documento dicen exactamente este texto. */
+  const renglones = (texto, dice) =>
+    texto.split('\n').map(l => l.trim()).filter(l => l.toLowerCase() === dice).length;
+
+  /* 8.1 · Sin Care. Es el convenio normal, y hasta hoy no lo mencionaba. */
+  const sin = await documento(DELUXE, { desayunos:['americano'] });
+  afirma('UN CONVENIO SIN CARE YA OFRECE EL GIMNASIO',
+    renglones(sin, 'acceso a gimnasio') === 1);
+
+  /* 8.2 · En la misma tira que los otros, y en orden. Cuatro renglones
+     seguidos se leen como una sola cosa: lo que trae la tarifa. */
+  const dond = (texto, re) => texto.search(re);
+  const iDes = dond(sin, /Desayuno incluido/);
+  const iGim = dond(sin, /^\s*Acceso a gimnasio\s*$/m);
+  const iSpa = dond(sin, /20% de descuento en SENSES SPA/);
+  const iTra = dond(sin, /Transportaci[óo]n Hotel/);
+  afirma('EN EL ORDEN: desayuno, gimnasio, spa y transportación',
+    iDes >= 0 && iGim > iDes && iSpa > iGim && iTra > iSpa);
+  afirma('y antes de la lista de valores agregados',
+    iGim < dond(sin, /VALORES AGREGADOS/i) || dond(sin, /VALORES AGREGADOS/i) < 0);
+
+  /* 8.3 · Con Care: una sola vez, y sin la tira suelta de antes. */
+  const con = await documento(DELUXE.concat(CARE), { desayunos:['americano'], incluyeRecovery:true });
+  afirma('CON CARE SE OFRECE UNA SOLA VEZ', renglones(con, 'acceso a gimnasio') === 1);
+  afirma('y ya no queda la palomita suelta del bloque Recovery',
+    !/✓\s*Incluye acceso a gimnasio/i.test(con));
+  afirma('el punto 3 de valores agregados sigue en su lugar',
+    /3\.- Acceso a Gimnasio/.test(con));
+
+  /* 8.4 · Y de verdad va DENTRO de la tira, no en una suya. Esto se mide en
+     el documento colgado: `innerText` de un nodo suelto no renderiza. */
+  const tiras = await p.evaluate(() => {
+    const v = saneaConv({ id:'v8', clienteId:'c1', ejecutivo:'Sistemas', fecha:'2026-10-27',
+      desayunos:['americano'], incluyeRecovery:true,
+      habitaciones:[{ grupo:'deluxe', codigo:'DLX', nombre:'Deluxe King', publica:2500, convenio:1900 },
+                    { grupo:'recovery', codigo:'CARE', nombre:'Care', publica:null, convenio:3500 }],
+      textos: Object.assign({}, state.ajustes.textos) });
+    const caja = document.createElement('div');
+    caja.className = 'doc-body';
+    caja.style.cssText = 'position:fixed;left:-99999px;top:0;width:820px';
+    caja.innerHTML = `<div class="doc-contenido">${cuerpoConvenio(v, cliente('c1'))}</div>`;
+    document.body.appendChild(caja);
+    const t = [...caja.querySelectorAll('.inc')].map(x => x.innerText.trim());
+    caja.remove();
+    return t;
+  });
+  afirma('TODO EN UNA SOLA TIRA, no una para el gimnasio y otra para el resto',
+    tiras.length === 1);
+  afirma('y esa tira los lleva a los cuatro',
+    tiras.length === 1 && /Desayuno incluido/.test(tiras[0]) &&
+    /Acceso a gimnasio/i.test(tiras[0]) && /SENSES SPA/.test(tiras[0]) &&
+    /Transportaci[óo]n/i.test(tiras[0]));
+});
+
+/* --- 9 --------------------------------------------------------------------
+   La migración del gimnasio. Mismo razonamiento que el bloque 3: cambiar el
+   texto de fábrica no le llega a nadie, porque lo guardado le gana. */
+await bloque('9 · al hotel que ya tiene los beneficios guardados le llega el gimnasio', async () => {
+  const r = await p.evaluate(() => {
+    const salida = [];
+    for (const x of BENEFICIOS_VIEJOS){
+      const viejo = JSON.parse(JSON.stringify(state));
+      viejo.ajustes.textos.beneficios = x;
+      salida.push(sanear(viejo).ajustes.textos.beneficios);
+    }
+    return salida;
+  });
+  afirma('la versión que repartimos gana el gimnasio',
+    r.length > 0 && r.every(x => /Acceso a gimnasio/i.test(x)));
+  afirma('sin perder el spa ni la transportación',
+    r.every(x => /SENSES SPA/.test(x) && /Transportaci[óo]n Hotel/.test(x)));
+
+  /* El contrapeso, otra vez: quien redactó el suyo manda. */
+  const MIO = 'Lo que yo le ofrezco a mis clientes';
+  const mio = await p.evaluate((m) => {
+    const otro = JSON.parse(JSON.stringify(state));
+    otro.ajustes.textos.beneficios = m;
+    return sanear(otro).ajustes.textos.beneficios;
+  }, MIO);
+  afirma('Y AL QUE ESCRIBIÓ EL SUYO NO SE LE PISA', mio === MIO);
+
+  /* Y el convenio que ya salió del hotel no se mueve: su copia manda. */
+  const viejo = await p.evaluate(() => {
+    const v = saneaConv({ id:'v10', clienteId:'c1', ejecutivo:'Sistemas', fecha:'2026-08-01',
+      habitaciones:[{ grupo:'recovery', codigo:'CARE', nombre:'Care', publica:null, convenio:3500 }],
+      incluyeRecovery:true,
+      textos: (() => { const x = Object.assign({}, state.ajustes.textos);
+                       delete x.beneficios; return x; })() });
+    const caja = document.createElement('div');
+    caja.innerHTML = `<div class="doc-contenido">${cuerpoConvenio(v, cliente('c1'))}</div>`;
+    return caja.innerText;
+  });
+  afirma('UN CONVENIO YA HECHO SIGUE IMPRIMIENDO SU BLOQUE RECOVERY IGUAL QUE AYER',
+    /Incluye acceso a gimnasio/i.test(viejo) &&
+    /20% de descuento en SENSES SPA/.test(viejo) &&
+    /Transportaci[óo]n/i.test(viejo));
 });
 
 await br.close(); srv.close();
