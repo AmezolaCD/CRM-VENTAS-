@@ -311,6 +311,91 @@ await bloque('11 · salones y eventos salió del editor, sin borrar lo que ya ha
     /Conferencia/.test(doc.texto));
 });
 
+/* --- 12 -------------------------------------------------------------------
+   EL HOTEL SE NOMBRA, Y LAS TRES PRIMERAS CLÁUSULAS VAN ARRIBA.
+
+   Marco, con un contrato de verdad delante: las tres cláusulas que dicen
+   QUIÉN se obliga y A QUÉ empezaban con una raya —«____________ proporcionará
+   al Cliente servicios de hospedaje…»— porque la razón social nunca se había
+   capturado. Y se leían hasta el final, detrás de los precios. Pidió las dos
+   cosas: el nombre por omisión, y el apartado antes del contrato de
+   servicios. */
+await bloque('12 · el hotel se nombra, y objeto/servicio/contraprestación van arriba', async () => {
+  /* 12.1 · La trampa de siempre: lo guardado le gana a lo de fábrica, y el
+     hotel tiene guardada una razón social VACÍA. Sin reponerla, el cambio no
+     le llega a nadie y el contrato sigue saliendo con la raya. */
+  const mig = await p.evaluate(() => {
+    const comoEstaHoy = JSON.parse(JSON.stringify(state));
+    comoEstaHoy.ajustes.hotel.razonSocial = '';
+    const suyo = JSON.parse(JSON.stringify(state));
+    suyo.ajustes.hotel.razonSocial = 'LA MÍA, S.A. DE C.V.';
+    return {
+      fabrica:  HOTEL_DEF.razonSocial,
+      repuesta: sanear(comoEstaHoy).ajustes.hotel.razonSocial,
+      suya:     sanear(suyo).ajustes.hotel.razonSocial,
+      otros: ['representante','rfc','escritura','domicilioFiscal',
+              'banco','cuenta','clabe','registroProfeco'].map(k => String(HOTEL_DEF[k] || '')),
+    };
+  });
+  afirma('UNA RAZÓN SOCIAL VACÍA SE REPONE CON LA DE FÁBRICA',
+    !!mig.fabrica.trim() && mig.repuesta === mig.fabrica);
+  afirma('y a quien capturó la suya NO se le pisa', mig.suya === 'LA MÍA, S.A. DE C.V.');
+
+  /* 12.2 · EL GRUPO DE CONTROL del archivo público. El nombre de la empresa
+     es lo único fiscal que se escribió; lo que sirve para cobrarle a alguien
+     en nombre del hotel se queda fuera, y si mañana se cuela, esto se pone
+     rojo. */
+  afirma('Y NINGÚN OTRO DATO FISCAL NI BANCARIO ENTRÓ AL PROGRAMA',
+    mig.otros.every(v => v.trim() === ''));
+
+  /* 12.3 · El orden. Los encabezados salen en orden de documento, así que la
+     lista de `h2` es el índice de la hoja. */
+  const r = await documento('contrato', LLENO,
+    { razonSocial: mig.fabrica, rfc:'', banco:'', cuenta:'', clabe:'' });
+  const pos = t => r.h2.indexOf(t);
+  afirma('OBJETO, SERVICIO Y CONTRAPRESTACIÓN VAN ANTES DE LOS SERVICIOS COTIZADOS',
+    pos('Objeto') >= 0 && pos('Objeto') < pos('Servicios cotizados') &&
+    pos('Servicio') < pos('Servicios cotizados') &&
+    pos('Contraprestación') < pos('Servicios cotizados'));
+  afirma('y antes de la propuesta económica',
+    pos('Contraprestación') < pos('Propuesta económica · hospedaje'));
+  afirma('en su orden: objeto, servicio y contraprestación',
+    pos('Objeto') < pos('Servicio') && pos('Servicio') < pos('Contraprestación'));
+  /* Y las otras catorce siguen abajo: hablan de montos y fechas que el
+     cliente todavía no ha visto cuando llega al objeto. */
+  afirma('LAS DEMÁS CLÁUSULAS SIGUEN DESPUÉS DE LOS PRECIOS',
+    pos('Condiciones del bloqueo') > pos('Costos adicionales no incluidos') &&
+    pos('Jurisdicción') > pos('Costos adicionales no incluidos'));
+  afirma('y ninguna se duplicó al moverlas',
+    ['Objeto','Servicio','Contraprestación','Condiciones del bloqueo','Jurisdicción']
+      .every(t => r.h2.filter(x => x === t).length === 1));
+
+  /* 12.4 · Las tres nombran al hotel, no a una raya. */
+  const U = r.texto.toUpperCase();
+  /* El corte de abajo va desde «OBJETO»: el saludo ya dice «anexo detallado de
+     los servicios cotizados…» más arriba, así que buscar ese texto desde el
+     principio daba un recorte vacío —y la prueba habría pasado sin mirar
+     nada—. El que interesa es el ENCABEZADO, que viene después. */
+  const iObjeto = U.indexOf('OBJETO');
+  const arriba = r.texto.slice(iObjeto, U.indexOf('SERVICIOS COTIZADOS', iObjeto));
+  afirma('LAS TRES NOMBRAN AL HOTEL, una por cláusula',
+    (arriba.match(new RegExp(mig.fabrica, 'g')) || []).length === 3);
+  afirma('y ya no empiezan con una raya', !/________/.test(arriba));
+
+  /* 12.5 · Pero sólo se llenó el nombre: lo demás se sigue viendo pendiente,
+     que es lo que hace que alguien lo capture antes de mandar el contrato. */
+  const abajo = r.texto.slice(U.indexOf('DATOS PARA EL PAGO'));
+  afirma('en los datos del pago sale el nombre', abajo.includes(mig.fabrica));
+  afirma('PERO EL RFC, LA CUENTA Y LA CLABE SIGUEN COMO RAYA',
+    (abajo.match(/________/g) || []).length >= 3);
+
+  /* 12.6 · Y la cotización no se movió: no lleva clausulado. */
+  const cot = await documento('cotizacion', LLENO, { razonSocial: mig.fabrica });
+  afirma('LA COTIZACIÓN NO LLEVA NINGUNO DE LOS TRES',
+    !cot.h2.includes('Objeto') && !cot.h2.includes('Servicio') &&
+    !cot.h2.includes('Contraprestación'));
+});
+
 await br.close(); srv.close();
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTodo en verde.\n');
 process.exit(fallas ? 1 : 0);

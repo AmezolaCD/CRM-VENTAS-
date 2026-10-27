@@ -1039,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.27-5";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.27-6";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1340,10 +1340,19 @@ const HOTEL_DEF = {
     { depto:"Sistemas",      jefe:"Marco Ramírez"    }
   ],
 
-  /* Los datos fiscales y bancarios del contrato de banquetes van vacíos a
-     propósito: este archivo es público. Se capturan una vez en
-     Ajustes → Datos legales del contrato y se quedan en la nube del hotel. */
-  razonSocial: "", representante: "", rfc: "", escritura: "",
+  /* Los datos fiscales y bancarios van vacíos a propósito: este archivo es
+     público. Se capturan una vez en Ajustes → Datos legales del contrato y se
+     quedan en la nube del hotel.
+
+     La RAZÓN SOCIAL es la excepción, y Marco la pidió así: sin ella las tres
+     primeras cláusulas del contrato —Objeto, Servicio y Contraprestación—
+     salían empezando con una raya, y el cliente firmaba un papel que no dice
+     quién se obliga. El nombre de una empresa no es un secreto: va en cada
+     factura y en el registro de comercio, y aquí ya están el nombre
+     comercial, el domicilio y el teléfono del hotel. Lo que sirve para
+     cobrarle a alguien en su nombre —RFC, escritura, banco, cuenta, CLABE—
+     se queda fuera, y así tiene que seguir. */
+  razonSocial: "Hotel Boutique NC", representante: "", rfc: "", escritura: "",
   domicilioFiscal: "", banco: "", cuenta: "", clabe: "",
   horarioAtencion: "de 9:00 a 18:00 horas, de lunes a viernes",
   registroProfeco: "", multaFumar: "20,000"
@@ -2561,6 +2570,13 @@ function sanear(s){
       hotel:  (() => {
         const h = Object.assign({}, HOTEL_DEF, (s.ajustes && s.ajustes.hotel) || {});
         h.jefes = saneaJefes(h.jefes);
+        /* Lo guardado le gana a lo de fábrica, y el hotel ya tiene guardada
+           una razón social VACÍA: ese "" pisaría el valor de arriba y el
+           contrato seguiría saliendo con la raya. Vacío quiere decir «nunca
+           se capturó», así que aquí sí se puede reponer sin preguntarse nada
+           más: a quien ya escribió la suya no se le toca, porque la suya no
+           está vacía. */
+        if (!String(h.razonSocial || "").trim()) h.razonSocial = HOTEL_DEF.razonSocial;
         return h;
       })(),
       textos: (() => {
@@ -15182,14 +15198,21 @@ function cuerpoContrato(k, c){
      Lo del hotel —razón social, RFC, domicilio, banco— sale de Ajustes y
      nunca está escrito aquí: el repositorio es público. Si falta, se imprime
      la raya y se ve el hueco. */
-  const politicasDelContrato = () => {
-    if (!enPapel) return "";
-    const li = xs => `<ul class="ct-serv">${xs.map(x => `<li>${x}</li>`).join("")}</ul>`;
-    const ol = xs => `<ol class="ct-serv">${xs.map(x => `<li>${x}</li>`).join("")}</ol>`;
-    const raya = "________________________________________________________________";
-    const pagos = Array.isArray(k.pagos) ? k.pagos : [];
-    const firman = Array.isArray(k.firmanMaestra) ? k.firmanMaestra : [];
+  /* LO QUE SE OBLIGA CADA QUIEN, arriba del todo.
 
+     Marco: «que el apartado de objeto, Servicio y contraprestación vaya antes
+     del contrato de servicios». Son las tres cláusulas que dicen QUIÉN se
+     obliga y A QUÉ, y se leían hasta el final, detrás de los precios. Ahora
+     van en seguida del saludo, antes de los servicios cotizados.
+
+     Las otras catorce se quedan abajo, en `politicasDelContrato`, y no es
+     pereza: hablan de montos, plazos, anticipos y fechas de cancelación que
+     el cliente todavía no ha visto cuando llega aquí.
+
+     Lleva la misma guarda que el resto del clausulado: una COTIZACIÓN no lo
+     imprime. */
+  const objetoServicioContraprestacion = () => {
+    if (!enPapel) return "";
     return `
     <h2>Objeto</h2>
     <div class="pol-html"><b>${esc(hueco(h.razonSocial))}</b> proporcionará al Cliente servicios de
@@ -15215,8 +15238,18 @@ function cuerpoContrato(k, c){
       contienen en el presente documento, en ${esc(hueco(h.domicilioFiscal || h.direccion))} o
       mediante los medios de pago que establezcan las partes, que de manera enunciativa y no
       limitativa pudieran ser transferencia de fondos, cargo a cuenta de crédito o cualquier
-      otro autorizado en términos de ley.</div>
+      otro autorizado en términos de ley.</div>`;
+  };
 
+  const politicasDelContrato = () => {
+    if (!enPapel) return "";
+    const li = xs => `<ul class="ct-serv">${xs.map(x => `<li>${x}</li>`).join("")}</ul>`;
+    const ol = xs => `<ol class="ct-serv">${xs.map(x => `<li>${x}</li>`).join("")}</ol>`;
+    const raya = "________________________________________________________________";
+    const pagos = Array.isArray(k.pagos) ? k.pagos : [];
+    const firman = Array.isArray(k.firmanMaestra) ? k.firmanMaestra : [];
+
+    return `
     <h2>Condiciones del bloqueo</h2>
     ${li([
       "Los únicos tipos y número de habitaciones reservadas en este momento por el Cliente son " +
@@ -15499,6 +15532,8 @@ function cuerpoContrato(k, c){
     </div>` : ""}
 
     <p style="white-space:pre-wrap">${esc(rellena(TEXTOS_CT.saludo))}</p>
+
+    ${objetoServicioContraprestacion()}
 
     ${cu.lineas.length ? `
       <h2>Servicios cotizados</h2>
