@@ -217,6 +217,82 @@ for (const tema of ['light', 'dark'])
   await ctx.close();
 });
 
+/* --- La copia en PDF, sola ------------------------------------------------
+   Marco: «quiero que los clientes al firmar en la liga que les mando, se les
+   descargue el documento en PDF automáticamente».
+
+   Antes se le pedía al cliente que volviera a abrir el enlace y le picara a
+   un botón: dos instrucciones después de que la persona ya dio por terminado
+   lo suyo, que es cuando nadie hace nada. Casi ninguno se quedaba con su
+   copia.
+
+   Lo que se cuida aquí es sobre todo lo que puede salir mal:
+   · que el PDF LLEVE SU FIRMA. El objeto de esa pantalla todavía no la trae
+     —viaja por el buzón y el hotel la aplica al sincronizar—, así que si no
+     se le pone antes de dibujar, el cliente se baja su documento en blanco;
+   · que si el PDF no se puede armar, ESO NO SE PAREZCA a que la firma falló.
+     La firma ya está entregada;
+   · y que el botón se quede puesto aunque la descarga salga bien, porque el
+     navegador del teléfono a veces la bloquea sin avisarle a nadie. */
+await bloque('7 · al firmar, la copia en PDF se baja sola', async () => {
+  estado = 201; recibido = null;
+  const { ctx, p } = await abrir();
+  const bajadas = [];
+  p.on('download', d => bajadas.push(d.suggestedFilename()));
+  await trazar(p);
+  await p.locator('#cfOk').click();
+  await p.locator('#cfCopia').waitFor({ timeout: 20000 }).catch(() => {});
+  /* Armar el PDF tarda: se espera a que el renglón deje de decir que está
+     preparándola. */
+  await p.waitForFunction(
+    () => { const e = document.querySelector('#cfCopia');
+            return e && !/Preparando/i.test(e.textContent); },
+    null, { timeout: 30000 }).catch(() => {});
+  const txt = await p.locator('#firmaCliente').innerText();
+
+  afirma('la firma se entregó igual que siempre',
+    !!recibido && /qued[oó] firmada/i.test(txt));
+  afirma('SE DESCARGÓ UN ARCHIVO SOLO, sin que el cliente pidiera nada',
+    bajadas.length === 1);
+  afirma('y es un PDF con nombre del documento',
+    /\.pdf$/i.test(bajadas[0] || '') && /convenio/i.test(bajadas[0] || ''));
+  afirma('la pantalla le dice que ya se descargó', /se descarg/i.test(txt));
+  afirma('Y LE DEJA EL BOTÓN, porque el teléfono a veces la bloquea callado',
+    await p.locator('#cfBajar').count() === 1);
+  afirma('ya no le pide volver a abrir el enlace', !/vuelva a abrir este enlace/i.test(txt));
+  await ctx.close();
+});
+
+/* --- Y si el PDF no se puede armar --------------------------------------- */
+await bloque('8 · si el PDF falla, la firma NO parece haber fallado', async () => {
+  estado = 201; recibido = null;
+  const { ctx, p } = await abrir();
+  /* Se rompe a propósito el armador del PDF, que es lo que pasaría en un
+     teléfono viejo o con poca memoria. */
+  /* Se rompe el armador QUE DE VERDAD SE LLAMA: el del descriptor.
+     `pdfDeConvenio` es un const —asignarle a window ni siquiera lo toca— y
+     el descriptor guarda su propia referencia, así que romper el nombre
+     global no hacía nada y el PDF salía bien: la prueba se ponía roja por su
+     culpa, no por la del código. */
+  await p.evaluate(() => {
+    DOCS_FIRMABLES.convenios.pdf = async () => { throw new Error('de mentiras'); };
+  });
+  await trazar(p);
+  await p.locator('#cfOk').click();
+  await p.waitForFunction(
+    () => { const e = document.querySelector('#cfCopia');
+            return e && !/Preparando/i.test(e.textContent); },
+    null, { timeout: 30000 }).catch(() => {});
+  const txt = await p.locator('#firmaCliente').innerText();
+  afirma('la firma sigue dándose por entregada',
+    !!recibido && /qued[oó] firmada/i.test(txt));
+  afirma('no se le enseña un error de técnico',
+    !/Error|undefined|de mentiras/.test(txt));
+  afirma('se le dice que la copia no salió sola', /no se pudo preparar la copia/i.test(txt));
+  afirma('Y LE QUEDA EL BOTÓN para intentarlo', await p.locator('#cfBajar').count() === 1);
+  await ctx.close();
+});
+
 await br.close(); srv.close();
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTodo en verde.\n');
 process.exit(fallas ? 1 : 0);

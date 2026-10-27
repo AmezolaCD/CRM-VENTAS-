@@ -1039,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.27-1";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.27-2";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -20002,12 +20002,61 @@ function dibujarParaFirmar(caja, v, datos, pedir){
         body: JSON.stringify(fila)
       });
       if (!r.ok) throw new Error(`${r.status} · ${(await r.text()).slice(0,200)}`);
+      /* LA COPIA SE BAJA SOLA, con la firma ya dibujada dentro.
+
+         Marco: «quiero que los clientes al firmar en la liga que les mando,
+         se les descargue el documento en PDF automáticamente».
+
+         Antes se le decía que volviera a abrir el enlace y le picara a
+         «Descargar en PDF»: dos instrucciones después de que la persona ya
+         dio por terminado lo suyo, que es cuando nadie hace nada. Casi
+         ninguno se quedaba con su copia.
+
+         La firma que se le acaba de mandar al hotel se le pone aquí al
+         documento ANTES de dibujarlo, porque el objeto de esta pantalla
+         todavía no la trae: viaja por el buzón y el hotel la aplica al
+         sincronizar. Sin esto, el cliente se bajaría su documento sin su
+         propia firma. */
+      v[info.campoFirma] = saneaFirma({
+        nombre, puesto: fila.puesto, celular: fila.celular,
+        fecha: new Date().toISOString(), img: fila.img
+      });
+
       caja.innerHTML = `<div class="note" style="border-left:3px solid var(--ok)">
         <b>Listo${nombre ? ", " + esc(nombre) : ""}. Su ${esc(comoSeLlama)} quedó
-        firmada.</b><br><br>
-        El hotel ya fue notificado. Si quiere guardar una copia, vuelva a abrir este enlace
-        antes de cerrarlo y use <i>Descargar en PDF</i>.</div>`;
+        firmada.</b> El hotel ya fue notificado.
+        <div id="cfCopia" style="margin-top:12px">Preparando su copia en PDF…</div></div>`;
       window.scrollTo(0, 0);
+
+      /* EN SU PROPIO try: la firma YA ESTÁ ENTREGADA. Si el PDF no se puede
+         armar —un teléfono viejo, poca memoria—, eso no puede parecerse a
+         que la firma falló, ni volver a dejar al cliente sin copia: se le
+         deja el botón y ya. */
+      const copia = caja.querySelector("#cfCopia");
+      const conBoton = aviso => {
+        copia.innerHTML = `${aviso} <button class="btn" id="cfBajar"
+          style="margin-top:8px">Descargar en PDF</button>`;
+        copia.querySelector("#cfBajar").onclick = async ev => {
+          const bb = ev.currentTarget, t = bb.textContent;
+          bb.disabled = true; bb.textContent = "Generando…";
+          try{
+            const by = await info.pdf(v, c);
+            descargarBlob(new Blob([by], { type:"application/pdf" }), info.nombrePdf(v, c));
+          }catch(e2){ alert("No se pudo generar el PDF. Use Imprimir del navegador."); }
+          finally{ bb.disabled = false; bb.textContent = t; }
+        };
+      };
+      try{
+        const bytes = await info.pdf(v, c);
+        descargarBlob(new Blob([bytes], { type:"application/pdf" }), info.nombrePdf(v, c));
+        /* El botón se deja puesto aunque la descarga haya salido bien: el
+           navegador del teléfono a veces la bloquea sin avisar a nadie, y
+           entonces el único rastro sería este renglón. */
+        conBoton("<b>Su copia se descargó.</b> Si no la encuentra, vuelva a bajarla:");
+      }catch(ex2){
+        console.error("No se pudo armar el PDF de la copia: " + String(ex2.message || ex2));
+        conBoton("No se pudo preparar la copia sola. Inténtelo con este botón:");
+      }
     }catch(ex){
       /* Lo que ve aquí es un CLIENTE del hotel, no un técnico.
 
