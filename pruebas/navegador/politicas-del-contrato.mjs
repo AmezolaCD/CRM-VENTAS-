@@ -78,12 +78,22 @@ const documento = (tipo, campos, hotel) => p.evaluate(({ t, c, hh }) => {
     ejecutivo:'Carmen Ejemplo', fecha:'2026-10-22', titulo:'Grupo de ejemplo',
     hospedaje:[saneaLineaHosp({ descripcion:'10 habitaciones King', noches:2, precio:1800 })]
   }, c));
+  /* SE CUELGA DEL DOCUMENTO a propósito. `innerText` de un nodo suelto no
+     renderiza: devuelve el texto crudo, con los espacios y los saltos del
+     código adentro. Así, una prueba que midiera la sangría diría que está mal
+     cuando en pantalla se ve bien —y al revés—. Colgado fuera de la vista, lo
+     que se mide es lo que el cliente va a leer. */
   const caja = document.createElement('div');
+  caja.className = 'doc-body';
+  caja.style.cssText = 'position:fixed;left:-99999px;top:0;width:820px';
   caja.innerHTML = `<div class="doc-contenido">${cuerpoContrato(k, cliente('c1'))}</div>`;
-  return { texto: caja.innerText,
-           h2: [...caja.querySelectorAll('h2')].map(x => x.textContent.trim()),
-           saltos: caja.querySelectorAll('.salto-hoja').length,
-           llaves: Object.keys(k) };
+  document.body.appendChild(caja);
+  const texto = caja.innerText;
+  const h2 = [...caja.querySelectorAll('h2')].map(x => x.textContent.trim());
+  const saltos = caja.querySelectorAll('.salto-hoja').length;
+  caja.remove();
+  return { texto,
+           h2, saltos, llaves: Object.keys(k) };
 }, { t: tipo, c: campos, hh: hotel });
 
 const LLENO = { limiteFirma:'2026-11-15', minimoHab:10, depositoHab:200,
@@ -130,8 +140,12 @@ await bloque('3 · la carta de presentación va al frente, en su propia hoja', a
   afirma('dice la fecha límite de firma', /a más tardar el día/.test(r.texto));
   afirma('la firma quien lleva el contrato', /Carmen Ejemplo/.test(r.texto));
   afirma('CORTA LA HOJA antes del contrato', r.saltos === 1);
+  /* Los encabezados se imprimen en mayúsculas por estilo, así que el texto
+     RENDERIZADO dice «OBJETO». Buscarlo tal como se escribe en el código no
+     lo encuentra, y la prueba diría que la carta no está antes. */
+  const arriba = r.texto.toUpperCase();
   afirma('y va ANTES del cuerpo',
-    r.texto.indexOf('Es un placer enterarnos') < r.texto.indexOf('Objeto'));
+    arriba.indexOf('ES UN PLACER ENTERARNOS') < arriba.indexOf('OBJETO'));
 });
 
 /* --- 4 --------------------------------------------------------------------
@@ -207,6 +221,94 @@ await bloque('7 · ningún dato real quedó escrito en el programa', async () =>
                       '01123' + '63925', '01202800' + '1123639259'];
   afirma('ni nada del contrato de ejemplo: ni cliente, ni RFC, ni cuenta',
     delEjemplo.every(x => !src.toUpperCase().includes(x.toUpperCase())));
+});
+
+/* --- 8 --------------------------------------------------------------------
+   Marco, señalando la tabla de instrucciones de pago: «en esta parte no se
+   puede seleccionar ninguna opción». Las casillas estaban hechas para
+   palomearse a mano sobre el papel; ahora se escogen donde se sabe qué se
+   acordó, que es el editor. */
+await bloque('8 · a qué cuenta se carga cada concepto, se escoge', async () => {
+  const r = await documento('contrato', Object.assign({}, LLENO, {
+    cargos: { habitacion:'maestra', telefono:'individual' } }));
+  const fila = n => (r.texto.split('\n').find(l => l.startsWith(n)) || '');
+  afirma('lo escogido se marca en su columna', /✗/.test(r.texto));
+  afirma('la habitación va a la maestra',
+    /Habitación e impuestos\s*✗\s*☐/.test(r.texto.replace(/\t/g, ' ')));
+  afirma('y el teléfono a la individual',
+    /Cargos de teléfono\s*☐\s*✗/.test(r.texto.replace(/\t/g, ' ')));
+  afirma('LO QUE NADIE ESCOGIÓ SE QUEDA EN BLANCO, para palomear a mano',
+    /Lavandería\s*☐\s*☐/.test(r.texto.replace(/\t/g, ' ')));
+});
+
+/* --- 9 -------------------------------------------------------------------- */
+await bloque('9 · y es un campo que nace al usarse, como los demás', async () => {
+  const sin = await documento('contrato', { limiteFirma:'2026-11-15' });
+  afirma('un contrato que no lo usa no carga la llave', !sin.llaves.includes('cargos'));
+  afirma('y su tabla sale con las catorce casillas vacías',
+    (sin.texto.match(/☐/g) || []).length === 14 && !/✗/.test(sin.texto));
+
+  const basura = await documento('contrato', { cargos:{ habitacion:'otra_cosa', noExiste:'maestra' } });
+  afirma('un valor que no es maestra ni individual se tira',
+    !basura.llaves.includes('cargos') && !/✗/.test(basura.texto));
+
+  const cot = await documento('cotizacion', { cargos:{ habitacion:'maestra' } });
+  afirma('Y LA COTIZACIÓN NO LO CARGA NUNCA', !cot.llaves.includes('cargos'));
+});
+
+/* --- 10 -------------------------------------------------------------------
+   Lo que se vio en la pantalla de Marco antes de arreglarlo: `.pol` lleva
+   `pre-wrap` —para los textos que alguien escribe en Ajustes, que traen
+   saltos de verdad— y en los párrafos que arma el programa eso imprimía LA
+   SANGRÍA DEL CÓDIGO: renglones partidos a media frase, en el contrato. */
+await bloque('10 · el texto no se parte donde se partió el código', async () => {
+  const r = await documento('contrato', LLENO);
+  const conSangria = r.texto.split('\n')
+    .filter(l => /^ {4,}\S/.test(l) && l.length > 20 && !/^\s*\d+\./.test(l));
+  afirma('ningún párrafo sale con la sangría del programa',
+    conSangria.length === 0, conSangria.slice(0, 2).join(' | '));
+
+  const src = fs.readFileSync(APP, 'utf8');
+  const i = src.indexOf('const politicasDelContrato');
+  const j = src.indexOf('const carta =', i);
+  afirma('las políticas usan la clase que NO respeta los saltos del código',
+    !/class="pol"/.test(src.slice(i, j)) && /class="pol-html"/.test(src.slice(i, j)));
+  afirma('y esa clase existe en el estilo, justificada',
+    /\.doc-body \.pol-html\{[^}]*white-space:normal/.test(src) &&
+    /\.doc-body \.pol-html\{[^}]*text-align:justify/.test(src));
+  afirma('TODO EL TEXTO JUSTIFICADO, como lo pidió Marco',
+    /\.doc-body p, \.doc-body li\{text-align:justify\}/.test(src));
+});
+
+/* --- 11 -------------------------------------------------------------------
+   Marco: «también quita esta parte de eventos». Los salones son de banquetes.
+   Lo delicado no es quitarla de la pantalla: es que al quitarla, el guardado
+   recogía una tabla que ya no existe, devolvía una lista vacía y le BORRABA
+   los salones al contrato viejo que los tenga, en el primer guardado y sin
+   avisar. */
+await bloque('11 · salones y eventos salió del editor, sin borrar lo que ya había', async () => {
+  const r = await p.evaluate(async () => {
+    const k = saneaContrato({ id:'k9', tipo:'contrato', clienteId:'c1', ejecutivo:'Carmen Ejemplo',
+      fecha:'2026-10-27',
+      eventos:[saneaLineaEvento({ fecha:'23 oct', evento:'Conferencia', salon:'Salón de ejemplo' })],
+      hospedaje:[saneaLineaHosp({ descripcion:'10 King', noches:2, precio:1800 })] });
+    state.contratos = [k]; guardar();
+    editarContrato('k9');
+    const hayTabla = !!document.querySelector('#tEv');
+    const hayBoton = !!document.querySelector('#bAddEv');
+    document.querySelector('.modal [data-close]')?.click();
+    return { hayTabla, hayBoton, eventos: (state.contratos[0].eventos || []).length };
+  });
+  afirma('la tabla ya no está en el editor', !r.hayTabla);
+  afirma('ni el botón de agregar evento', !r.hayBoton);
+  afirma('Y EL CONTRATO VIEJO NO PERDIÓ SUS SALONES', r.eventos === 1);
+
+  /* El documento sigue sabiendo imprimirlos: a ese cliente ya se le
+     enseñaron, y hacerlos desaparecer de la hoja sería peor. */
+  const doc = await documento('contrato', {
+    eventos:[{ fecha:'23 oct', evento:'Conferencia', salon:'Salón de ejemplo' }] });
+  afirma('y el documento los sigue imprimiendo si los trae',
+    /Conferencia/.test(doc.texto));
 });
 
 await br.close(); srv.close();

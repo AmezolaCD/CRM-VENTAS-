@@ -675,6 +675,17 @@
   .doc-body .inc{font-size:11.5px; color:#6d6634; white-space:pre-wrap; margin:0 0 12px;
     padding-left:9px; border-left:3px solid #b2aa6d}
   .doc-body .pol{white-space:pre-wrap; font-size:11.8px; color:#4c3b57; text-align:justify}
+  /* Los párrafos que el programa arma en HTML, no los que alguien escribió
+     en un campo de Ajustes. `.pol` lleva `pre-wrap` porque aquéllos traen
+     saltos de verdad que hay que respetar; en éstos ese mismo `pre-wrap`
+     imprimía LA SANGRÍA DEL CÓDIGO —renglones partidos a media frase, y se
+     veía en el contrato—. Aquí el salto lo decide el ancho de la hoja. */
+  .doc-body .pol-html{white-space:normal; font-size:11.8px; color:#4c3b57;
+    text-align:justify}
+  /* Marco: «que todo el texto esté justificado». Los párrafos y las listas
+     del documento, no las tablas ni los encabezados. */
+  .doc-body p, .doc-body li{text-align:justify}
+  .doc-body .ct-serv li{text-align:justify}
   /* La carta de presentación es su propia hoja. En pantalla se ve una línea
      punteada —el documento se lee de corrido—; al imprimir, corta. */
   .doc-body .salto-hoja{border-top:1px dashed var(--line); margin:22px 0 4px}
@@ -1028,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.22-6";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.27-1";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3557,7 +3568,7 @@ function saneaContrato(k){
        vengan —de un documento al que le cambiaron el tipo, de un respaldo, de
        la nube—. Mismo trato que `tokenFirma` de aquí arriba: el saneador es el
        único lugar donde esto se puede garantizar de verdad. */
-    for (const kk of ["limiteFirma","minimoHab","depositoHab","firmanMaestra","pagos"])
+    for (const kk of ["limiteFirma","minimoHab","depositoHab","firmanMaestra","pagos","cargos"])
       delete o[kk];
   }
   if ("limiteFirma" in o){
@@ -3574,6 +3585,15 @@ function saneaContrato(k){
                    fecha: String((x && x.fecha) || "").trim() }))
       .filter(x => x.monto || x.fecha);
     if (!o.pagos.length) delete o.pagos;
+  }
+  if ("cargos" in o){
+    const c = {};
+    for (const [kk] of CARGOS_CT){
+      const val = String(((o.cargos || {})[kk]) || "").trim().toLowerCase();
+      if (A_QUE_CUENTA.includes(val)) c[kk] = val;
+    }
+    o.cargos = c;
+    if (!Object.keys(c).length) delete o.cargos;
   }
   if ("firmanMaestra" in o){
     o.firmanMaestra = (Array.isArray(o.firmanMaestra) ? o.firmanMaestra : [])
@@ -14900,6 +14920,20 @@ function cuerpoConvenio(v, c){
    y en el mismo orden, para que nadie tenga que reaprender el documento.
    ========================================================================== */
 
+/* Los conceptos de «Instrucciones de pago», en el orden del machote.
+   Antes se imprimían con casillas vacías para palomear a mano; Marco pidió
+   poder escogerlos desde el editor, que es donde se sabe qué se acordó. */
+const CARGOS_CT = [
+  ["habitacion",  "Habitación e impuestos"],
+  ["aybProg",     "Cargos de alimentos y bebidas programados"],
+  ["aybExtra",    "Cargos de alimentos y bebidas no incluidos en el programa"],
+  ["telefono",    "Cargos de teléfono"],
+  ["personales",  "Cargos personales"],
+  ["lavanderia",  "Lavandería"],
+  ["deposito",    "Depósito por daño a la habitación"]
+];
+const A_QUE_CUENTA = ["maestra", "individual"];
+
 const TEXTOS_CT = {
   saludo: "Agradeciendo su preferencia, anexo detallado de los servicios cotizados " +
           "para su estadía en {{HOTEL}} en base a la información previamente proporcionada.",
@@ -15066,7 +15100,7 @@ function cuerpoContrato(k, c){
 
     return `
     <h2>Objeto</h2>
-    <div class="pol"><b>${esc(hueco(h.razonSocial))}</b> proporcionará al Cliente servicios de
+    <div class="pol-html"><b>${esc(hueco(h.razonSocial))}</b> proporcionará al Cliente servicios de
       hospedaje dentro de las instalaciones que opera (en adelante los “Servicios”), mismos que
       serán destinados para la atención de determinado Grupo o Grupos de personas que el Cliente
       autorizará según se especifican en el cuerpo del presente documento. En el caso de que
@@ -15075,14 +15109,14 @@ function cuerpoContrato(k, c){
       contemplados en él.</div>
 
     <h2>Servicio</h2>
-    <div class="pol"><b>${esc(hueco(h.razonSocial))}</b> se obliga a realizar todas aquellas
+    <div class="pol-html"><b>${esc(hueco(h.razonSocial))}</b> se obliga a realizar todas aquellas
       actividades, acciones y en general cuantos preparativos, reservaciones y trabajos sean
       necesarios a efecto de cumplir con los alcances de los Servicios descritos, y que le
       permitan al Cliente disposición de uso de las habitaciones y salones, en su caso, durante
       todo el tiempo de vigencia de la estancia del Grupo o Grupos.</div>
 
     <h2>Contraprestación</h2>
-    <div class="pol"><b>${esc(hueco(h.razonSocial))}</b> recibirá como contraprestación por
+    <div class="pol-html"><b>${esc(hueco(h.razonSocial))}</b> recibirá como contraprestación por
       todos y cada uno de los Servicios convenidos, por lo que el Cliente se obliga a pagar en
       moneda nacional o su equivalente en dólares de los Estados Unidos de Norteamérica, todos y
       cada uno de los Servicios e impuestos que correspondan, en los plazos y montos que se
@@ -15116,7 +15150,7 @@ function cuerpoContrato(k, c){
       "según la disponibilidad al momento, y puede generar el cargo de una renta completa por " +
       "habitación."
     ])}
-    ${k.depositoHab ? `<div class="pol">Por políticas del hotel se solicita un depósito de
+    ${k.depositoHab ? `<div class="pol-html">Por políticas del hotel se solicita un depósito de
       <b>${esc(money(k.depositoHab, "USD"))}</b> por habitación a cada huésped al momento del
       check-in, el cual será liberado por el hotel durante el check-out. Dependiendo del banco,
       este proceso puede tardar de 3 a 5 días hábiles. En caso de que la empresa prefiera no
@@ -15124,7 +15158,7 @@ function cuerpoContrato(k, c){
       autorización de cargos para cubrir cualquier posible daño.</div>` : ""}
 
     <h2>Propinas</h2>
-    <div class="pol">Propina a camarista, a consideración del cliente.</div>
+    <div class="pol-html">Propina a camarista, a consideración del cliente.</div>
 
     <h2>Notas adicionales</h2>
     ${li([
@@ -15141,7 +15175,7 @@ function cuerpoContrato(k, c){
     ])}
 
     <h2>Obligaciones del cliente</h2>
-    <div class="pol">El Cliente se obliga, en los plazos y términos convenidos, a facilitar y
+    <div class="pol-html">El Cliente se obliga, en los plazos y términos convenidos, a facilitar y
       entregar las especificaciones, datos e información relativa a la estancia del Grupo o
       Grupos, así como a respetar los reglamentos y ordenamientos de las instalaciones del Hotel,
       asumiendo la responsabilidad que corresponda ante el incumplimiento de esto. Para los
@@ -15202,22 +15236,19 @@ function cuerpoContrato(k, c){
     ])}
 
     <h2>Instrucciones de pago</h2>
-    <div class="pol">Se marca a qué cuenta se carga cada concepto.</div>
+    <div class="pol-html">Se marca a qué cuenta se carga cada concepto.</div>
     <table class="tar"><thead><tr>
         <th>Concepto</th>
         <th style="width:110px;text-align:center">Maestra</th>
         <th style="width:110px;text-align:center">Individual</th></tr></thead>
-      <tbody>${[
-        "Habitación e impuestos",
-        "Cargos de alimentos y bebidas programados",
-        "Cargos de alimentos y bebidas no incluidos en el programa",
-        "Cargos de teléfono",
-        "Cargos personales",
-        "Lavandería",
-        "Depósito por daño a la habitación"
-      ].map(x => `<tr><td>${esc(x)}</td>
-        <td style="text-align:center">☐</td>
-        <td style="text-align:center">☐</td></tr>`).join("")}</tbody></table>
+      <tbody>${CARGOS_CT.map(([kk, etq]) => {
+        /* Lo escogido en el editor se marca; lo que nadie escogió se queda
+           como casilla vacía, para palomearlo a mano sobre el papel. */
+        const a = ((k.cargos || {})[kk]) || "";
+        const caja = cual => `<td style="text-align:center;font-size:13px">${
+          a === cual ? "<b>✗</b>" : "☐"}</td>`;
+        return `<tr><td>${esc(etq)}</td>${caja("maestra")}${caja("individual")}</tr>`;
+      }).join("")}</tbody></table>
 
     <h2>Liquidación de cuentas</h2>
     ${li([
@@ -15228,14 +15259,14 @@ function cuerpoContrato(k, c){
       "mayor de 5 días hábiles; en caso de no haber respuesta por parte del cliente en ese " +
       "periodo, el hotel da por entendido que la cuenta ha sido aceptada."
     ])}
-    <div class="pol" style="margin-top:8px">La(s) persona(s) autorizada(s) por el Cliente para
+    <div class="pol-html" style="margin-top:8px">La(s) persona(s) autorizada(s) por el Cliente para
       firmar consumos y cargos diversos a la cuenta maestra es (son):</div>
-    <div class="pol" style="line-height:2.4">${
+    <div class="pol-html" style="line-height:2.4">${
       (firman.length ? firman : ["", "", ""])
         .map(n => n ? `<b>${esc(n)}</b>` : raya).join("<br>")}</div>
 
     <h2>Programa de pagos</h2>
-    <div class="pol">A fin de considerar el bloqueo de habitaciones, el Hotel deberá recibir el
+    <div class="pol-html">A fin de considerar el bloqueo de habitaciones, el Hotel deberá recibir el
       presente contrato con firma del Cliente <b>en cada una de sus hojas</b> a más tardar el
       <b>${esc(fechaHueco(k.limiteFirma))}</b>, así como el primer depósito, que <b>no es
       reembolsable</b>. Los siguientes pagos deberán recibirse de acuerdo con el siguiente
@@ -15267,7 +15298,7 @@ function cuerpoContrato(k, c){
     ])}
 
     <h2>Datos para el pago</h2>
-    <div class="pol">El pago podrá realizarse con tarjeta de crédito corporativa, transferencia
+    <div class="pol-html">El pago podrá realizarse con tarjeta de crédito corporativa, transferencia
       bancaria o cheque certificado a nombre de <b>${esc(hueco(h.razonSocial))}</b>, RFC
       <b>${esc(hueco(h.rfc))}</b>.</div>
     <table class="tar"><tbody>
@@ -15276,14 +15307,14 @@ function cuerpoContrato(k, c){
       <tr><td>CLABE</td><td><b>${esc(hueco(h.clabe))}</b></td></tr>
       <tr><td>Moneda</td><td>${esc(nombreMoneda(k.moneda))} (${esc(k.moneda)})</td></tr>
     </tbody></table>
-    <div class="pol" style="margin-top:8px">En el caso de que el Cliente incumpla las
+    <div class="pol-html" style="margin-top:8px">En el caso de que el Cliente incumpla las
       obligaciones contenidas en este contrato y sus anexos, el Hotel estará facultado para
       exigir la desocupación inmediata de las instalaciones o habitaciones asignadas, así como
       para retener el equipaje, en su caso, en garantía del pago de las cantidades no pagadas
       hasta esa fecha.</div>
 
     <h2>Políticas de cancelación · hospedaje</h2>
-    <div class="pol">Después del <b>${esc(fechaHueco(k.limiteFirma))}</b>, toda cancelación
+    <div class="pol-html">Después del <b>${esc(fechaHueco(k.limiteFirma))}</b>, toda cancelación
       causará el cargo correspondiente al <b>100% del total del grupo</b>.</div>
 
     <h2>No show y salida anticipada</h2>
@@ -15297,7 +15328,7 @@ function cuerpoContrato(k, c){
     ])}
 
     <h2>Imposibilidad de cumplimiento</h2>
-    <div class="pol">Queda expresamente entendido que cada parte estará liberada del
+    <div class="pol-html">Queda expresamente entendido que cada parte estará liberada del
       cumplimiento de las obligaciones de este contrato en el caso de que éste sea impedido
       total o parcialmente por causas de fuerza mayor, incluyendo sin limitación actos de la
       naturaleza, actos u órdenes de las autoridades gubernamentales, actos de guerra,
@@ -15305,14 +15336,14 @@ function cuerpoContrato(k, c){
       reparaciones de emergencia, y cualquier otra situación fuera del control de las partes.</div>
 
     <h2>Acuerdo total</h2>
-    <div class="pol">Este documento constituye el contrato completo entre las partes respecto de
+    <div class="pol-html">Este documento constituye el contrato completo entre las partes respecto de
       los asuntos que se incluyen en el mismo, y cancela y sustituye cualquier entendimiento o
       convenio, verbal o escrito, que previamente hubieren acordado las partes respecto de las
       mismas. Las partes aceptan expresamente que en el presente contrato no ha existido engaño,
       dolo, mala fe o cualquier otro vicio del consentimiento.</div>
 
     <h2>Jurisdicción</h2>
-    <div class="pol">Para todo lo relativo a la interpretación, cumplimiento o resolución del
+    <div class="pol-html">Para todo lo relativo a la interpretación, cumplimiento o resolución del
       presente contrato, las partes se someten a la competencia de la Procuraduría Federal del
       Consumidor y de los Tribunales del Fuero Común${h.registroProfeco
         ? `. Registro PROFECO del contrato: <b>${esc(h.registroProfeco)}</b>` : ""}.</div>`;
@@ -15327,22 +15358,22 @@ function cuerpoContrato(k, c){
     ${c && c.empresa ? `<div class="doc-dest"><b>${esc(c.empresa)}</b>${
       k.titulo ? "<br>" + esc(k.titulo.toUpperCase()) : ""}</div>` : ""}
     <p>Estimado ${esc((c && c.contacto) || "señor(a)")},</p>
-    <p style="white-space:pre-wrap">Es un placer enterarnos que está considerando a ${
+    <p>Es un placer enterarnos que está considerando a ${
       esc(h.nombre)}, como sede para el grupo de referencia.</p>
-    <p style="white-space:pre-wrap">Adjunto encontrará el contrato que detalla los términos y
+    <p>Adjunto encontrará el contrato que detalla los términos y
       condiciones a los que estamos preparados para comprometernos, siempre y cuando recibamos
       este contrato firmado a más tardar el día <b>${esc(fechaHueco(k.limiteFirma))}</b>.</p>
-    <p style="white-space:pre-wrap">Le rogamos sea tan amable de leer cuidadosamente estos
+    <p>Le rogamos sea tan amable de leer cuidadosamente estos
       términos y condiciones. Si existe alguna condición que requiera de revisión, le rogamos
       nos contacte para realizar, en su caso, las modificaciones correspondientes. Por el
       momento hemos reservado el espacio, y lo mantendremos tentativamente hasta el día de su
       fecha límite, de forma tal, que usted pueda revisar este documento y regresar una copia
       firmada a nuestra atención.</p>
-    <p style="white-space:pre-wrap">Esperamos tener la oportunidad de trabajar con usted, si
+    <p>Esperamos tener la oportunidad de trabajar con usted, si
       tiene alguna duda o comentario, no dude en hacérnoslo saber. Estamos a sus órdenes en
       cualquier momento.</p>
     <p style="margin-top:18px">Atentamente,<br><b>${esc(h.nombre)}</b></p>
-    <div class="pol" style="margin-top:4px">
+    <div class="pol-html" style="margin-top:4px">
       <b>${esc(ejecutivoDeCt(k) || "________________")}</b><br>
       Ejecutivo de ventas${h.telefono ? "<br>Tel. " + esc(h.telefono) : ""}${
       correoDelEjecutivo ? "<br>" + esc(correoDelEjecutivo) : ""}
@@ -15403,8 +15434,7 @@ function cuerpoContrato(k, c){
             <td class="num"></td>
             <td class="num"><b>${esc(mon(cu.subtotal))}</b></td>
             <td class="num"><b>${esc(mon(cu.total))}</b></td></tr></tbody></table>
-      <div class="inc">Totales con ${esc(String(k.impuestos))}% de impuestos incluidos
-        (IVA e impuesto sobre hospedaje).</div>
+      <div class="inc">${esc(`Totales con ${k.impuestos}% de impuestos incluidos (IVA e impuesto sobre hospedaje).`)}</div>
       ${textoDesayuno(k) ? `<div class="inc">${esc(textoDesayuno(k))}</div>` : ""}` : ""}
 
     ${k.eventos.length ? `
@@ -15544,19 +15574,6 @@ function editarContrato(id, clientePre, alCerrar){
     <td class="num h-tot">—</td>
     <td><button class="btn sm danger" data-quita>✕</button></td></tr>`;
 
-  const filaEv = e => `<tr>
-    <td><input class="field e-fecha" value="${esc(e.fecha)}" placeholder="23 oct" style="width:100%"></td>
-    <td><input class="field e-hora" value="${esc(e.horario)}" placeholder="08:00-19:00" style="width:100%"></td>
-    <td><input class="field e-evento" value="${esc(e.evento)}" placeholder="Conferencia" style="width:100%"></td>
-    <td><input class="field e-pax num" inputmode="numeric" value="${esc(e.pax)}" style="width:100%;text-align:right"></td>
-    <td><input class="field e-montaje" value="${esc(e.montaje)}" placeholder="Auditorio" style="width:100%"></td>
-    <td>${celdaSalon(e.salon, "e")}</td>
-    <td><input class="field e-horas num" inputmode="decimal" value="${esc(e.horas)}"
-          placeholder="del horario" title="Horas que se renta el salón"
-          style="width:100%;text-align:right"></td>
-    <td><input class="field e-renta" value="${esc(e.renta)}" placeholder="Cortesía en base a consumo" style="width:100%"></td>
-    <td><button class="btn sm danger" data-quita>✕</button></td></tr>`;
-
   const filaEx = x => `<tr>
     <td><input class="field x-concepto" value="${esc(x.concepto)}" style="width:100%"></td>
     <td><input class="field x-costo" value="${esc(x.costo)}" style="width:100%"></td>
@@ -15645,6 +15662,21 @@ function editarContrato(id, clientePre, alCerrar){
               <textarea class="field" id="ctFirman" style="width:100%;min-height:64px"
                 placeholder="Un nombre por renglón. Vacío imprime rayas para llenarlas a mano."
                 >${esc((k.firmanMaestra || []).join("\n"))}</textarea></div>
+            <div class="full"><label class="lbl">Instrucciones de pago</label>
+              <div class="hint" style="margin:-2px 0 5px">A qué cuenta se carga cada concepto.
+                Lo que no se escoja sale con la casilla vacía, para palomearlo a mano.</div>
+              <table class="data"><thead><tr><th>Concepto</th>
+                  <th style="width:110px;text-align:center">Maestra</th>
+                  <th style="width:110px;text-align:center">Individual</th>
+                  <th style="width:90px;text-align:center">Sin marcar</th></tr></thead>
+                <tbody>${CARGOS_CT.map(([kk, etq]) => {
+                  const a = ((k.cargos || {})[kk]) || "";
+                  const op = (val, et) => `<td style="text-align:center">
+                    <input type="radio" name="cg_${kk}" value="${val}" data-cg="${kk}"
+                      aria-label="${esc(etq)}: ${et}"${a === val ? " checked" : ""}></td>`;
+                  return `<tr><td>${esc(etq)}</td>
+                    ${op("maestra","maestra")}${op("individual","individual")}${op("","sin marcar")}</tr>`;
+                }).join("")}</tbody></table></div>
             <div class="full"><label class="lbl">Programa de pagos</label>
               <table class="data"><thead><tr><th style="width:70px">Pago</th>
                   <th style="width:180px">Importe</th><th>Fecha límite</th></tr></thead>
@@ -15674,14 +15706,11 @@ function editarContrato(id, clientePre, alCerrar){
         </table></div>
         <p style="margin:8px 0 0"><button class="btn" id="bAddHosp">+ Agregar línea</button></p>
 
-        <h3 class="sec">Salones y eventos <span class="hint">(opcional)</span></h3>
-        <div style="overflow:auto"><table class="data" id="tEv">
-          <thead><tr><th>Fecha</th><th>Horario</th><th>Evento</th><th class="num">Pax</th>
-            <th>Montaje</th><th>Salón</th>
-            <th class="num" style="width:72px" title="Horas que se renta el salón">Horas</th>
-            <th>Renta</th><th style="width:44px"></th></tr></thead>
-          <tbody>${k.eventos.map(filaEv).join("")}</tbody></table></div>
-        <p style="margin:8px 0 0"><button class="btn" id="bAddEv">+ Agregar evento</button></p>
+        <!-- Salones y eventos salió de aquí: Marco lo pidió quitar. Los salones
+             son de banquetes, y «el contrato de ventas y los de banquetes son
+             distintos». El DOCUMENTO sigue sabiendo imprimirlos para los
+             contratos viejos que ya los traigan —ahí ya se le enseñaron a un
+             cliente—, pero no se capturan más desde aquí. -->
 
         <h3 class="sec">Costos adicionales no incluidos</h3>
         <div style="overflow:auto"><table class="data" id="tEx">
@@ -15758,8 +15787,6 @@ function editarContrato(id, clientePre, alCerrar){
     ov.querySelector("#tHosp tbody").insertAdjacentHTML("beforeend", filaHosp(saneaLineaHosp({})));
     recalcular();
   };
-  q("#bAddEv").onclick = () =>
-    ov.querySelector("#tEv tbody").insertAdjacentHTML("beforeend", filaEv(saneaLineaEvento({})));
   q("#bAddEx").onclick = () =>
     ov.querySelector("#tEx tbody").insertAdjacentHTML("beforeend", filaEx(saneaLineaExtra({})));
 
@@ -15830,13 +15857,10 @@ function editarContrato(id, clientePre, alCerrar){
       tipoCambio: q("#ctTC").value.trim(),
       impuestos: impuestos(),
       hospedaje: hosp,
-      eventos: [...ov.querySelectorAll("#tEv tbody tr")].map(tr => saneaLineaEvento({
-        fecha: tr.querySelector(".e-fecha").value, horario: tr.querySelector(".e-hora").value,
-        evento: tr.querySelector(".e-evento").value, pax: tr.querySelector(".e-pax").value,
-        montaje: tr.querySelector(".e-montaje").value, salon: tr.querySelector(".e-salon").value,
-        horas: tr.querySelector(".e-horas") ? tr.querySelector(".e-horas").value : "",
-        renta: tr.querySelector(".e-renta").value
-      })).filter(e => e.fecha || e.evento || e.salon),
+      /* `eventos` NO se escribe aquí a propósito. La tabla ya no está en el
+         editor, así que recogerla devolvería una lista vacía y le BORRARÍA los
+         salones al contrato viejo que los tenga, en el primer guardado y sin
+         avisar. No ponerla en el Object.assign los deja como estaban. */
       adicionales: [...ov.querySelectorAll("#tEx tbody tr")].map(tr => saneaLineaExtra({
         concepto: tr.querySelector(".x-concepto").value, costo: tr.querySelector(".x-costo").value
       })).filter(x => x.concepto || x.costo),
@@ -15848,7 +15872,15 @@ function editarContrato(id, clientePre, alCerrar){
       minimoHab: Number(q("#ctMinHab").value) || 0,
       depositoHab: Number(q("#ctDepHab").value) || 0,
       firmanMaestra: q("#ctFirman").value.split("\n").map(x => x.trim()).filter(Boolean),
-      pagos: [...ov.querySelectorAll("#ctSoloContrato tbody tr")].map(tr => ({
+      cargos: (() => {
+        const c = {};
+        ov.querySelectorAll("#ctSoloContrato input[data-cg]:checked").forEach(r => {
+          if (r.value) c[r.dataset.cg] = r.value;
+        });
+        return c;
+      })(),
+      pagos: [...ov.querySelectorAll("#ctSoloContrato table.data tbody tr")]
+        .filter(tr => tr.querySelector(".pg-monto")).map(tr => ({
         monto: Number(tr.querySelector(".pg-monto").value) || 0,
         fecha: tr.querySelector(".pg-fecha").value
       })).filter(x => x.monto || x.fecha),
@@ -15875,6 +15907,7 @@ function editarContrato(id, clientePre, alCerrar){
       if (!k.depositoHab) delete k.depositoHab;
       if (!k.firmanMaestra || !k.firmanMaestra.length) delete k.firmanMaestra;
       if (!k.pagos || !k.pagos.length) delete k.pagos;
+      if (!k.cargos || !Object.keys(k.cargos).length) delete k.cargos;
     }
     if (!existente){ k.createdAt = new Date().toISOString(); state.contratos.push(k); }
     else reabrirParaCorregir(k, "contratos", ejecutivoDeCt(k));
