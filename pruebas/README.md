@@ -54,6 +54,7 @@ node pruebas/navegador/beneficios-del-convenio.mjs  # el spa y la transportació
 node pruebas/navegador/los-departamentos-de-la-liga.mjs # lo que ve la liga de las ODTs
 node pruebas/navegador/solo-las-ordenes.mjs         # el papel que sólo ve las ODTs
 node pruebas/navegador/politicas-del-contrato.mjs   # el contrato de ventas, completo
+node pruebas/navegador/observaciones-del-convenio.mjs # las que sí salen en la carta
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
@@ -118,6 +119,13 @@ todo lo que NO debía moverse: que **la cotización siga igual** y no cargue ni 
 nuevas, y que **el contrato de banquetes no se haya tocado** —ése es el grupo de control—.
 Además mide que lo que falta se imprima como una raya en vez de callarse, y que los datos del
 hotel salgan de Ajustes y no del código, porque el repositorio es público.
+
+`observaciones-del-convenio.mjs` cuida los **dos** campos de notas de la carta-convenio: el
+interno, que nunca se imprime, y el que Marco pidió «adicional», que sí lo lee el cliente. El
+bloque que importa es el grupo de control: si los dos se cruzan, una nota del equipo —«ojo,
+este cliente paga tarde»— acabaría impresa delante de él. Mide además que los saltos de renglón
+del textarea lleguen al papel, que vacío no imprima ni el encabezado, y que el campo nazca al
+usarse.
 
 `contratos-en-papel.mjs` cuida lo que pidió el departamento legal del hotel: que a un
 **contrato** no se le pueda sacar una firma por ningún camino —ni el lienzo, ni el enlace, ni
