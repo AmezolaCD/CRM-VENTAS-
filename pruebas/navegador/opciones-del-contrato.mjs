@@ -104,8 +104,11 @@ await bloque('1 · sin marcar, el documento dice lo de siempre', async () => {
 /* --- 2 -------------------------------------------------------------------- */
 await bloque('2 · marcada y con porcentaje, lo dice con su número', async () => {
   const r = await documento({ comisionable:true, comision:10 });
-  afirma('dice TARIFAS COMISIONABLES AL 10%',
-    r.renglon === '**TARIFAS COMISIONABLES AL 10%**');
+  /* «Antes de impuestos» no es adorno: un 10% sobre un total que ya trae el
+     13% adentro es otra cantidad, y esa diferencia se discute con el contrato
+     ya firmado. */
+  afirma('dice TARIFAS COMISIONABLES AL 10% ANTES DE IMPUESTOS',
+    r.renglon === '**TARIFAS COMISIONABLES AL 10% ANTES DE IMPUESTOS**');
   afirma('y ya no dice lo contrario en ningún lado',
     !/NO COMISIONABLES/.test(r.texto));
   afirma('el contrato sí guarda las dos cosas',
@@ -136,7 +139,7 @@ await bloque('4 · desmarcarla lo regresa todo a su lugar', async () => {
 await bloque('5 · vale igual para la cotización que para el contrato', async () => {
   const cot = await documento({ comisionable:true, comision:12 }, 'cotizacion');
   afirma('la cotización también lo dice',
-    cot.renglon === '**TARIFAS COMISIONABLES AL 12%**');
+    cot.renglon === '**TARIFAS COMISIONABLES AL 12% ANTES DE IMPUESTOS**');
   const ctr = await documento({ comisionable:true, comision:12 }, 'contrato');
   afirma('y el contrato igual', ctr.renglon === cot.renglon);
 });
@@ -194,7 +197,8 @@ await bloque('6 · la casilla está en el editor y enseña su porcentaje al pren
   });
   afirma('se guardó lo que tecleó',
     r.guardado.comisionable === true && r.guardado.comision === 10);
-  afirma('y el documento lo dice', r.renglon === '**TARIFAS COMISIONABLES AL 10%**');
+  afirma('y el documento lo dice',
+    r.renglon === '**TARIFAS COMISIONABLES AL 10% ANTES DE IMPUESTOS**');
 });
 
 /* --- 7 --------------------------------------------------------------------
@@ -270,6 +274,113 @@ await bloque('11 · el desplegable está en el editor y guarda lo que se escoge'
   });
   afirma('se guardó lo que escogió', r.guardado === 'si');
   afirma('y el documento lo dice', /La tarifa incluye desayuno\./.test(r.texto));
+});
+
+/* --- 12 -------------------------------------------------------------------
+   EL APARTADO DE COMISIÓN.
+
+   Marco: «en los contratos puede ser comisionable al 10% antes de impuestos o
+   no comisionable, en el caso de que sea comisionable que venga el texto que
+   te adjunto». El texto explica cómo cobra la agencia: el cierre de cuenta,
+   la factura con IVA, y que el hotel paga los lunes y aplica los jueves.
+
+   Lo que se cuida:
+
+   · que SALGA cuando las tarifas son comisionables, con sus dos párrafos;
+   · que NO salga cuando no lo son —a un cliente directo no le dice nada, y
+     prometerle días de pago que no le tocan es peor que callarse—;
+   · que la COTIZACIÓN siga sin llevarlo, como el resto del clausulado;
+   · y que se imprima como texto, no con la sangría del código adentro. `.pol`
+     respeta los espacios, y ésa es la trampa que ya mordió una vez. */
+await bloque('12 · comisionable: el contrato explica cómo se cobra', async () => {
+  /** Lo que se ve de verdad: colgado del documento, que es donde se renderiza. */
+  const hoja = (campos, tipo) => p.evaluate(({ c, t }) => {
+    const k = saneaContrato(Object.assign({ id:'k12', tipo:t, clienteId:'c1',
+      ejecutivo:'Sistemas', fecha:'2026-10-27', titulo:'Grupo de ejemplo',
+      hospedaje:[saneaLineaHosp({ descripcion:'10 habitaciones King', noches:2, precio:1800 })]
+    }, c));
+    const caja = document.createElement('div');
+    caja.className = 'doc-body';
+    caja.style.cssText = 'position:fixed;left:-99999px;top:0;width:820px';
+    caja.innerHTML = `<div class="doc-contenido">${cuerpoContrato(k, cliente('c1'))}</div>`;
+    document.body.appendChild(caja);
+    const h2 = [...caja.querySelectorAll('h2')].map(x => x.textContent.trim());
+    const texto = caja.innerText;
+    caja.remove();
+    return { texto, h2 };
+  }, { c: campos, t: tipo || 'contrato' });
+
+  const con = await hoja({ comisionable:true, comision:10 });
+  afirma('EL CONTRATO COMISIONABLE TRAE EL APARTADO', con.h2.includes('Comisión'));
+  afirma('con el cierre de cuenta y la validación del cliente',
+    /cierre de cuenta correspondiente, el cual será enviado al cliente/i.test(con.texto));
+  afirma('con la factura por el total y su IVA',
+    /emitir y enviar la factura por el monto total/i.test(con.texto) && /IVA/.test(con.texto));
+  afirma('Y CON LOS DÍAS DE PAGO: lunes, aplicados los jueves',
+    /procesa pagos los lunes/i.test(con.texto) && /aplicados los jueves/i.test(con.texto));
+  afirma('y la documentación que hay que presentar',
+    /documentación requerida por el hotel/i.test(con.texto));
+
+  /* Dos párrafos, no uno: el renglón en blanco separa lo que hay que hacer de
+     cuándo se cobra, y pegados se leen como una sola instrucción. */
+  afirma('son DOS párrafos, no un bloque pegado',
+    /IVA correspondiente\.\s*\n\s*\n?\s*El hotel procesa pagos/.test(con.texto));
+  /* La trampa de `.pol`: respeta los espacios, así que la sangría del código
+     se imprimiría tal cual delante del cliente. */
+  afirma('y sin la sangría del código adentro',
+    !/\n {4,}(Al término|El hotel procesa)/.test(con.texto));
+
+  /* Dónde: después de los costos adicionales, pegado al renglón de la
+     comisión, y antes de la vigencia y del clausulado. */
+  afirma('VA DESPUÉS DE LOS COSTOS ADICIONALES',
+    con.h2.indexOf('Comisión') > con.h2.indexOf('Costos adicionales no incluidos'));
+  afirma('y antes de las condiciones del bloqueo',
+    con.h2.indexOf('Comisión') < con.h2.indexOf('Condiciones del bloqueo'));
+  afirma('una sola vez', con.h2.filter(x => x === 'Comisión').length === 1);
+
+  /* --- Los grupos de control --- */
+  const sin = await hoja({});
+  afirma('SIN COMISIÓN NO ASOMA EL APARTADO', !sin.h2.includes('Comisión'));
+  afirma('ni se le prometen días de pago a quien no cobra comisión',
+    !/procesa pagos los lunes/i.test(sin.texto));
+  afirma('y el contrato sigue completo',
+    sin.h2.includes('Condiciones del bloqueo') && sin.h2.includes('Jurisdicción'));
+
+  const cot = await hoja({ comisionable:true, comision:10 }, 'cotizacion');
+  afirma('LA COTIZACIÓN NO LO LLEVA, como el resto del clausulado',
+    !cot.h2.includes('Comisión') && !/procesa pagos los lunes/i.test(cot.texto));
+  afirma('pero sí sigue diciendo que es comisionable',
+    /TARIFAS COMISIONABLES AL 10% ANTES DE IMPUESTOS/.test(cot.texto));
+});
+
+/* --- 13 -------------------------------------------------------------------
+   El 10% es lo que negocia el hotel, así que el editor lo propone. Propone,
+   no impone. */
+await bloque('13 · al prender la casilla, el editor propone el 10%', async () => {
+  const r = await p.evaluate(async () => {
+    document.querySelectorAll('.overlay').forEach(o => o.remove());
+    state.contratos = []; guardar();
+    editarContrato(null, 'c1');
+    const pct = document.querySelector('#ctComPct');
+    const on  = document.querySelector('#ctComOn');
+    on.checked = true; on.dispatchEvent(new Event('change'));
+    const propuesto = pct.value;
+
+    /* Y si ya había uno escrito, no se pisa: apagar y prender la casilla no
+       debe borrarle a nadie el 12% que acababa de negociar. */
+    pct.value = '12';
+    on.checked = false; on.dispatchEvent(new Event('change'));
+    on.checked = true;  on.dispatchEvent(new Event('change'));
+    const respetado = pct.value;
+
+    const ayuda = document.querySelector('#ctComAyuda').textContent;
+    document.querySelectorAll('.overlay').forEach(o => o.remove());
+    return { propuesto, respetado, ayuda };
+  });
+  afirma('propone 10 al prenderla', r.propuesto === '10');
+  afirma('Y NO PISA EL QUE YA ESTABA ESCRITO', r.respetado === '12');
+  afirma('y la ayuda dice que es antes de impuestos', /antes de impuestos/i.test(r.ayuda));
+  afirma('y que el contrato agrega el apartado', /apartado de Comisión/i.test(r.ayuda));
 });
 
 await br.close(); srv.close();

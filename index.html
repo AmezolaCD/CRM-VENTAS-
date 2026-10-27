@@ -1039,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.27-6";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.27-7";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -15053,7 +15053,19 @@ const TEXTOS_CT = {
     "documento. Las tarifas se sostienen hasta el {{VIGENCIA}}.",
   pago: "FORMA DE PAGO PUEDE SER CRÉDITO, DÉBITO, EFECTIVO O TRANSFERENCIA. EN CASO DE " +
         "CUENTAS NACIONALES CONTAMOS CON LINK DE PAGO PARA TARJETA VISA Y MASTER CARD.",
-  cierre: "Me reitero nuevamente a sus órdenes por cualquier duda o requerimiento adicional."
+  cierre: "Me reitero nuevamente a sus órdenes por cualquier duda o requerimiento adicional.",
+
+  /* Cómo se cobra la comisión. Sólo sale cuando las tarifas son
+     comisionables: a un cliente directo no le dice nada, y a una agencia le
+     dice lo único que necesita saber para cobrar.
+
+     Va pegado a la izquierda a propósito: `.pol` respeta los espacios
+     (`white-space:pre-wrap`), así que la sangría del código se imprimiría
+     tal cual en el documento del cliente. */
+  comision:
+`Al término de la estancia del grupo, el hotel realizará el cierre de cuenta correspondiente, el cual será enviado al cliente para su revisión y validación. Una vez autorizado, el cliente deberá emitir y enviar la factura por el monto total indicado en dicho cierre, incluyendo el IVA correspondiente.
+
+El hotel procesa pagos los lunes, mismos que serán aplicados los jueves de cada semana. Para proceder con el pago, será indispensable presentar la documentación requerida por el hotel.`
 };
 
 /**
@@ -15063,6 +15075,11 @@ const TEXTOS_CT = {
  * conservan para que el documento se vea igual que siempre. Sin porcentaje
  * dice sólo «TARIFAS COMISIONABLES»: más vale eso que un «AL %» suelto,
  * porque el porcentaje a veces se negocia aparte.
+ *
+ * Y con porcentaje dice SOBRE QUÉ se calcula —«antes de impuestos»—, que es
+ * como lo negocia el hotel. Sin esa frase, un 10% sobre un total que ya trae
+ * 13% de impuestos adentro es otra cantidad, y la diferencia se discute
+ * cuando el contrato ya está firmado.
  */
 /** Lo que el contrato dice del desayuno. Vacío: no dice nada, como siempre. */
 const textoDesayuno = k => k.desayuno === "si" ? "La tarifa incluye desayuno."
@@ -15070,11 +15087,13 @@ const textoDesayuno = k => k.desayuno === "si" ? "La tarifa incluye desayuno."
 
 /** Lo que dice la ayuda del editor, que cambia al prender la casilla. */
 const ayudaComision = on => on
-  ? "El porcentaje que se le reconoce a la agencia. Vacío imprime sólo «TARIFAS COMISIONABLES»."
+  ? "El porcentaje que se le reconoce a la agencia, antes de impuestos. El contrato agrega " +
+    "el apartado de Comisión: el cierre de cuenta, la factura y los días de pago. " +
+    "Vacío imprime sólo «TARIFAS COMISIONABLES»."
   : "Sin marcar, el documento dice «TARIFAS NETAS NO COMISIONABLES», como hasta hoy.";
 
 const textoComisionable = k => k.comisionable
-  ? `**TARIFAS COMISIONABLES${k.comision ? ` AL ${k.comision}%` : ""}**`
+  ? `**TARIFAS COMISIONABLES${k.comision ? ` AL ${k.comision}% ANTES DE IMPUESTOS` : ""}**`
   : "**TARIFAS NETAS NO COMISIONABLES**";
 
 const anioContrato = k => String(k.fecha || hoyISO()).slice(0, 4) ||
@@ -15588,6 +15607,9 @@ function cuerpoContrato(k, c){
         <td class="num">${esc(x.costo || "—")}</td></tr>`).join("")}</tbody></table>`
       : `<div class="pol">Sin costos adicionales especificados.</div>`}
 
+    ${k.comisionable && enPapel ? `<h2>Comisión</h2>
+      <div class="pol">${esc(TEXTOS_CT.comision)}</div>` : ""}
+
     <div class="pol" style="margin-top:14px">${esc(rellena(
       k.tipo === "contrato" ? TEXTOS_CT.vigenciaCtr : TEXTOS_CT.vigenciaCot))}</div>
 
@@ -15908,6 +15930,11 @@ function editarContrato(id, clientePre, alCerrar){
     const on = e.target.checked;
     q("#ctComPct").style.display = on ? "" : "none";
     q("#ctComAyuda").textContent = ayudaComision(on);
+    /* El 10% es lo que negocia el hotel, así que se propone solo. Se propone,
+       no se impone: queda escrito en el campo y se puede cambiar o borrar
+       antes de guardar. Sólo cuando está vacío, para no pisar un porcentaje
+       que alguien ya puso y está apagando y prendiendo la casilla. */
+    if (on && !q("#ctComPct").value.trim()) q("#ctComPct").value = "10";
     if (on) q("#ctComPct").focus();
   };
   q("#bAddHosp").onclick = () => {
