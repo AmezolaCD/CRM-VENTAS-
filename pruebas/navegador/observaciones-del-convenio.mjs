@@ -90,6 +90,7 @@ const documento = campos => p.evaluate(c => {
 /* --- 1 -------------------------------------------------------------------- */
 await bloque('1 · lo que se escribe para el cliente, sale en la carta', async () => {
   const r = await documento({
+    desayunos:['americano'],
     observaciones:'La tarifa de fin de semana aplica sólo de viernes a domingo.\nCortesía: una suite por cada 20 habitaciones.' });
   afirma('trae el apartado de Observaciones', r.h2.includes('Observaciones'));
   afirma('con lo que escribió el ejecutivo',
@@ -99,8 +100,17 @@ await bloque('1 · lo que se escribe para el cliente, sale en la carta', async (
      lista de tres cosas en un solo párrafo no se lee igual. */
   afirma('LOS SALTOS DE RENGLÓN SE RESPETAN',
     /viernes a domingo\.\s*\n\s*Cortesía/.test(r.texto));
-  afirma('va al final, después de las políticas',
-    r.h2.indexOf('Observaciones') > r.h2.indexOf('Políticas'));
+  /* Marco: «las observaciones colócalas después de los beneficios». No al
+     final: pegadas a la tira que lleva el desayuno y los beneficios del
+     convenio, que es donde el cliente las va a buscar. */
+  afirma('VAN DESPUÉS DE LOS BENEFICIOS',
+    r.texto.indexOf('20% de descuento en SENSES SPA') <
+    r.texto.indexOf('La tarifa de fin de semana'));
+  afirma('y antes de las especificaciones y las políticas',
+    r.h2.indexOf('Observaciones') < r.h2.indexOf('Políticas') &&
+    r.h2.indexOf('Observaciones') < r.h2.indexOf('Especificaciones de tarifas'));
+  afirma('una sola vez en todo el documento',
+    (r.texto.match(/La tarifa de fin de semana/g) || []).length === 1);
 });
 
 /* --- 2 --------------------------------------------------------------------
@@ -167,6 +177,27 @@ await bloque('5 · el editor enseña los dos, y dice cuál es cuál', async () =
     r.valObs === 'para el cliente' && r.valNotas === 'interna');
   afirma('EL EDITOR DICE CUÁL SALE', r.diceSalen);
   afirma('y cuál no', r.diceNoSalen);
+});
+
+/* --- 6 --------------------------------------------------------------------
+   El convenio sin una sola habitación —un borrador a medias— no tiene tabla
+   de la cual colgar las observaciones. Sin la red del final se quedarían
+   FUERA del documento, y el ejecutivo las daría por escritas. */
+await bloque('6 · sin habitaciones, las observaciones no se pierden', async () => {
+  const r = await p.evaluate(() => {
+    const v = saneaConv({ id:'v6', clienteId:'c1', ejecutivo:'Carmen Ejemplo',
+      fecha:'2026-10-27', habitaciones:[], observaciones:'Pendiente de confirmar tarifas.',
+      textos: Object.assign({}, state.ajustes.textos) });
+    const caja = document.createElement('div');
+    caja.className = 'doc-body';
+    caja.style.cssText = 'position:fixed;left:-99999px;top:0;width:820px';
+    caja.innerHTML = `<div class="doc-contenido">${cuerpoConvenio(v, cliente('c1'))}</div>`;
+    document.body.appendChild(caja);
+    const t = caja.innerText; caja.remove();
+    return t;
+  });
+  afirma('salen de todos modos', /Pendiente de confirmar tarifas/.test(r));
+  afirma('y una sola vez', (r.match(/Pendiente de confirmar tarifas/g) || []).length === 1);
 });
 
 await br.close(); srv.close();

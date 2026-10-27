@@ -1039,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.27-3";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.27-4";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -14800,6 +14800,23 @@ function cuerpoConvenio(v, c){
      todo el documento, porque son del convenio y no de un tipo de habitación.
      `yaSalieron` es lo que lo garantiza aunque el convenio traiga los dos
      bloques. */
+  /* Las observaciones de ESTE convenio, pegadas a los beneficios: Marco las
+     quiere ahí y no al final. Se imprimen UNA sola vez aunque el convenio
+     traiga los dos bloques, igual que los beneficios.
+
+     Lleva la clase pol y no pol-html: este texto viene de un textarea y trae
+     saltos de renglon de verdad, que es para lo que esta el pre-wrap. (Sin
+     acentos graves en este comentario: uno solo CIERRA la plantilla de
+     JavaScript, y en este archivo ya ha pasado tres veces.) */
+  let obsYaSalieron = false;
+  const bloqueObservaciones = () => {
+    if (obsYaSalieron) return "";
+    const txt = String(v.observaciones || "").trim();
+    if (!txt) return "";
+    obsYaSalieron = true;
+    return `<h2>Observaciones</h2><div class="pol">${esc(txt)}</div>`;
+  };
+
   let yaSalieron = false;
   const tiraBeneficios = () => {
     if (yaSalieron) return "";
@@ -14835,7 +14852,11 @@ function cuerpoConvenio(v, c){
     if (suyos) lineas.push(`Desayuno incluido: ${listaDesayunos(suyos)}`);
     const ben = tiraBeneficios();
     if (ben) lineas.push(ben);
-    return lineas.length ? `<div class="inc">${esc(lineas.join("\n"))}</div>` : "";
+    /* Y en seguida las observaciones, que es donde Marco las quiere: pegadas
+       a los beneficios. Van FUERA de la tira —en su propio apartado, con su
+       encabezado— porque no son parte de lo que incluye la tarifa. */
+    return (lineas.length ? `<div class="inc">${esc(lineas.join("\n"))}</div>` : "") +
+      bloqueObservaciones();
   };
 
   /* La tabla y su «incluye» se piden por separado porque en Recovery no van
@@ -14933,16 +14954,11 @@ function cuerpoConvenio(v, c){
       <h2>Políticas</h2>
       <div class="pol">${esc(T("politicas"))}</div>
 
-      <!-- Lo acordado con ESTA empresa. Va al final, antes del cierre, en el
-           mismo lugar que las Observaciones del contrato de ventas, para que
-           los dos documentos se lean igual. Vacío no imprime ni el título.
-           Lleva la clase pol y no pol-html: este texto viene de un textarea y
-           trae saltos de renglón de verdad, que es para lo que está el
-           pre-wrap. (Sin acentos graves aquí dentro: un acento grave en un
-           comentario CIERRA la plantilla de JavaScript, y en este archivo ya
-           ha pasado tres veces.) -->
-      ${v.observaciones ? `<h2>Observaciones</h2>
-        <div class="pol">${esc(v.observaciones)}</div>` : ""}
+      <!-- La red: las observaciones ya salieron pegadas a los beneficios, allá
+           arriba, y esto no imprime nada. Sólo sirve para el convenio que no
+           trae NINGUNA habitación —un borrador a medias—, donde no hay tabla
+           de la cual colgarlas y si no se quedarían fuera del documento. -->
+      ${bloqueObservaciones()}
 
       <p style="white-space:pre-wrap;margin-top:14px">${esc(T("cierre"))}</p>
 
