@@ -476,6 +476,93 @@ await bloque('13 · los datos del pago se capturan en Ajustes, no en el programa
     !/\b\d{18}\b/.test(src));
 });
 
+/* --- 14 -------------------------------------------------------------------
+   EL DINERO SE TECLEA COMO SE ESCRIBE.
+
+   Marco, con un contrato de verdad delante: «le puse la cantidad que tendrían
+   que pagar y no me sale». En PROGRAMA DE PAGOS la fecha salió y el importe
+   salió como una raya.
+
+   El editor leía ese campo con `Number()`. `Number("$25,000.00")` es NaN, y el
+   `|| 0` lo volvía CERO; el documento imprime una raya cuando el importe es
+   cero, así que lo tecleado se perdía EN SILENCIO: ni aviso, ni campo en rojo.
+   `parseMoney` ya existía en el archivo y las líneas de hospedaje lo usaban;
+   el programa de pagos nunca se enteró, ni sus tres campos hermanos.
+
+   Esta prueba MANEJA EL EDITOR, no arma el contrato a mano: el error estaba
+   justo en el camino que una prueba de las de armar objetos no toca. */
+await bloque('14 · un importe con formato llega entero al documento', async () => {
+  /** Abre el editor en blanco, llena lo mínimo y lo que se le pida, y guarda. */
+  const porElEditor = async (campos) => {
+    await p.evaluate(() => {
+      document.querySelectorAll('.overlay').forEach(o => o.remove());
+      state.contratos = []; guardar();
+      editarContrato(null, 'c1');
+      document.querySelector('#ctTipo').value = 'contrato';
+      document.querySelector('#ctTipo').dispatchEvent(new Event('change'));
+    });
+    await p.locator('#ctLimite').waitFor({ timeout:8000 });
+    /* El porcentaje vive escondido hasta que se prende la casilla —un campo de
+       comisión a la vista en un contrato que no la lleva invita a llenarlo—,
+       así que primero se le pica a la pastilla. */
+    if ('#ctComPct' in campos) await p.locator('label:has(#ctComOn)').click();
+    for (const [sel, valor] of Object.entries(campos)) await p.fill(sel, valor);
+    // Lo que el formulario exige para dejar guardar.
+    await p.fill('#tHosp tbody tr:first-child .h-desc', '10 habitaciones King');
+    await p.fill('#tHosp tbody tr:first-child .h-noches', '2');
+    await p.fill('#tHosp tbody tr:first-child .h-precio', '1800');
+    await p.locator('#bOkCt').click();
+    await p.waitForTimeout(400);
+    return await p.evaluate(() => {
+      const k = state.contratos[0];
+      if (!k) return { guardado:null, texto:'(no se guardó el contrato)' };
+      const caja = document.createElement('div');
+      caja.className = 'doc-body';
+      caja.style.cssText = 'position:fixed;left:-99999px;top:0;width:820px';
+      caja.innerHTML = `<div class="doc-contenido">${cuerpoContrato(k, cliente('c1'))}</div>`;
+      document.body.appendChild(caja);
+      const texto = caja.innerText; caja.remove();
+      return { guardado: JSON.parse(JSON.stringify(k)), texto };
+    });
+  };
+
+  /* 14.1 · El caso exacto de Marco. */
+  const r = await porElEditor({
+    '#ctLimite':'2026-11-15',
+    '.pg-monto':'$25,000.00',
+    '.pg-fecha':'2026-11-15',
+  });
+  afirma('EL IMPORTE CON $ Y COMAS SE GUARDA, no se vuelve cero',
+    r.guardado && Array.isArray(r.guardado.pagos) && r.guardado.pagos[0].monto === 25000);
+  afirma('y el documento lo imprime en lugar de la raya',
+    /25,000/.test(r.texto) && !/Importe[\s\S]{0,40}_____/.test(r.texto));
+
+  /* 14.2 · El formato no cambia el trato. */
+  const coma = await porElEditor({ '#ctLimite':'2026-11-15', '.pg-monto':'25,000', '.pg-fecha':'2026-11-15' });
+  const liso = await porElEditor({ '#ctLimite':'2026-11-15', '.pg-monto':'25000',  '.pg-fecha':'2026-11-15' });
+  afirma('«25,000» y «25000» valen lo mismo',
+    coma.guardado.pagos[0].monto === 25000 && liso.guardado.pagos[0].monto === 25000);
+
+  /* 14.3 · Los tres hermanos, recogidos a dos renglones de distancia. */
+  const otros = await porElEditor({
+    '#ctLimite':'2026-11-15',
+    '#ctDepHab':'$1,200',
+    '#ctMinHab':'1,000',
+    '#ctComPct':'10%',
+  });
+  afirma('EL DEPÓSITO POR HABITACIÓN con $ y coma también', otros.guardado.depositoHab === 1200);
+  afirma('y el mínimo de habitaciones queda entero', otros.guardado.minimoHab === 1000);
+  afirma('Y «10%» EN LA COMISIÓN VALE 10, no cero', otros.guardado.comision === 10);
+
+  /* 14.4 · Los grupos de control. Un renglón vacío NO se vuelve un cero
+     impreso: sigue siendo la raya que alguien tiene que llenar a mano. */
+  const vacio = await porElEditor({ '#ctLimite':'2026-11-15' });
+  afirma('SIN IMPORTE SIGUE SALIENDO LA RAYA, no un $0.00',
+    !/\$0\.00/.test(vacio.texto) && /_____/.test(vacio.texto));
+  afirma('y no se guarda un pago inventado', !vacio.guardado.pagos);
+  afirma('ni una comisión de cero colgando', !('comision' in vacio.guardado));
+});
+
 await br.close(); srv.close();
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTodo en verde.\n');
 process.exit(fallas ? 1 : 0);

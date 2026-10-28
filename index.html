@@ -1039,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.28-1";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.28-2";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3625,8 +3625,11 @@ function saneaContrato(k){
     if (!o[kk]) delete o[kk];
   }
   if ("pagos" in o){
+    /* También aquí `parseMoney`: un monto con formato puede llegar de un
+       respaldo, de una importación o de otro equipo, y con `Number` se volvía
+       cero al cargar, en silencio y sin que nadie hubiera tecleado nada. */
     o.pagos = (Array.isArray(o.pagos) ? o.pagos : [])
-      .map(x => ({ monto: Number((x && x.monto) || 0) || 0,
+      .map(x => ({ monto: parseMoney(x && x.monto),
                    fecha: String((x && x.fecha) || "").trim() }))
       .filter(x => x.monto || x.fecha);
     if (!o.pagos.length) delete o.pagos;
@@ -16023,10 +16026,18 @@ function editarContrato(id, clientePre, alCerrar){
       notas: q("#ctNotas").value.trim(),
       desayuno: q("#ctDes").value,
       comisionable: q("#ctComOn").checked,
-      comision: Number(q("#ctComPct").value) || 0,
+      /* `parseMoney` y no `Number`: el dinero se teclea como se escribe.
+         `Number("$25,000.00")` es NaN y el `|| 0` lo volvía CERO, y un importe
+         en cero se imprime como una raya — así que lo que se escribió se
+         perdía sin un aviso, sin un campo en rojo, sin nada. Marco lo encontró
+         en el programa de pagos de un contrato de verdad. Los cuatro campos se
+         recogen aquí, a dos renglones unos de otros, y todos tenían el mismo
+         defecto: `10%` en la comisión también valía cero. */
+      comision: parseMoney(q("#ctComPct").value),
       limiteFirma: q("#ctLimite").value,
-      minimoHab: Number(q("#ctMinHab").value) || 0,
-      depositoHab: Number(q("#ctDepHab").value) || 0,
+      // Habitaciones, no pesos: se redondea, pero se tolera el «1,000».
+      minimoHab: Math.round(parseMoney(q("#ctMinHab").value)),
+      depositoHab: parseMoney(q("#ctDepHab").value),
       firmanMaestra: q("#ctFirman").value.split("\n").map(x => x.trim()).filter(Boolean),
       cargos: (() => {
         const c = {};
@@ -16037,7 +16048,7 @@ function editarContrato(id, clientePre, alCerrar){
       })(),
       pagos: [...ov.querySelectorAll("#ctSoloContrato table.data tbody tr")]
         .filter(tr => tr.querySelector(".pg-monto")).map(tr => ({
-        monto: Number(tr.querySelector(".pg-monto").value) || 0,
+        monto: parseMoney(tr.querySelector(".pg-monto").value),
         fecha: tr.querySelector(".pg-fecha").value
       })).filter(x => x.monto || x.fecha),
       updatedAt: new Date().toISOString()
