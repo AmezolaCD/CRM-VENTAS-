@@ -1039,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.28-2";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.28-3";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -9546,6 +9546,12 @@ function renderAjustes(){
           <input class="field" data-legal="${k}" value="${esc(h[k] || "")}"
             placeholder="${esc(ph)}"></div>`).join("")}
       </div>
+      <p style="margin:10px 0 0">
+        <button class="btn" id="bVerLegales">Comprobar que los demás ya los tienen</button></p>
+      <div class="hint" style="margin-top:6px">Estos datos viven en el servidor, no en esta
+        computadora: el equipo de al lado los lee de ahí. El botón los sube y luego le pregunta
+        al servidor qué tiene guardado, que es la única manera de saberlo sin adivinar.</div>
+      <div id="loQueVenLosDemas" style="margin-top:8px"></div>
 
       <h3 class="sec">Datos del hotel</h3>
       <div class="grid">
@@ -10024,6 +10030,79 @@ function renderAjustes(){
      Y antes de preguntar se sube lo que está en pantalla. Sin eso, el botón
      contestaría «le falta tu departamento» por la única razón que no importa:
      que todavía no sale de aquí. */
+  /**
+   * ¿Hay algo que impida que los AJUSTES de este equipo lleguen al servidor?
+   *
+   * Devuelve `{ color, html }` con el problema, o `null` si no hay ninguno y
+   * la pregunta de verdad es otra. Sube lo que haya pendiente antes de
+   * contestar, porque la mitad de las veces la respuesta es «todavía no subía».
+   *
+   * Vive aparte porque hay DOS botones que necesitan exactamente esto —el de
+   * la liga de las ODTs y el de los datos legales— y ninguna de las dos cosas
+   * que miran es suya: las dos viven en el MISMO renglón del servidor,
+   * `ajustes:global`. Duplicar estos mensajes sería duplicar lo mejor escrito
+   * del archivo, y arreglar uno solo el día que cambien.
+   *
+   * Lo que NO se comparte es la consecuencia: el diagnóstico es el mismo, pero
+   * «la liga va a seguir viendo la lista de antes» y «los demás equipos van a
+   * seguir viendo los datos de antes» no son la misma frase para quien la lee.
+   * Por eso entra como parámetro en vez de quedarse en un genérico que no le
+   * dice a nadie qué va a pasarle.
+   */
+  async function porQueNoSuben(consecuencia){
+    /* Lo primero, porque explica de golpe todo lo demás: SIN SESIÓN no se
+       sube nada. `sincronizar()` se sale calladito, y el botón diría «le
+       faltan» una y otra vez sin que ninguna de las dos cosas sea mentira ni
+       sirva de nada. Y es un estado fácil de no notar: la aplicación sigue
+       andando, enseña todo, y hasta alcanza a preguntarle al servidor, porque
+       para preguntar basta la llave pública. Lo que no se puede sin sesión es
+       ESCRIBIR. */
+    if (!nubeActiva())
+      return { color:"var(--bad)", html:
+        `<b>Este equipo no tiene sesión abierta con el servidor.</b> Nada de lo que guardes ` +
+        `aquí está subiendo —ni los datos del hotel, ni los departamentos, ni los usuarios—, ` +
+        `y ${esc(consecuencia)}.` +
+        `<br><span class="hint">Cierra sesión y vuelve a entrar con tu correo. Lo que tienes ` +
+        `escrito no se pierde: está guardado en este navegador y sube en cuanto haya sesión.</span>` };
+
+    /* Con una vuelta ya en camino, `sincronizar()` se sale sin hacer nada. Si
+       no se esperara, el botón diría que falta subir por no haber subido, y
+       mandaría a buscar el problema donde no está. */
+    for (let i = 0; i < 24 && sincronizando; i++)
+      await new Promise(r => setTimeout(r, 250));
+    await sincronizar();
+
+    /* ANTES DE COMPARAR NADA, MIRAR SI LA SUBIDA SIQUIERA PASÓ.
+
+       Es lo que le faltaba al botón y lo que de verdad le pasó a Marco: si el
+       servidor RECHAZA el renglón de ajustes —porque la cuenta no tiene
+       permiso de escribirlo, que es lo que decide roles.sql—, no va a cuadrar
+       por más veces que le dé, y «le faltan» es una respuesta verdadera y
+       completamente inútil. El motivo ya venía del servidor; nada más no lo
+       estábamos leyendo. */
+    const rechazo = (nube.rechazados || []).find(x => x.id === "ajustes:global");
+    if (rechazo)
+      return { color:"var(--bad)", html:
+        `<b>El servidor no aceptó los ajustes, así que esto no va a cambiar.</b>` +
+        `<br>Lo que contestó: <i>${esc(rechazo.motivo || "sin motivo")}</i>` +
+        `<br><span class="hint">Casi siempre es que esta cuenta no tiene permiso de ` +
+        `escribir los ajustes. Eso lo decide <b>roles.sql</b>: vuelve a correrlo en ` +
+        `Supabase y revisa que tu correo esté en Usuarios con el papel de administrador.</span>` };
+
+    if (nube.estado === "error")
+      return { color:"var(--bad)", html:
+        `<b>No se pudo sincronizar.</b> ${esc(nube.error || "")}` +
+        `<br><span class="hint">Mientras no suba, ${esc(consecuencia)}.</span>` };
+
+    return null;
+  }
+
+  /** ¿Este equipo tiene apuntado que ya subió los ajustes? */
+  const creeQueSubioAjustes = () => {
+    const fila = filasDeEstado().find(f => f.id === "ajustes:global");
+    return !!fila && sincronizado.get("ajustes:global") === JSON.stringify(fila.datos);
+  };
+
   p.querySelector("#bVerJefes").onclick = async () => {
     const boton = p.querySelector("#bVerJefes");
     const caja  = p.querySelector("#loQueVeLaLiga");
@@ -10034,52 +10113,12 @@ function renderAjustes(){
     boton.disabled = true;
     pinta("var(--muted)", "Subiendo lo de aquí y preguntándole al servidor…");
     try{
-      /* Lo primero, porque explica de golpe todo lo demás: SIN SESIÓN no se
-         sube nada. `sincronizar()` se sale calladito, y el botón diría «le
-         faltan» una y otra vez sin que ninguna de las dos cosas sea mentira ni
-         sirva de nada. Y es un estado fácil de no notar: la aplicación sigue
-         andando, enseña todo, y hasta este botón alcanza a preguntarle al
-         servidor, porque para preguntar basta la llave pública. Lo que no se
-         puede sin sesión es ESCRIBIR. */
-      if (!nubeActiva()){
-        pinta("var(--bad)",
-          `<b>Este equipo no tiene sesión abierta con el servidor.</b> Nada de lo que guardes ` +
-          `aquí está subiendo —ni los departamentos, ni los usuarios, ni los textos—, y la liga ` +
-          `va a seguir viendo la lista de antes.` +
-          `<br><span class="hint">Cierra sesión y vuelve a entrar con tu correo. Lo que tienes ` +
-          `escrito no se pierde: está guardado en este navegador y sube en cuanto haya sesión.</span>`);
-        return;
-      }
-      /* Con una vuelta ya en camino, `sincronizar()` se sale sin hacer nada.
-         Si no se esperara, el botón diría «le faltan» por no haber subido, y
-         mandaría a buscar el problema donde no está. */
-      for (let i = 0; i < 24 && sincronizando; i++)
-        await new Promise(r => setTimeout(r, 250));
-      await sincronizar();
-
-      /* ANTES DE COMPARAR LISTAS, MIRAR SI LA SUBIDA SIQUIERA PASÓ.
-
-         Esto es lo que le faltaba al botón y es lo que de verdad le pasó a
-         Marco: si el servidor RECHAZA el renglón de ajustes —porque la cuenta
-         no tiene permiso de escribirlo, que es lo que decide roles.sql—, la
-         lista nunca va a cuadrar por más veces que le dé, y «le faltan
-         Administración» es una respuesta verdadera y completamente inútil.
-         El motivo ya venía del servidor; nada más no lo estábamos leyendo. */
-      const rechazo = (nube.rechazados || []).find(x => x.id === "ajustes:global");
-      if (rechazo){
-        pinta("var(--bad)",
-          `<b>El servidor no aceptó los ajustes, así que la lista no va a cambiar.</b>` +
-          `<br>Lo que contestó: <i>${esc(rechazo.motivo || "sin motivo")}</i>` +
-          `<br><span class="hint">Casi siempre es que esta cuenta no tiene permiso de ` +
-          `escribir los ajustes. Eso lo decide <b>roles.sql</b>: vuelve a correrlo en ` +
-          `Supabase y revisa que tu correo esté en Usuarios con el papel de administrador.</span>`);
-        return;
-      }
-      if (nube.estado === "error"){
-        pinta("var(--bad)", `<b>No se pudo sincronizar.</b> ${esc(nube.error || "")}` +
-          `<br><span class="hint">Mientras no suba, la liga va a seguir viendo la lista de antes.</span>`);
-        return;
-      }
+      /* Las tres razones por las que un ajuste no sale de esta computadora
+         —sin sesión, rechazado por el servidor, o la sincronización caída—
+         son las mismas para la liga que para los datos legales, porque todo
+         va en el mismo renglón `ajustes:global`. Viven en `porQueNoSuben`. */
+      const problema = await porQueNoSuben("la liga va a seguir viendo la lista de antes");
+      if (problema){ pinta(problema.color, problema.html); return; }
 
       const r = await jefesDeLaLiga(tokenOdt());
       if (r.motivo){
@@ -10098,9 +10137,7 @@ function renderAjustes(){
          otra vez al botón no va a servir de nada —no hay nada pendiente que
          mandar—, y decirle «espera un momento» sería mandarlo a esperar para
          siempre. */
-      const fila = filasDeEstado().find(f => f.id === "ajustes:global");
-      const creeQueYaSubio = !!fila &&
-        sincronizado.get("ajustes:global") === JSON.stringify(fila.datos);
+      const creeQueYaSubio = creeQueSubioAjustes();
 
       pinta("var(--warn)",
         `<b>La liga todavía no ve lo mismo que esta tabla.</b>` +
@@ -10108,6 +10145,56 @@ function renderAjustes(){
         (d.sobran.length ? `<br>Y sigue ofreciendo: <b>${esc(d.sobran.join(", "))}</b>, ` +
                            `que aquí ya no está.` : "") +
         (creeQueYaSubio
+          ? `<br><span class="hint">Y ojo: este equipo tiene apuntado que ya lo subió, así ` +
+            `que volver a darle no va a cambiar nada. Pásame esta pantalla.</span>`
+          : `<br><span class="hint">Si acabas de escribirlos, dale otra vez en un momento: ` +
+            `puede que la subida siguiera en camino.</span>`));
+    }catch(e){
+      pinta("var(--bad)", "<b>No se pudo revisar.</b> " + esc(String(e && e.message ? e.message : e)));
+    }finally{ boton.disabled = false; }
+  };
+  p.querySelector("#bVerLegales").onclick = async () => {
+    const boton = p.querySelector("#bVerLegales");
+    const caja  = p.querySelector("#loQueVenLosDemas");
+    const pinta = (color, html) =>
+      caja.innerHTML = `<div class="note" style="border-left:3px solid ${color}">${html}</div>`;
+
+    recogerAjustes(); guardar();
+    boton.disabled = true;
+    pinta("var(--muted)", "Subiendo lo de aquí y preguntándole al servidor…");
+    try{
+      const problema = await porQueNoSuben(
+        "los demás equipos van a seguir viendo los datos de antes");
+      if (problema){ pinta(problema.color, problema.html); return; }
+
+      /* Se le pregunta al servidor por el renglón, no se deduce de lo que este
+         equipo cree. Deducirlo es justo lo que llevaba tres veces fallando. */
+      const filas = await api(
+        `/rest/v1/crm_datos?select=datos&id=eq.${encodeURIComponent("ajustes:global")}`);
+      const alla = (filas && filas[0] && filas[0].datos && filas[0].datos.hotel) || {};
+
+      /* Se comparan los campos POR NOMBRE y se reportan por su etiqueta. Lo
+         que NUNCA se escribe es el valor: esto se lee en voz alta, se manda
+         por captura de pantalla y acaba en cualquier lado. El número de
+         cuenta y la CLABE no salen de aquí ni para decir que no coinciden. */
+      const difieren = CAMPOS_LEGALES
+        .filter(([k]) => String(h[k] || "").trim() !== String(alla[k] || "").trim())
+        .map(([, etq]) => etq);
+
+      if (!difieren.length){
+        pinta("var(--ok)",
+          `<b>El servidor ya tiene estos datos.</b> Quien abra el CRM ahorita los va a ver en ` +
+          `sus contratos.` +
+          `<br><span class="hint">Si en otra computadora siguen saliendo las rayitas, es que ` +
+          `tiene la pestaña abierta desde antes: los ajustes se bajan al entrar. Que la ` +
+          `recargue y listo.</span>`);
+        return;
+      }
+
+      pinta("var(--warn)",
+        `<b>El servidor todavía no tiene lo mismo que esta pantalla.</b>` +
+        `<br>No coinciden: <b>${esc(difieren.join(", "))}</b>.` +
+        (creeQueSubioAjustes()
           ? `<br><span class="hint">Y ojo: este equipo tiene apuntado que ya lo subió, así ` +
             `que volver a darle no va a cambiar nada. Pásame esta pantalla.</span>`
           : `<br><span class="hint">Si acabas de escribirlos, dale otra vez en un momento: ` +

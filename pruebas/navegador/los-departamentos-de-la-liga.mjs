@@ -321,6 +321,111 @@ await bloque('11 · sin sesión lo dice, en vez de mandar a esperar', async () =
   afirma('ni se molesta en comparar listas, que no diría nada útil', !r.preguntó);
 });
 
+/* ===========================================================================
+   LOS DATOS LEGALES: ¿YA LOS TIENEN LOS DEMÁS EQUIPOS?
+
+   Marco capturó los datos bancarios en Ajustes: «desde mi equipo sí puedo
+   verlos, pero desde los demás no».
+
+   Tres causas posibles y todas se ven igual desde su silla: sin sesión no se
+   sube nada; el servidor puede estar rechazando el renglón; o subió bien y el
+   otro equipo tiene la pestaña abierta desde antes. Es la TERCERA vez que
+   pasa lo mismo —los departamentos, el «Falta subir 4», y ahora esto— y cada
+   vez se resolvió adivinando.
+
+   El botón nuevo le pregunta al servidor en vez de deducirlo, y comparte las
+   tres comprobaciones con el de la liga: los dos miran el MISMO renglón,
+   `ajustes:global`.
+   =========================================================================== */
+
+/**
+ * Abre Ajustes con la nube fingida, pone los datos legales que se le pidan y
+ * le dice al servidor de mentiras qué tiene guardado. Devuelve lo que el
+ * botón escribe en pantalla.
+ */
+const preguntarLegales = (aqui, enElServidor, mal) => p.evaluate(async ({ a, alla, m }) => {
+  nube.url    = 'https://ejemplodeproyecto.supabase.co';
+  nube.anon   = 'llave-de-mentiras';
+  nube.sesion = (m && m.sinSesion) ? null : { user: { email:'admin1@ejemplo.example' } };
+  nube.rechazados = (m && m.rechazados) || [];
+  nube.estado     = (m && m.estado) || 'listo';
+  nube.error      = (m && m.error) || '';
+
+  Object.assign(state.ajustes.hotel, a);
+  guardar();
+
+  window.sincronizar = async () => {};
+  /* Lo que el servidor contesta cuando se le pregunta por el renglón.
+     `'igual'` es una copia de TODO lo del hotel: `CAMPOS_LEGALES` son diez
+     campos y se comparan los diez, así que fingir sólo los cinco que le
+     interesan a la prueba haría ver como diferencia a los otros cinco. */
+  const suyo = alla === 'igual'
+    ? Object.assign({}, state.ajustes.hotel)
+    : alla === 'igual-salvo'
+      ? Object.assign({}, state.ajustes.hotel,
+          { banco:'OTRO BANCO', clabe:'111111111111111111' })
+      : alla;
+  window.api = async () => [{ datos: { hotel: suyo } }];
+
+  renderAjustes();
+  document.querySelector('#bVerLegales').click();
+  for (let i = 0; i < 60; i++){
+    await new Promise(r => setTimeout(r, 50));
+    const t = document.querySelector('#loQueVenLosDemas').innerText;
+    if (t && !/preguntándole al servidor/i.test(t)) break;
+  }
+  const caja = document.querySelector('#loQueVenLosDemas');
+  return { texto: caja.innerText, borde: caja.querySelector('.note')?.style.borderLeft || '' };
+}, { a: aqui, alla: enElServidor, m: mal });
+
+/* Inventados, como todo en este repositorio público. */
+const LEGALES = { razonSocial:'RAZÓN DE EJEMPLO SA DE CV', rfc:'XAXX010101000',
+                  banco:'BANCO DE EJEMPLO', cuenta:'0000000000',
+                  clabe:'000000000000000000' };
+
+/* --- 12 ------------------------------------------------------------------- */
+await bloque('12 · cuando el servidor ya los tiene, lo dice en verde', async () => {
+  const r = await preguntarLegales(LEGALES, 'igual');
+  afirma('dice que el servidor ya los tiene', /servidor ya tiene estos datos/i.test(r.texto));
+  afirma('en verde', /ok/.test(r.borde));
+  /* El paso que de verdad falta, y el que nadie adivina: la otra computadora
+     tiene la pestaña abierta desde antes. */
+  afirma('Y DICE QUE LA OTRA PESTAÑA HAY QUE RECARGARLA',
+    /recargue|pestaña abierta desde antes/i.test(r.texto));
+});
+
+/* --- 13 ------------------------------------------------------------------- */
+await bloque('13 · cuando el servidor tiene otra cosa, nombra qué no coincide', async () => {
+  const r = await preguntarLegales(LEGALES, 'igual-salvo');
+  afirma('avisa que todavía no coinciden', /todav[íi]a no tiene lo mismo/i.test(r.texto));
+  afirma('y NOMBRA los campos', /Banco/.test(r.texto) && /CLABE/i.test(r.texto));
+  afirma('no nombra los que sí coinciden', !/RFC/.test(r.texto));
+
+  /* EL GRUPO DE CONTROL QUE IMPORTA. Esta pantalla se lee en voz alta, se
+     manda por captura y acaba en cualquier lado: puede decir QUÉ campo no
+     coincide, nunca CUÁL es su valor. */
+  afirma('Y NO ESCRIBE NI LA CUENTA NI LA CLABE',
+    !r.texto.includes('0000000000') && !r.texto.includes('000000000000000000') &&
+    !r.texto.includes('111111111111111111'));
+});
+
+/* --- 14 ------------------------------------------------------------------- */
+await bloque('14 · si el servidor rechaza los ajustes, lo dice y dice por qué', async () => {
+  const r = await preguntarLegales(LEGALES, {}, { rechazados:[{ id:'ajustes:global',
+    tipo:'ajustes', motivo:'new row violates row-level security policy' }] });
+  afirma('dice que el servidor no los aceptó', /no acept[óo] los ajustes/i.test(r.texto));
+  afirma('con el motivo que contestó', /row-level security/i.test(r.texto));
+  afirma('Y MANDA A roles.sql, no a intentar otra vez', /roles\.sql/i.test(r.texto));
+});
+
+/* --- 15 ------------------------------------------------------------------- */
+await bloque('15 · sin sesión lo dice, en vez de prometer que ya llegaron', async () => {
+  const r = await preguntarLegales(LEGALES, {}, { sinSesion:true });
+  afirma('dice que no hay sesión', /no tiene sesi[óo]n/i.test(r.texto));
+  afirma('y que por eso no sube nada', /Nada de lo que guardes[\s\S]{0,60}subiendo/i.test(r.texto));
+  afirma('sin dar por perdido lo escrito', /no se pierde/i.test(r.texto));
+});
+
 await br.close(); srv.close();
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTodo en verde.\n');
 process.exit(fallas ? 1 : 0);
