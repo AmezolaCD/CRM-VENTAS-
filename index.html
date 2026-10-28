@@ -1039,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.27-7";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.28-1";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1341,8 +1341,8 @@ const HOTEL_DEF = {
   ],
 
   /* Los datos fiscales y bancarios van vacíos a propósito: este archivo es
-     público. Se capturan una vez en Ajustes → Datos legales del contrato y se
-     quedan en la nube del hotel.
+     público. Se capturan una vez en Ajustes → Datos legales de los contratos
+     y se quedan en la nube del hotel.
 
      La RAZÓN SOCIAL es la excepción, y Marco la pidió así: sin ella las tres
      primeras cláusulas del contrato —Objeto, Servicio y Contraprestación—
@@ -9529,12 +9529,14 @@ function renderAjustes(){
 
       <div id="huerfanos" style="margin-top:22px"></div>
 
-      <h3 class="sec">Datos legales del contrato de banquetes</h3>
+      <h3 class="sec">Datos legales de los contratos</h3>
       <div class="note warn"><b>Estos datos no vienen puestos a propósito.</b> El archivo de
         la aplicación es público —está en internet, cualquiera lo puede abrir—, así que el RFC,
         la escritura y la cuenta bancaria del hotel no pueden ir escritos ahí. Se capturan
         aquí una vez y se quedan en la nube del hotel, donde sólo los ve el equipo.
-        <br><br>Mientras estén vacíos, el contrato de banquetes sale con rayitas en su lugar.</div>
+        <br><br><b>Son de los dos contratos</b>, no sólo del de banquetes: el de ventas los usa
+        en su apartado «Datos para el pago». Mientras estén vacíos, los dos salen con rayitas
+        en su lugar, para que se vea lo que falta en vez de callarlo.</div>
       <div class="grid">
         ${CAMPOS_LEGALES.map(([k, etq, ph]) => `<div class="full">
           <label class="lbl">${esc(etq)}</label>
@@ -18256,7 +18258,7 @@ function editarEvento(id, tipoPre, alCerrar){
 
    Los datos duros —banco, cuenta, CLABE, RFC, escritura, número de registro—
    NO viven aquí: este archivo es público. Son huecos que se llenan en
-   Ajustes → Datos legales del contrato y que `hueco()` deja como raya
+   Ajustes → Datos legales de los contratos y que `hueco()` deja como raya
    mientras estén vacíos.
 
    Cada cláusula es `{ titulo, bloques }`, y un bloque es un párrafo (texto)

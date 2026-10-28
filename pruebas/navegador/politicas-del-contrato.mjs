@@ -396,6 +396,86 @@ await bloque('12 · el hotel se nombra, y objeto/servicio/contraprestación van 
     !cot.h2.includes('Contraprestación'));
 });
 
+/* --- 13 -------------------------------------------------------------------
+   DÓNDE SE CAPTURAN LOS DATOS DEL PAGO.
+
+   Marco, viendo «DATOS PARA EL PAGO» con cuatro rayas: «agrega los datos
+   bancarios del documento original porfavor». No van al programa: este
+   archivo es público, y una cuenta y una CLABE ahí quedan en internet y en el
+   historial de Git, donde borrarlas después ya no las quita. Van en Ajustes,
+   que se guarda en la nube privada del hotel.
+
+   Y entonces lo que había que arreglar no era el dato: era el letrero. La
+   sección se llamaba «Datos legales del contrato DE BANQUETES», así que quien
+   la leía concluía, con razón, que no era lo suyo —y el contrato de ventas
+   seguía saliendo con rayas—. */
+await bloque('13 · los datos del pago se capturan en Ajustes, no en el programa', async () => {
+  const pantalla = await p.evaluate(() => {
+    state.usuarios = [saneaUsuario({ id:'u9', nombre:'Sistemas',
+      correo:'admin9@ejemplo.example', rol:'admin' })];
+    guardar();
+    vista = 'ajustes'; render();
+    const sec = [...document.querySelectorAll('h3.sec')]
+      .find(x => /Datos legales/i.test(x.textContent));
+    const aviso = sec ? sec.nextElementSibling.innerText : '';
+    return {
+      titulo: sec ? sec.textContent.trim() : '(no está la sección)',
+      aviso,
+      campos: ['banco','cuenta','clabe','rfc']
+        .filter(k => document.querySelector(`[data-legal="${k}"]`)),
+    };
+  });
+  afirma('la sección ya no se llama sólo «de banquetes»',
+    pantalla.titulo === 'Datos legales de los contratos');
+  afirma('EL AVISO DICE QUE SON DE LOS DOS CONTRATOS',
+    /los dos contratos/i.test(pantalla.aviso) && /ventas/i.test(pantalla.aviso));
+  afirma('y nombra el apartado donde salen en el de ventas',
+    /Datos para el pago/i.test(pantalla.aviso));
+  afirma('y sigue explicando por qué no vienen puestos',
+    /p[úu]blico/i.test(pantalla.aviso));
+  afirma('están los cuatro campos que hacen falta', pantalla.campos.length === 4);
+
+  /* El camino completo: lo que se teclea ahí sale impreso en el contrato. */
+  const impreso = await p.evaluate(() => {
+    const puesto = { banco:'BANCO DE EJEMPLO', cuenta:'0000000000',
+                     clabe:'000000000000000000', rfc:'XAXX010101000' };
+    for (const [k, v] of Object.entries(puesto)) {
+      const i = document.querySelector(`[data-legal="${k}"]`);
+      i.value = v; i.dispatchEvent(new Event('input', { bubbles:true }));
+    }
+    document.querySelector('#bGuardarAj').click();
+
+    const k = saneaContrato({ id:'k13', tipo:'contrato', clienteId:'c1',
+      ejecutivo:'Carmen Ejemplo', fecha:'2026-10-28', titulo:'Grupo de ejemplo',
+      hospedaje:[saneaLineaHosp({ descripcion:'10 habitaciones King', noches:2, precio:1800 })] });
+    const caja = document.createElement('div');
+    caja.className = 'doc-body';
+    caja.style.cssText = 'position:fixed;left:-99999px;top:0;width:820px';
+    caja.innerHTML = `<div class="doc-contenido">${cuerpoContrato(k, cliente('c1'))}</div>`;
+    document.body.appendChild(caja);
+    const t = caja.innerText; caja.remove();
+    return { texto: t, guardado: Object.assign({}, state.ajustes.hotel) };
+  });
+  afirma('se guardaron en los ajustes del hotel',
+    impreso.guardado.banco === 'BANCO DE EJEMPLO' &&
+    impreso.guardado.clabe === '000000000000000000');
+  afirma('Y EL CONTRATO LOS IMPRIME EN LUGAR DE LAS RAYAS',
+    /BANCO DE EJEMPLO/.test(impreso.texto) &&
+    /000000000000000000/.test(impreso.texto) &&
+    /XAXX010101000/.test(impreso.texto));
+
+  /* EL GRUPO DE CONTROL, y es el que de verdad importa: que nada de esto haya
+     entrado al archivo. Si un día alguien pega la cuenta del hotel «para
+     probar», esto se pone rojo antes de que salga publicado. */
+  const def = await p.evaluate(() => Object.assign({}, HOTEL_DEF));
+  afirma('NINGÚN DATO BANCARIO NI FISCAL VIENE PUESTO EN EL PROGRAMA',
+    ['banco','cuenta','clabe','rfc','escritura','domicilioFiscal','registroProfeco']
+      .every(k => String(def[k] || '').trim() === ''));
+  const src = fs.readFileSync(APP, 'utf8');
+  afirma('y el archivo no trae ninguna cadena con forma de CLABE',
+    !/\b\d{18}\b/.test(src));
+});
+
 await br.close(); srv.close();
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTodo en verde.\n');
 process.exit(fallas ? 1 : 0);
