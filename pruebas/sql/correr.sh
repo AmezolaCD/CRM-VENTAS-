@@ -57,6 +57,15 @@ su pg -c "$BIN/psql -h $SOCK -p 5433 -U postgres -q -f $TRABAJO/contador-de-foli
   sed 's/^NOTICE:  //'
 
 echo ""
+echo "Los papeles: quién ve qué, y que la bajada termine a tiempo:"
+# Las notas de psql vienen con el archivo y el renglón delante; se les quita el
+# prefijo ANTES de filtrar, o se irían junto con el resto del ruido —y la
+# prueba pasaría en verde sin enseñar una sola línea—.
+su pg -c "$BIN/psql -h $SOCK -p 5433 -U postgres -q -f $TRABAJO/papeles.sql" 2>&1 |
+  sed -E 's/^psql:[^ ]*: NOTICE:  //; s/^NOTICE:  //' |
+  grep -vE "^(SET|BEGIN|COMMIT|ROLLBACK|INSERT|UPDATE|DELETE|DO|ANALYZE|CREATE|SELECT|resultado|---|\(1 row\)|^$)"
+
+echo ""
 echo "La firma del cliente:"
 su pg -c "$BIN/psql -h $SOCK -p 5433 -U postgres -q -f $TRABAJO/firma-del-cliente.sql" 2>&1 |
   grep -vE "^(SET|BEGIN|COMMIT|INSERT|UPDATE|SAVEPOINT|DO|NOTICE:  relation|NOTICE:  policy|NOTICE:  trigger|NOTICE:  function|NOTICE:  schema|resultado|---|\(1 row\)|^$)" |

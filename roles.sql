@@ -146,6 +146,25 @@ stable
 as $$ select coalesce(public.crm_yo() ->> 'nombre', ''); $$;
 
 -- ---------------------------------------------------------------------------
+-- 2 bis. EL ÍNDICE SIN EL CUAL NADA DE ESTO TERMINA A TIEMPO
+--
+--    `crm_yo()` busca al dueño del correo comparando `lower(datos->>'correo')`.
+--    Eso es una EXPRESIÓN, y un índice normal no la cubre: sin éste, cada
+--    evaluación recorre a mano todas las filas de usuarios.
+--
+--    Le costó días al hotel. La sincronización entera devolvía
+--    «canceling statement due to statement timeout» y el CRM no subía ni
+--    bajaba nada: ni los ajustes, ni la lista de usuarios, ni el catálogo. Lo
+--    que se veía desde fuera era «a mí me salen los datos y a Carmen no».
+--
+--    Vive aquí y no en nube.sql a propósito: este archivo es el que trae la
+--    función que lo necesita, y quien corra uno sin el otro se queda a medias.
+-- ---------------------------------------------------------------------------
+create index if not exists crm_datos_usuarios_correo_idx
+  on public.crm_datos ((lower(datos ->> 'correo')))
+  where tipo = 'usuarios' and borrado = false;
+
+-- ---------------------------------------------------------------------------
 -- 3. Las reglas
 --
 --    · El catálogo, los textos y la lista de usuarios los necesita todo el
@@ -170,6 +189,21 @@ as $$ select coalesce(public.crm_yo() ->> 'nombre', ''); $$;
 --    Escribir sigue abierto a cualquiera que haya entrado, salvo los ajustes y
 --    la lista de usuarios, que son del administrador. No se restringe más
 --    porque quien puede ver un registro necesita poder corregirlo.
+--
+--    POR QUÉ CADA LLAMADA VA ENVUELTA EN `(select ...)`.
+--
+--    Porque sin eso, esto no termina. Postgres NO guarda el resultado de una
+--    función `stable` dentro de un predicado de fila: la vuelve a evaluar en
+--    cada fila y en cada rama del `case`. Son ocho ramas, cada `crm_rol()`
+--    llama a `crm_yo()` hasta dos veces, y `crm_yo()` consulta la tabla. Con
+--    la cartera crecida eso se multiplica hasta pasarse del límite de ocho
+--    segundos de Supabase, y entonces no truena una consulta: truena la
+--    sincronización completa, en silencio y para todos.
+--
+--    Envuelta en una subconsulta escalar, Postgres la resuelve UNA sola vez
+--    por consulta, antes de mirar la primera fila. Es el mismo texto y las
+--    mismas reglas —quién ve qué no cambia ni un ápice—; lo único que cambia
+--    es cuántas veces se le pregunta.
 -- ---------------------------------------------------------------------------
 -- Se tiran primero las de nube.sql y también las de este archivo, para que
 -- volver a correrlo no truene con "policy already exists".
@@ -184,29 +218,29 @@ create policy "lee lo suyo" on public.crm_datos for select to authenticated
 using (
   case
     -- Quien no está en la lista de usuarios no alcanza nada.
-    when public.crm_rol() = 'ninguno' then false
+    when (select public.crm_rol()) = 'ninguno' then false
 
     -- La administración y la dirección lo ven todo. El departamento que
     -- escogen al entrar acota la pantalla, no el permiso: alcanzan los dos.
-    when public.crm_rol() in ('admin','direccion') then true
+    when (select public.crm_rol()) in ('admin','direccion') then true
 
     -- La tableta del lobby: los ajustes, la lista de usuarios y lo que ella
     -- misma capturó. Nada más.
-    when public.crm_rol() = 'captura'
+    when (select public.crm_rol()) = 'captura'
       then tipo in ('ajustes','usuarios')
-        or (tipo = 'prospectos' and lower(coalesce(duenio,'')) = lower(public.crm_nombre()))
+        or (tipo = 'prospectos' and lower(coalesce(duenio,'')) = lower((select public.crm_nombre())))
 
     -- Banquetes comparte la cartera con ventas, pero el hospedaje no es suyo
     -- y las campañas tampoco.
     -- La cartera le baja entera a propósito: un evento cuelga de un cliente, y
     -- sin el cliente el evento no se puede ni abrir. La pantalla le sigue
     -- enseñando nada más los suyos.
-    when public.crm_rol() in ('banquetes','gte_banquetes')
+    when (select public.crm_rol()) in ('banquetes','gte_banquetes')
       then tipo not in ('convenios','contratos','huespedes','campanas','odts')
        and (tipo in ('ajustes','habitaciones','usuarios','clientes')
-            or public.crm_rol() = 'gte_banquetes'
+            or (select public.crm_rol()) = 'gte_banquetes'
             or duenio is null
-            or lower(duenio) = lower(public.crm_nombre()))
+            or lower(duenio) = lower((select public.crm_nombre())))
 
     -- Marketing no alcanza la cartera. Lo suyo son las campañas —que no tienen
     -- dueño, son del área— y los prospectos, que son el resultado de su
@@ -217,7 +251,7 @@ using (
     -- y el día que Pedro tocara una de Sidney el servidor le rebotaría la
     -- subida ENTERA —PostgREST manda el lote en un solo POST—. A quién le toca
     -- trabajarla se guarda dentro del renglón, que es un dato, no un permiso.
-    when public.crm_rol() in ('marketing','gte_marketing')
+    when (select public.crm_rol()) in ('marketing','gte_marketing')
       then tipo in ('ajustes','usuarios','campanas','prospectos','odts')
 
     -- Quien lleva las órdenes de trabajo y nada más. Marketing ya las ve, pero
@@ -231,25 +265,25 @@ using (
     --
     -- Escribir no necesita renglón propio: una orden no lleva dueño, y la
     -- regla de edición ya deja tocar lo que no lo tiene.
-    when public.crm_rol() = 'odts'
+    when (select public.crm_rol()) = 'odts'
       then tipo in ('ajustes','usuarios','odts')
 
     -- Ventas: todo menos los eventos de banquetes y las campañas.
     else tipo not in ('eventos','campanas','odts')
      and (tipo in ('ajustes','habitaciones','usuarios')
-          or public.crm_rol() = 'gerente'
+          or (select public.crm_rol()) = 'gerente'
           or duenio is null
-          or lower(duenio) = lower(public.crm_nombre()))
+          or lower(duenio) = lower((select public.crm_nombre())))
   end
 );
 
 create policy "inserta" on public.crm_datos for insert to authenticated
 with check (
-  case when public.crm_rol() = 'ninguno'
+  case when (select public.crm_rol()) = 'ninguno'
             then false
        when tipo in ('ajustes','usuarios','habitaciones')
-            then public.crm_rol() = 'admin'
-       when public.crm_rol() = 'captura'
+            then (select public.crm_rol()) = 'admin'
+       when (select public.crm_rol()) = 'captura'
             then tipo = 'prospectos'
        else true end
 );
@@ -259,28 +293,28 @@ with check (
 -- más aquí le tumbaría la subida entera por una fila que ni siquiera tiene.
 create policy "edita" on public.crm_datos for update to authenticated
 using (
-  case when public.crm_rol() = 'ninguno'
+  case when (select public.crm_rol()) = 'ninguno'
        then false
-       when public.crm_rol() = 'captura'
-       then tipo = 'prospectos' and lower(coalesce(duenio,'')) = lower(public.crm_nombre())
+       when (select public.crm_rol()) = 'captura'
+       then tipo = 'prospectos' and lower(coalesce(duenio,'')) = lower((select public.crm_nombre()))
        else tipo in ('ajustes','habitaciones','usuarios')
-            or public.crm_rol() in ('admin','direccion','gerente','gte_banquetes')
+            or (select public.crm_rol()) in ('admin','direccion','gerente','gte_banquetes')
             -- Banquetes escribe SU columna en la ficha del cliente: su etapa y
             -- su ejecutivo de banquetes. La cartera le baja entera —ver la
             -- regla de lectura de arriba—, así que también tiene que poder
             -- devolverla: el renglón trae el `duenio` de ventas, y sin esto el
             -- servidor se lo rebota y su etapa no sale nunca de su equipo.
-            or (tipo = 'clientes' and public.crm_rol() = 'banquetes')
+            or (tipo = 'clientes' and (select public.crm_rol()) = 'banquetes')
             or duenio is null
-            or lower(duenio) = lower(public.crm_nombre())
+            or lower(duenio) = lower((select public.crm_nombre()))
   end
 )
 with check (
-  case when public.crm_rol() = 'ninguno'
+  case when (select public.crm_rol()) = 'ninguno'
             then false
        when tipo in ('ajustes','usuarios','habitaciones')
-            then public.crm_rol() = 'admin'
-       when public.crm_rol() = 'captura'
+            then (select public.crm_rol()) = 'admin'
+       when (select public.crm_rol()) = 'captura'
             then tipo = 'prospectos'
        else true end
 );
@@ -291,7 +325,7 @@ with check (
 drop policy if exists "equipo lee bitacora"   on public.crm_bitacora;
 drop policy if exists "gerencia lee bitacora" on public.crm_bitacora;
 create policy "gerencia lee bitacora" on public.crm_bitacora for select to authenticated
-using (public.crm_rol() in ('admin','gerente'));
+using ((select public.crm_rol()) in ('admin','gerente'));
 
 -- ---------------------------------------------------------------------------
 -- 5. Para deshacer

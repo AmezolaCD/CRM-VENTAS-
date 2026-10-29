@@ -157,17 +157,22 @@ await bloque('4 · los demás papeles siguen igual', async () => {
    preguntándole a alguien por qué no usa el sistema. */
 await bloque('5 · roles.sql conoce el papel', async () => {
   const sql = fs.readFileSync(SQL, 'utf8');
+  /* `crm_rol()` va envuelta en `(select ...)` dentro de las políticas, y no es
+     cosmético: sin eso Postgres la reevalúa en CADA FILA y la sincronización
+     entera se pasaba del límite de ocho segundos de Supabase. Las búsquedas de
+     aquí abajo no fijan la envoltura —eso lo mide `pruebas/sql/papeles.sql`—,
+     pero tienen que tolerarla. */
   afirma('la regla de lectura lo nombra',
-    /crm_rol\(\)\s*=\s*'odts'/.test(sql));
+    /crm_rol\(\)\)?\s*=\s*'odts'/.test(sql));
   afirma('Y LE DEJA LEER LAS ÓRDENES',
-    /crm_rol\(\)\s*=\s*'odts'[\s\S]{0,600}?tipo in \([^)]*'odts'[^)]*\)/.test(sql));
+    /crm_rol\(\)\)?\s*=\s*'odts'[\s\S]{0,600}?tipo in \([^)]*'odts'[^)]*\)/.test(sql));
   /* Sin los ajustes no tiene los datos del hotel ni la lista de
      departamentos; sin usuarios, el propio servidor no sabe qué papel tiene
      quien pregunta. Con cualquiera de los dos fuera, entra a una pantalla en
      blanco. */
   /* La rama, y sólo la rama: hasta el `when` siguiente o el `else`. Pasarse
      de ahí leería la de ventas y esto diría que alcanza las campañas. */
-  const desde = sql.indexOf("crm_rol() = 'odts'");
+  const desde = sql.search(/crm_rol\(\)\)?\s*=\s*'odts'/);
   const hasta = sql.slice(desde).search(/\n\s*(when|else)\b/);
   const rama = sql.slice(desde, desde + (hasta > 0 ? hasta : 300));
   afirma('con los ajustes, de donde sale la lista de departamentos',
@@ -179,7 +184,7 @@ await bloque('5 · roles.sql conoce el papel', async () => {
     !/'clientes'/.test(rama) && !/'campanas'/.test(rama) && !/'convenios'/.test(rama));
 
   /* El renglón tiene que ir ANTES del `else`, o nunca se llega a él. */
-  const iOdts  = sql.indexOf("crm_rol() = 'odts'");
+  const iOdts  = sql.search(/crm_rol\(\)\)?\s*=\s*'odts'/);
   const iElse  = sql.indexOf("else tipo not in ('eventos','campanas','odts')");
   afirma('y va antes de la rama de ventas, que excluye las órdenes',
     iOdts > 0 && iElse > iOdts);
