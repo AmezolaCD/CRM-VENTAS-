@@ -1039,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.29-2";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.29-3";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2036,7 +2036,9 @@ function saneaUsuario(u){
  * palomita en Ajustes → Usuarios. Quien no puede ni ve la pestaña.
  */
 const puedeCertificados = () => {
-  if (!nubeActiva()) return true;          // suelto, en una sola máquina, manda quien la usa
+  // `nubeConfigurada` y no `nubeActiva`: suelto de verdad, no «todavía sin
+  // sesión». Ver el comentario de `nubeConfigurada`.
+  if (!nubeConfigurada()) return true;     // suelto, en una sola máquina, manda quien la usa
   if (esAdmin()) return true;
   const u = usuarioActual();
   return !!(u && u.certificados);
@@ -2089,13 +2091,20 @@ function usuarioActual(){
 }
 
 /**
- * Sin nube no hay sesión, y entonces no hay a quién limitarle nada: quien
- * abre la aplicación en su equipo es dueño de sus propios datos. Con nube,
- * un correo que no está dado de alta entra como ejecutivo sin cartera, que
- * es lo prudente: mejor que no vea nada a que lo vea todo por descuido.
+ * Sin servidor no hay a quién limitarle nada: quien abre la aplicación en su
+ * equipo es dueño de sus propios datos. Con servidor, un correo que no está
+ * dado de alta entra como ejecutivo sin cartera, que es lo prudente: mejor
+ * que no vea nada a que lo vea todo por descuido.
+ *
+ * SIN SERVIDOR, no «sin sesión». Antes esto preguntaba `nubeActiva()`, que
+ * exige sesión viva, y mientras la sesión se restauraba —en cada carga— esta
+ * función contestaba «admin» a cualquiera. De ahí el parpadeo que reportó
+ * Carmen: veía pestañas de administradora y se le iban solas. Con el servidor
+ * configurado y sin sesión se cae a «ejecutivo», que es equivocarse del lado
+ * que no regala nada.
  */
 function rolActual(){
-  if (!nubeActiva()) return "admin";
+  if (!nubeConfigurada()) return "admin";
   const u = usuarioActual();
   return u ? u.rol : "ejecutivo";
 }
@@ -4819,6 +4828,26 @@ let nube = { url:"", anon:"", sesion:null, estado:"local", ultimo:"", timer:null
 let sincronizado = new Map();     // id de fila -> JSON ya confirmado en la nube
 
 const nubeActiva = () => !!(nube.url && nube.anon && nube.sesion);
+
+/**
+ * ¿Esta copia trabaja CON el servidor del hotel, aunque ahora mismo no haya
+ * sesión?
+ *
+ * No es lo mismo que `nubeActiva`, y confundirlas costó caro: la pestaña de
+ * Certificados le aparecía a Carmen al cargar y se le iba sola un segundo
+ * después. `nubeActiva` exige sesión viva, y la sesión no está restaurada en
+ * el instante en que la página pinta; en esa ventana —y cada vez que el token
+ * se renueva— las reglas de permisos caían en la rama de «copia suelta» y
+ * repartían de más: `rolActual()` devolvía «admin».
+ *
+ * Son dos preguntas distintas:
+ *   · ¿soy una copia suelta, sin servidor?   → esto
+ *   · ¿puedo hablar con el servidor ahora?   → `nubeActiva`
+ *
+ * Para repartir permisos manda la primera: si el hotel tiene servidor, hay
+ * reglas, las esté alcanzando o no en este milisegundo.
+ */
+const nubeConfigurada = () => !!(nube.url && nube.anon);
 
 /**
  * Supabase enseña la dirección del proyecto en varios lados y no siempre igual:

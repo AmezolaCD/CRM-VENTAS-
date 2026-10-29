@@ -470,6 +470,103 @@ await bloque('13 · publicada la foto, entra sin tener que recargar', async () =
   afirma('ya no queda ningún motivo que avisar', despues.motivo === '');
 });
 
+/* --- 14 -------------------------------------------------------------------
+   LA PESTAÑA QUE APARECE Y SE VA SOLA.
+
+   Carmen: «la opción de certificados se quita; actualizo y aparece, pero
+   luego desaparece». No era la sincronización ni su ficha: pasaba en CADA
+   carga, siempre.
+
+   `nubeActiva()` exige SESIÓN VIVA, y la sesión no está restaurada en el
+   instante en que la página pinta. En esa ventana —y cada vez que el token se
+   renueva— las dos decisiones de permisos caían en la rama de «copia suelta»:
+
+       rolActual()         → "admin"  ← por un momento, administradora de todo
+       puedeCertificados() → true     ← de ahí la pestaña
+
+   Entraba la sesión, se evaluaba de verdad, y todo se encogía delante de
+   ella. «Sin servidor» y «sin sesión todavía» no son lo mismo, y compartían
+   función.
+   -------------------------------------------------------------------------- */
+await bloque('14 · sin sesión todavía, nadie se vuelve administrador', async () => {
+  const r = await p.evaluate(() => {
+    /* Una ejecutiva SIN la palomita, y el hotel configurado. */
+    state.usuarios = [
+      saneaUsuario({ id:'u1', nombre:'Carmen', correo:'carmen@ejemplo.example',
+                     rol:'ejecutivo' }),
+      saneaUsuario({ id:'u3', nombre:'Sistemas', correo:'admin@ejemplo.example',
+                     rol:'admin' })];
+    guardar();
+
+    const mide = () => ({ rol: rolActual(), cert: puedeCertificados(),
+                          vistas: vistasDelRol() });
+
+    // 1 · El instante de la carga: hay servidor configurado, pero la sesión
+    //     todavía no se restaura. Es exactamente la ventana del parpadeo.
+    const sesion = nube.sesion;
+    nube.sesion = null;
+    const sinSesion = mide();
+
+    // 2 · Y un segundo después, con la sesión puesta.
+    nube.sesion = sesion;
+    const conSesion = mide();
+
+    // 3 · El grupo de control: una copia SUELTA DE VERDAD, sin dirección ni
+    //     llave. Ahí sí manda quien usa la máquina, y eso no se puede romper.
+    const url = nube.url, anon = nube.anon;
+    nube.url = ''; nube.anon = ''; nube.sesion = null;
+    const suelta = mide();
+    nube.url = url; nube.anon = anon; nube.sesion = sesion;
+
+    return { sinSesion, conSesion, suelta };
+  });
+
+  afirma('EN LA VENTANA SIN SESIÓN NO ES ADMINISTRADORA',
+    r.sinSesion.rol !== 'admin');
+  afirma('Y NO LE APARECE LA PESTAÑA DE CERTIFICADOS',
+    r.sinSesion.cert === false && !r.sinSesion.vistas.includes('certificados'));
+  /* La mitad más grande del mismo error: con «admin» se le asomaba Ajustes,
+     que es la pantalla de los datos del hotel y de los permisos de todos. */
+  afirma('ni la de Ajustes', !r.sinSesion.vistas.includes('ajustes'));
+
+  afirma('con la sesión puesta sigue sin certificados, que es lo correcto',
+    r.conSesion.cert === false);
+  afirma('Y NO CAMBIA ENTRE UN MOMENTO Y OTRO: se acabó el parpadeo',
+    r.sinSesion.cert === r.conSesion.cert &&
+    r.sinSesion.vistas.includes('certificados') === r.conSesion.vistas.includes('certificados'));
+
+  afirma('UNA COPIA SUELTA DE VERDAD SIGUE PUDIENDO TODO',
+    r.suelta.rol === 'admin' && r.suelta.cert === true);
+});
+
+/* --- 15 --------------------------------------------------------------------
+   El otro lado, y la regla que de verdad importa.
+
+   Antes de restaurar la sesión el CRM NO SABE QUIÉN ERES, así que no puede
+   saber que tienes la palomita: enseña de menos. Eso está bien y es el único
+   sentido en el que puede equivocarse sin hacer daño. Lo que no debe pasar
+   nunca —y es lo que pasaba— es enseñar de MÁS: pestañas de administradora a
+   quien no lo es, que luego se le quitan delante de los ojos.
+   -------------------------------------------------------------------------- */
+await bloque('15 · con la palomita prendida, aparece al identificarse y no antes', async () => {
+  const r = await p.evaluate(() => {
+    state.usuarios = [
+      saneaUsuario({ id:'u1', nombre:'Carmen', correo:'carmen@ejemplo.example',
+                     rol:'ejecutivo', certificados:true }),
+      saneaUsuario({ id:'u3', nombre:'Sistemas', correo:'admin@ejemplo.example',
+                     rol:'admin' })];
+    guardar();
+    const sesion = nube.sesion;
+    nube.sesion = null;
+    const antes = vistasDelRol().includes('certificados');
+    nube.sesion = sesion;
+    const despues = vistasDelRol().includes('certificados');
+    return { antes, despues };
+  });
+  afirma('la tiene con la sesión puesta', r.despues);
+  afirma('Y ANTES DE SABER QUIÉN ES, NO SE LA REGALA', r.antes === false);
+});
+
 await br.close(); srv.close();
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTodo en verde.\n');
 process.exit(fallas ? 1 : 0);
