@@ -563,6 +563,127 @@ await bloque('14 · un importe con formato llega entero al documento', async () 
   afirma('ni una comisión de cero colgando', !('comision' in vacio.guardado));
 });
 
+/* --- 15 -------------------------------------------------------------------
+   EL CONTRATO SE LLEVA LOS DATOS DEL HOTEL CONSIGO.
+
+   Marco: «sigue sin aparecer los datos bancarios aunque ya los puse en
+   ajustes; a mí sí me salen pero a Carmen no».
+
+   La pantalla de firma corre en el navegador DEL CLIENTE, que no tiene los
+   ajustes del hotel ni tiene por qué tenerlos: el servidor sólo le deja leer
+   el documento que trae su clave. Sin congelar nada, el contrato que él abre
+   desde su enlace dice «________» donde va la razón social, el RFC y la
+   cuenta de depósito — firmaría un papel que no nombra al hotel ni dice dónde
+   pagar.
+
+   Banquetes se protegía así desde siempre (`datosHotel`). Ventas no lo
+   necesitaba hasta que este documento empezó a nombrar al hotel, que fue
+   cuando le agregamos «Datos para el pago» y las cláusulas de Objeto,
+   Servicio y Contraprestación. Se le puso la dependencia sin la protección.
+   =========================================================================== */
+await bloque('15 · el cliente, sin los ajustes del hotel, igual lee quién se obliga', async () => {
+  const r = await p.evaluate(() => {
+    /* Lo que el hotel tiene capturado hoy. Inventado: repo público. */
+    Object.assign(state.ajustes.hotel, { razonSocial:'RAZÓN DE EJEMPLO SA DE CV',
+      rfc:'XAXX010101000', banco:'BANCO DE EJEMPLO', cuenta:'0000000000',
+      clabe:'000000000000000000' });
+    guardar();
+
+    const k = saneaContrato({ id:'k15', tipo:'contrato', clienteId:'c1',
+      ejecutivo:'Carmen Ejemplo', fecha:'2026-10-29', titulo:'Grupo de ejemplo',
+      hospedaje:[saneaLineaHosp({ descripcion:'10 habitaciones King', noches:2, precio:1800 })] });
+
+    /* Se congela como lo hace `emitirContrato`, que es el único lugar donde
+       un contrato deja de ser borrador. */
+    const dh = datosDelHotelAhora();
+    if (dh) k.datosHotel = dh;
+
+    /* Y AHORA SE BORRAN LOS AJUSTES: así es exactamente como llega el
+       documento al navegador del cliente. */
+    const guardados = state.ajustes.hotel;
+    state.ajustes.hotel = Object.assign({}, HOTEL_DEF);
+
+    const caja = document.createElement('div');
+    caja.className = 'doc-body';
+    caja.style.cssText = 'position:fixed;left:-99999px;top:0;width:820px';
+    caja.innerHTML = `<div class="doc-contenido">${cuerpoContrato(k, cliente('c1'))}</div>`;
+    document.body.appendChild(caja);
+    const texto = caja.innerText; caja.remove();
+
+    state.ajustes.hotel = guardados;
+    return { texto, llaves: Object.keys(k) };
+  });
+
+  afirma('NOMBRA AL HOTEL en el objeto, aunque no haya ajustes',
+    /RAZÓN DE EJEMPLO SA DE CV/.test(r.texto));
+  afirma('y dice a nombre de quién se paga, con su RFC',
+    /XAXX010101000/.test(r.texto));
+  afirma('Y DICE DÓNDE PAGAR: banco, cuenta y CLABE',
+    /BANCO DE EJEMPLO/.test(r.texto) && /0000000000/.test(r.texto) &&
+    /000000000000000000/.test(r.texto));
+  afirma('el contrato emitido carga la copia', r.llaves.includes('datosHotel'));
+});
+
+/* --- 16 ------------------------------------------------------------------- */
+await bloque('16 · lo congelado no se mueve, y lo que no se congeló sí', async () => {
+  const r = await p.evaluate(() => {
+    Object.assign(state.ajustes.hotel, { razonSocial:'LA DE ANTES SA DE CV',
+      banco:'BANCO DE ANTES', cuenta:'1111111111', clabe:'111111111111111111' });
+    guardar();
+    const k = saneaContrato({ id:'k16', tipo:'contrato', clienteId:'c1',
+      ejecutivo:'Carmen Ejemplo', fecha:'2026-10-29', titulo:'Grupo de ejemplo',
+      hospedaje:[saneaLineaHosp({ descripcion:'10 King', noches:2, precio:1800 })] });
+    const dh = datosDelHotelAhora();
+    if (dh) k.datosHotel = dh;
+
+    /* El hotel cambia de banco DESPUÉS de emitirlo. */
+    Object.assign(state.ajustes.hotel, { banco:'BANCO NUEVO', cuenta:'2222222222' });
+    guardar();
+
+    const dibuja = (doc) => {
+      const caja = document.createElement('div');
+      caja.innerHTML = `<div class="doc-contenido">${cuerpoContrato(doc, cliente('c1'))}</div>`;
+      return caja.innerText;
+    };
+    /* Y un BORRADOR, que nunca se emitió y por tanto no congeló nada. */
+    const borrador = saneaContrato({ id:'k16b', tipo:'contrato', clienteId:'c1',
+      ejecutivo:'Carmen Ejemplo', fecha:'2026-10-29',
+      hospedaje:[saneaLineaHosp({ descripcion:'10 King', noches:2, precio:1800 })] });
+    return { emitido: dibuja(k), borrador: dibuja(borrador),
+             llavesBorrador: Object.keys(borrador) };
+  });
+
+  afirma('EL CONTRATO EMITIDO CONSERVA EL BANCO CON EL QUE SE FIRMÓ',
+    /BANCO DE ANTES/.test(r.emitido) && !/BANCO NUEVO/.test(r.emitido));
+  afirma('y el borrador sí toma el nuevo', /BANCO NUEVO/.test(r.borrador));
+  afirma('un borrador no carga la copia congelada',
+    !r.llavesBorrador.includes('datosHotel'));
+});
+
+/* --- 17 --------------------------------------------------------------------
+   EL GRUPO DE CONTROL. El mecanismo se copió de banquetes; si algo se rompió,
+   es ahí. */
+await bloque('17 · el contrato de BANQUETES sigue congelando igual', async () => {
+  const r = await p.evaluate(() => {
+    Object.assign(state.ajustes.hotel, { razonSocial:'RAZÓN DE EJEMPLO SA DE CV' });
+    guardar();
+    const e = saneaEvento({ id:'e17', clienteId:'c1', ejecutivo:'Carmen Ejemplo',
+      fecha:'2026-10-29', titulo:'Evento de ejemplo' });
+    const dh = datosDelHotelAhora();
+    if (dh) e.datosHotel = dh;
+    const guardados = state.ajustes.hotel;
+    state.ajustes.hotel = Object.assign({}, HOTEL_DEF);
+    const caja = document.createElement('div');
+    caja.innerHTML = `<div class="doc-contenido">${cuerpoContratoBq(e, cliente('c1'))}</div>`;
+    const texto = caja.innerText;
+    state.ajustes.hotel = guardados;
+    return texto;
+  });
+  afirma('sin ajustes, el de banquetes también nombra al hotel',
+    /RAZÓN DE EJEMPLO SA DE CV/.test(r));
+  afirma('y sigue siendo el de eventos sociales', /EVENTOS SOCIALES/i.test(r));
+});
+
 await br.close(); srv.close();
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTodo en verde.\n');
 process.exit(fallas ? 1 : 0);

@@ -1039,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.28-3";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.29-1";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3615,6 +3615,14 @@ function saneaContrato(k){
        único lugar donde esto se puede garantizar de verdad. */
     for (const kk of ["limiteFirma","minimoHab","depositoHab","firmanMaestra","pagos","cargos"])
       delete o[kk];
+  }
+  /* Los datos del hotel con los que se emitió, congelados. Mismo trato que en
+     `saneaEvento`: nace al emitirse y se cae si queda vacío, para no cambiarle
+     la forma a todos los contratos a la vez —la sincronización los daría por
+     editados y este equipo mandaría su copia encima de la de los demás—. */
+  if (o.datosHotel !== undefined){
+    o.datosHotel = saneaDatosHotel(o.datosHotel);
+    if (!o.datosHotel) delete o.datosHotel;
   }
   if ("limiteFirma" in o){
     o.limiteFirma = String(o.limiteFirma || "").trim();
@@ -15245,7 +15253,11 @@ const contratoEsMio = k => puedeVerTodo() ||
 /** El cuerpo del documento. Se usa para verlo, imprimirlo y armar el PDF. */
 function cuerpoContrato(k, c){
   if (!(c && c.empresa) && k.destinatario) c = k.destinatario;
-  const h = state.ajustes.hotel;
+  /* Lo congelado al emitir manda; lo que no se congeló cae a lo de Ajustes.
+     Así el cliente lee el mismo papel desde su navegador —donde no hay
+     ajustes— y un contrato viejo no empeora por lo que no alcanzó a guardar.
+     Igual que `cuerpoContratoBq`. */
+  const h = Object.assign({}, state.ajustes.hotel, k.datosHotel || {});
   const cu = cuentasContrato(k);
   const mon = v => money(v, k.moneda);
 
@@ -16339,6 +16351,15 @@ async function emitirContrato(k, firma){
   // dentro de un año, aunque la ficha del cliente haya cambiado.
   if (c) k.destinatario = { empresa:c.empresa, contacto:c.contacto, ubicacion:c.ubicacion,
                             telefono:c.telefono, email:c.email };
+  /* Y los datos del hotel, por la misma razón y por una más grande: LA
+     PANTALLA DE FIRMA CORRE EN EL NAVEGADOR DEL CLIENTE, que no tiene los
+     ajustes del hotel ni tiene por qué tenerlos. Sin esto, el contrato que él
+     abre desde su enlace dice «________» donde va la razón social, el RFC y la
+     cuenta de depósito: firmaría un papel que no nombra al hotel ni dice dónde
+     pagar. Banquetes lo hacía desde siempre (`emitirEvento`); ventas no lo
+     necesitaba hasta que este documento empezó a nombrar al hotel. */
+  const dh = datosDelHotelAhora();
+  if (dh) k.datosHotel = dh;
   registrarAuto(k.clienteId,
     firma ? `${doc} ${k.folio} firmada por el ejecutivo` : `${doc} ${k.folio} emitido`,
     firma ? (k.titulo || "")
