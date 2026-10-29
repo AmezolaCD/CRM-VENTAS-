@@ -55,6 +55,7 @@ node pruebas/navegador/los-departamentos-de-la-liga.mjs # lo que ve la liga de l
 node pruebas/navegador/solo-las-ordenes.mjs         # el papel que sólo ve las ODTs
 node pruebas/navegador/politicas-del-contrato.mjs   # el contrato de ventas, completo
 node pruebas/navegador/observaciones-del-convenio.mjs # las que sí salen en la carta
+node pruebas/navegador/subir-en-trozos.mjs          # la subida no truena por grande
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el

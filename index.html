@@ -1039,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.29-1";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.29-2";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -5601,8 +5601,57 @@ function duenioDe(fila){
  *
  * Un renglón malo entre cien son unos siete viajes de más, no cien.
  */
+/* NUNCA UNA SOLA PETICIÓN CON TODO.
+
+   PostgREST ejecuta el lote completo como UN SOLO statement, y Supabase lo
+   corta a los ocho segundos. Le costó días al hotel: `sincronizado` vive en
+   memoria y al recargar queda vacío, así que el CRM daba por no subido TODO y
+   mandaba la base entera de una. Se pasaba del tiempo, y como un timeout no
+   es «un renglón malo», ni siquiera se partía: se rendía y lo volvía a
+   intentar igual en la siguiente vuelta, para siempre.
+
+   Se parte por número de renglones Y por tamaño, porque las dos cosas pesan:
+   doscientos clientes no son nada, pero doscientos convenios con la firma del
+   cliente dentro —una imagen en base64— son varios megabytes en un solo POST. */
+const TOPE_LOTE  = 200;
+const TOPE_BYTES = 1_000_000;
+
+/** Corta `filas` en trozos que ni son muchos ni pesan de más. */
+function enTrozos(filas){
+  const trozos = [];
+  let actual = [], bytes = 0;
+  for (const f of filas){
+    const suyo = JSON.stringify(f).length;
+    if (actual.length && (actual.length >= TOPE_LOTE || bytes + suyo > TOPE_BYTES)){
+      trozos.push(actual); actual = []; bytes = 0;
+    }
+    actual.push(f); bytes += suyo;
+  }
+  if (actual.length) trozos.push(actual);
+  return trozos;
+}
+
+/**
+ * ¿Rebotó por GRANDE, no por malo?
+ *
+ * Un timeout no se arregla rindiéndose: se arregla mandando menos de una vez.
+ * Sin esto, `mandarLote` lo trataba como «se cayó todo» y lanzaba sin partir.
+ */
+function esDemasiadoGrande(e){
+  const m = String((e && e.message) || "");
+  return /statement timeout|canceling statement|57014|\b413\b|\b504\b|too large|payload/i.test(m);
+}
+
 async function mandarLote(filas, parte, yaRebotado){
   if (!filas.length) return;
+
+  /* Antes de nada, el tamaño. Cada trozo se manda como si fuera nuevo —sin
+     arrastrar `yaRebotado`—, porque ninguno de ellos se ha intentado todavía. */
+  const trozos = enTrozos(filas);
+  if (trozos.length > 1){
+    for (const t of trozos) await mandarLote(t, parte);
+    return;
+  }
 
   // Con yaRebotado se salta el intento completo: quien llama YA vio rebotar
   // este mismo montón y repetirlo tal cual sólo gastaría otro viaje. Un
@@ -5626,8 +5675,11 @@ async function mandarLote(filas, parte, yaRebotado){
       }
       /* Un error que no es del renglón —se cayó la red, caducó la sesión— no
          se arregla partiendo: partir haría N peticiones para fallar N veces.
-         Se deja salir y la sincronización lo reporta como lo que es. */
-      if (!esRechazoDeFila(e)) throw e;
+         Se deja salir y la sincronización lo reporta como lo que es.
+
+         Salvo que haya rebotado por GRANDE: eso sí se arregla partiendo, y es
+         justo lo que no se hacía. */
+      if (!esRechazoDeFila(e) && !esDemasiadoGrande(e)) throw e;
     }
   }
 
@@ -5644,7 +5696,13 @@ async function mandarLote(filas, parte, yaRebotado){
  */
 function esRechazoDeFila(e){
   const m = String((e && e.message) || "");
-  return /row-level security|violates|check constraint|duplicate key|permission denied|42501|23514|23505|\b40[0-9]\b/i.test(m);
+  /* OJO CON EL 401. Antes esto decía `\b40[0-9]\b`, que lo incluía, y una
+     sesión caducada se tomaba por un renglón malo: el lote se partía en dos,
+     y en dos, y en dos, hasta mandar UNA PETICIÓN POR RENGLÓN —medido: 799
+     para 400 clientes—, todas con la misma sesión caducada y todas fallando.
+     Un 401 no es de un renglón: es de este equipo, y no se arregla partiendo.
+     El 403 sí se queda, porque ése sí lo manda la regla de fila. */
+  return /row-level security|violates|check constraint|duplicate key|permission denied|42501|23514|23505|\b(400|403|409|422)\b/i.test(m);
 }
 
 /**
@@ -5667,15 +5725,24 @@ async function subir(cambios, borrados){
 
     /* La columna "duenio" sólo existe si se corrió roles.sql. Eso se prueba
        ANTES de ponerse a partir: sin la columna rebota todo, y partir un lote
-       que va a rebotar entero no averigua nada. */
+       que va a rebotar entero no averigua nada.
+
+       Pero se prueba con UN SOLO RENGLÓN, no con el montón entero. Mandar todo
+       de una para averiguar si existe una columna es lo que tenía al hotel sin
+       sincronizar: esa petición era la que se pasaba de los ocho segundos, y
+       aquí arriba —fuera de `mandarLote`— nadie la partía. Con un renglón la
+       pregunta se contesta igual y no puede tardar. */
     if (!nube.sinDuenio){
       try{
+        const todas = arma(true);
         await api("/rest/v1/crm_datos?on_conflict=id", {
           method:"POST",
           headers:{ "Prefer":"resolution=merge-duplicates,return=minimal" },
-          body: JSON.stringify(arma(true))
+          body: JSON.stringify(todas.slice(0, 1))
         });
-        for (const f of cambios) parte.subidos.push(f.id);
+        parte.subidos.push(todas[0].id);
+        // La columna está: el resto va por el camino que sí parte en trozos.
+        await mandarLote(todas.slice(1), parte);
       }catch(e){
         // Sin la columna se recuerda por lo que dure la sesión: al día
         // siguiente se intenta otra vez, y si ya corrieron roles.sql, se usa.
@@ -5685,8 +5752,11 @@ async function subir(cambios, borrados){
           nube.sinDuenio = true;
           await mandarLote(arma(false), parte);
         } else {
-          if (!esRechazoDeFila(e)) throw e;
-          await mandarLote(arma(true), parte, true);   // ya rebotó: directo a partir
+          if (!esRechazoDeFila(e) && !esDemasiadoGrande(e)) throw e;
+          /* Lo que rebotó fue el renglón de prueba, no el montón: los demás no
+             se han intentado todavía, así que van como lote nuevo y
+             `mandarLote` decide si hay que partir. */
+          await mandarLote(arma(true), parte);
         }
       }
     } else {
