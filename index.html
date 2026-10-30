@@ -1039,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.29-3";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.30-1";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -4823,6 +4823,12 @@ const NUBE_CFG    = "crm-hotel-nube";
 const NUBE_SESION = "crm-hotel-sesion";
 const SONDEO_MS   = 15000;
 
+/* Los avisos de firmas que llegaron y no se pudieron aplicar. Viven aparte de
+   `nube` y a propósito: ver `apuntarAvisosFirma`. */
+const AVISOS_FIRMA = "crm-hotel-firmas-avisos";
+const TOPE_AVISOS  = 30;
+let avisosFirma = [];
+
 let nube = { url:"", anon:"", sesion:null, estado:"local", ultimo:"", timer:null,
              pendiente:null, rechazados:[] };
 let sincronizado = new Map();     // id de fila -> JSON ya confirmado en la nube
@@ -4892,6 +4898,13 @@ function cargarNube(){
     guardarNubeCfg();
   }
   try{ nube.sesion = JSON.parse(localStorage.getItem(NUBE_SESION) || "null"); }catch(e){}
+  /* Se leen aquí y no en `arrancarNube` por lo mismo de siempre: una lectura
+     que depende de que el llamador se acuerde es una lectura que algún día no
+     se hace. Esto ya es el lugar donde se levanta lo guardado de la nube. */
+  try{
+    const a = JSON.parse(localStorage.getItem(AVISOS_FIRMA) || "[]");
+    avisosFirma = Array.isArray(a) ? a.filter(x => x && x.txt) : [];
+  }catch(e){ avisosFirma = []; }
 }
 
 function guardarNubeCfg(){
@@ -4903,6 +4916,71 @@ function guardarSesion(){
     if (nube.sesion) localStorage.setItem(NUBE_SESION, JSON.stringify(nube.sesion));
     else localStorage.removeItem(NUBE_SESION);
   }catch(e){}
+}
+
+/* ===========================================================================
+   LOS AVISOS DE FIRMAS QUE NO ENTRARON
+
+   Marco: «el contrato se le mandó al cliente y el cliente lo firmó, pero no se
+   ve en sistema».
+
+   Lo que pasaba: `recogerFirmas()` levanta el buzón en CADA sincronización
+   automática, y tiene tres desenlaces en los que la firma no se aplica —el
+   documento se firma en papel, ya estaba firmado, o la clave del enlace ya no
+   corresponde—. Los tres dejaban su explicación en `parte.notas`, y el sondeo
+   automático hacía `if (parte.hubo) render()` y tiraba el resto. La fila del
+   buzón, en cambio, SÍ quedaba marcada como recogida. Resultado: un cliente
+   firmó, el hotel no se enteró, y el botón de «Buscar firmas de clientes» ya
+   no encontraba nada, porque el sondeo automático siempre llega primero.
+
+   El rechazo en sí está bien —un contrato se firma en papel porque así lo
+   pidió legal, una clave vieja no vale—. Lo que estaba mal era rechazar sin
+   decirlo.
+
+   Se guarda en `localStorage` y no en `nube`: `nube` vive en memoria
+   —`guardarNubeCfg()` escribe la dirección, la llave y el enlazado, nada
+   más—, y un aviso que no aguanta una recarga es el mismo defecto con otro
+   disfraz.
+
+   Queda en el equipo que estaba sincronizando, porque el buzón se recoge una
+   sola vez y le toca a quien pasó por ahí. Para «firmó y no aparece en
+   ninguna máquina» está «Firmas recibidas», que va a preguntarle al servidor.
+   =========================================================================== */
+function guardarAvisosFirma(){
+  try{ localStorage.setItem(AVISOS_FIRMA, JSON.stringify(avisosFirma)); }catch(e){}
+}
+
+/**
+ * Apunta lo que una recogida de firmas no pudo aplicar.
+ *
+ * Se llama DESDE DENTRO de `recogerFirmas()`, a propósito: el defecto que se
+ * está arreglando era justamente un llamador que no miraba las notas. Si
+ * guardarlas dependiera del llamador, el siguiente también se olvidaría.
+ *
+ * Los avisos se repiten: la rama de «este equipo no tiene bajado ese
+ * documento» no marca la fila —otro equipo tiene que poder aplicarla—, así
+ * que vuelve en cada sondeo, cada quince segundos. Uno que ya está no se
+ * duplica: se le recorre la fecha y se le lleva la cuenta.
+ */
+function apuntarAvisosFirma(avisos){
+  let hubo = false;
+  for (const a of avisos || []){
+    const txt = String(a || "").trim();
+    if (!txt) continue;
+    hubo = true;
+    const ya = avisosFirma.find(x => x.txt === txt);
+    if (ya){ ya.fecha = new Date().toISOString(); ya.veces = (ya.veces || 1) + 1; }
+    else avisosFirma.unshift({ txt, fecha:new Date().toISOString(), veces:1 });
+  }
+  if (!hubo) return;
+  if (avisosFirma.length > TOPE_AVISOS) avisosFirma.length = TOPE_AVISOS;
+  guardarAvisosFirma();
+}
+
+/** «Ya lo vi». No borra ninguna firma: sólo quita el recordatorio. */
+function olvidarAvisosFirma(){
+  avisosFirma = [];
+  guardarAvisosFirma();
 }
 
 /** Llamada a la API con la llave y el token; renueva el token si caducó. */
@@ -5816,7 +5894,10 @@ async function subir(cambios, borrados){
  * se aplica hay que poder decir por qué, o se vuelve un misterio.
  */
 async function recogerFirmas(){
-  const parte = { hubo:false, buzon:true, pendientes:0, aplicadas:0, notas:[] };
+  /* `notas` es todo lo que pasó, para el botón que se aprieta a mano.
+     `avisos` es sólo una cosa: llegó la firma de un cliente y NO entró. Esos
+     son los que se guardan y se enseñan sin que nadie los pida. */
+  const parte = { hubo:false, buzon:true, pendientes:0, aplicadas:0, notas:[], avisos:[] };
   if (!nubeActiva()){ parte.buzon = false; parte.notas.push("No hay sesión en la nube."); return parte; }
 
   let filas;
@@ -5851,24 +5932,37 @@ async function recogerFirmas(){
     const info = infoDoc(tipo);
     const v = info.lista().find(x => x.id === id);
     if (!v){
-      parte.notas.push(`Hay una firma de ${f.nombre || "un cliente"} para un documento que este equipo no tiene bajado.`);
+      const n = `Hay una firma de ${f.nombre || "un cliente"} para un documento que este equipo no tiene bajado.`;
+      parte.notas.push(n);
+      parte.avisos.push(n);
       continue;                                  // no se marca: otro equipo la aplicará
     }
     const firma = { nombre:f.nombre, puesto:f.puesto, celular:f.celular,
                     fecha:f.creado || new Date().toISOString(), img:f.img };
+    /* Las tres ramas que NO aplican la firma apuntan en las dos listas. Antes
+       sólo escribían en `notas`, y el sondeo automático las tiraba: el cliente
+       firmaba, la fila quedaba marcada como recogida, y nadie se enteraba
+       nunca. Eso es lo que arreglan estos `parte.avisos.push`. */
     if (soloEnPapel(v)){
       /* Puede quedar alguna firma en el buzón de antes de que legal lo
          prohibiera, o de un enlace que alcanzó a usarse. No se aplica: en un
          contrato esa firma no vale. Ver `soloEnPapel`. */
-      parte.notas.push(`Llegó una firma en pantalla para el contrato ${v.folio || v.id}, y los ` +
-        "contratos se firman en papel. No se aplicó: imprímelo, fírmenlo a mano y súbelo " +
-        "con «Registrar que se firmó en papel».");
+      const n = `Firmó ${f.nombre || "el cliente"} en pantalla el contrato ${v.folio || v.id}, y los ` +
+        "contratos se firman en papel, así que no se aplicó. El cliente ya manifestó su " +
+        "aceptación: imprímelo, fírmenlo a mano y súbelo con «Registrar que se firmó en papel».";
+      parte.notas.push(n);
+      parte.avisos.push(n);
     } else if (v[info.campoFirma]){
-      parte.notas.push(`${v.folio} ya estaba firmado; se descartó una firma repetida.`);
+      const n = `${v.folio} ya estaba firmado; se descartó una firma repetida de ${f.nombre || "el cliente"}.`;
+      parte.notas.push(n);
+      parte.avisos.push(n);
     } else if (!v.tokenFirma || v.tokenFirma !== f.token){
       // Suele pasar si se rehizo el enlace: firmaron con el viejo.
-      parte.notas.push(`La firma de ${f.nombre || "el cliente"} para ${v.folio} llegó con una clave que ya no corresponde. ` +
-        "Vuelve a mandarle el enlace.");
+      const n = `La firma de ${f.nombre || "el cliente"} para ${v.folio} llegó con una clave que ya no corresponde ` +
+        "—casi siempre es que se rehízo el enlace después de habérselo mandado—. " +
+        "Vuelve a mandarle el enlace de ahora.";
+      parte.notas.push(n);
+      parte.avisos.push(n);
     } else {
       info.aplica(v, firma, f);
       parte.aplicadas++;
@@ -5884,6 +5978,8 @@ async function recogerFirmas(){
         "puede volver a aparecer en el siguiente sondeo. " + e.message);
     }
   }
+  /* Se apunta AQUÍ ADENTRO, no en el llamador: ver `apuntarAvisosFirma`. */
+  apuntarAvisosFirma(parte.avisos);
   return parte;
 }
 
@@ -5894,6 +5990,7 @@ async function buscarFirmasAhora(e){
   try{
     const p = await recogerFirmas();
     if (p.hubo) render();
+    pintarAvisosFirma(); pintarNube();
     const cuerpo = !p.buzon
       ? p.notas.join("\n")
       : p.aplicadas
@@ -6074,7 +6171,12 @@ async function sincronizar(){
 
     // Las firmas que dejaron los clientes se recogen antes de subir, para que
     // el convenio cerrado viaje a los demás equipos en esta misma tanda.
+    /* Lo que no se aplicó lo apunta `recogerFirmas` por su cuenta —ahí
+       adentro, para que ningún llamador pueda olvidarlo, que es exactamente
+       lo que pasaba aquí—. Esto sólo repinta la caja de Ajustes si está
+       abierta. */
     if ((await recogerFirmas()).hubo) render();
+    pintarAvisosFirma();
     // Los registros que dejaron en la liga entran antes de subir, para que
     // viajen a los demás equipos en esta misma tanda.
     if (!nube.sinBuzonAltas && (await recogerAltas()).hubo) render();
@@ -6492,7 +6594,19 @@ function pintarNube(){
                      ".\nLo demás sí subió. Clic para ver cuáles."],
     error:          ["Sin conexión", "var(--bad)", nube.error || "No se pudo sincronizar"]
   };
-  const [txt, color, ayuda] = mapa[nube.estado] || mapa.local;
+  let [txt, color, ayuda] = mapa[nube.estado] || mapa.local;
+  /* Una firma de cliente que llegó y no se pudo aplicar gana sobre «En línea»
+     —si no, nadie se entera: a Ajustes → Nube y equipo no entra nadie por su
+     cuenta— y pierde contra todo lo demás. Lo sin subir sigue siendo lo
+     primero, y «Sin conexión» también: con el servidor caído no hay nada que
+     uno pueda ir a revisar. */
+  const avisaFirmas = nube.estado === "listo" && !nube.rechazados.length && !!avisosFirma.length;
+  if (avisaFirmas){
+    txt   = avisosFirma.length === 1 ? "Una firma sin aplicar"
+                                     : avisosFirma.length + " firmas sin aplicar";
+    color = "var(--warn)";
+    ayuda = "Un cliente firmó y su firma no entró al documento.\nClic para ver qué pasó.";
+  }
   const u = usuarioActual();
   // Con sesión abierta el chip dice de quién es y abre el menú para salir: en
   // una computadora compartida, cambiar de persona tiene que estar a la mano
@@ -6501,14 +6615,17 @@ function pintarNube(){
   /* Con sesión el chip enseña el nombre, no el estado. Para lo rechazado eso
      no alcanza: quedaría sólo el punto de color, y de eso justamente se trata
      —que se vea—. Así que el nombre se acompaña de la cuenta. */
-  const etiqueta = nube.rechazados.length ? (quien ? quien + " · " + txt : txt) : (quien || txt);
+  const etiqueta = (nube.rechazados.length || avisaFirmas)
+    ? (quien ? quien + " · " + txt : txt) : (quien || txt);
   el.innerHTML = `<span class="punto-nube" style="background:${color}"></span>` +
     esc(etiqueta);
   el.title = (quien ? txt + " · " : "") + ayuda + (nube.sesion ? "\nClic para cerrar sesión" : "");
   el.classList.toggle("conSesion", !!nube.sesion);
   /* Lo rechazado gana sobre el menú de sesión: es lo urgente, y es lo que la
      persona está tratando de entender cuando le pica al chip. */
-  el.onclick = nube.rechazados.length ? menuRechazados : (nube.sesion ? menuSesion : null);
+  el.onclick = nube.rechazados.length ? menuRechazados
+             : avisaFirmas               ? menuAvisosFirma
+             : (nube.sesion ? menuSesion : null);
 }
 
 /**
@@ -6566,6 +6683,162 @@ function menuRechazados(){
     ov.remove();
     await sincronizar();
   };
+}
+
+/* ===========================================================================
+   LAS FIRMAS QUE LLEGARON Y NO ENTRARON
+
+   Dos pantallas para el mismo caso, y hacen falta las dos.
+
+   · `menuAvisosFirma` enseña lo que ESTE equipo recogió y no pudo aplicar.
+     Sale del chip, sin que nadie vaya a buscarlo.
+   · `firmasRecibidas` va a preguntarle AL SERVIDOR qué ha llegado al buzón,
+     aplicado o no. Es la que recupera una firma vieja —una que se recogió
+     antes de que existiera el aviso, en otro equipo, o hace un mes—.
+   =========================================================================== */
+
+/** Un aviso, como renglón. */
+const renglonAvisoFirma = a => `
+  <div class="note warn" style="margin-top:10px">
+    <div>${esc(a.txt)}</div>
+    <div class="hint" style="margin-top:6px">${esc(fechaHora(a.fecha))}${
+      (a.veces || 1) > 1 ? ` · se repitió ${a.veces} veces` : ""}</div></div>`;
+
+/**
+ * La caja de avisos dentro de Ajustes → Nube y equipo.
+ *
+ * Se pinta aparte de `renderAjustes` para poder quitarla sin volver a armar
+ * la pantalla entera: ahí hay campos que alguien puede estar llenando.
+ */
+function pintarAvisosFirma(){
+  const caja = document.getElementById("nbAvisosFirma");
+  if (!caja) return;
+  if (!avisosFirma.length){ caja.innerHTML = ""; return; }
+  caja.innerHTML = `
+    <div class="note warn"><b>${avisosFirma.length === 1
+        ? "Llegó una firma de un cliente y no se pudo aplicar."
+        : "Llegaron " + avisosFirma.length + " firmas de clientes y no se pudieron aplicar."}</b>
+      Las firmas siguen guardadas en el servidor; esto es el recordatorio, no la firma.</div>
+    ${avisosFirma.map(renglonAvisoFirma).join("")}
+    <p style="margin:10px 0 0"><button class="btn" id="bAvisosVistos">Ya lo vi</button></p>`;
+  caja.querySelector("#bAvisosVistos").onclick = () => {
+    olvidarAvisosFirma(); pintarAvisosFirma(); pintarNube();
+  };
+}
+
+/** Lo que este equipo recogió y no pudo aplicar. Se abre desde el chip. */
+function menuAvisosFirma(){
+  const ov = modal(`
+    <div class="modal" style="max-width:560px">
+      <div class="modal-head"><h2>${avisosFirma.length === 1
+          ? "Una firma sin aplicar" : avisosFirma.length + " firmas sin aplicar"}</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note"><b>Un cliente firmó desde su enlace y la firma no entró al
+          documento.</b> No se perdió: sigue guardada en el servidor. Abajo dice qué pasó
+          con cada una y qué hay que hacer.</div>
+        ${avisosFirma.map(renglonAvisoFirma).join("")}
+        <p class="hint" style="margin-top:14px">Si falta alguna —porque la recogió otro
+          equipo, o porque es de antes— búscala con <b>Firmas recibidas</b>, que le
+          pregunta al servidor.</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="bAvisosBuzon">Firmas recibidas</button>
+        <div class="spacer"></div>
+        <button class="btn" data-close>Cerrar</button>
+        <button class="btn primary" id="bAvisosVistos">Ya lo vi</button></div>
+    </div>`);
+  ov.querySelector("#bAvisosBuzon").onclick = e => firmasRecibidas(e);
+  ov.querySelector("#bAvisosVistos").onclick = () => {
+    olvidarAvisosFirma(); ov.remove(); pintarAvisosFirma(); pintarNube();
+  };
+}
+
+/**
+ * TODO lo que ha llegado al buzón de firmas, aplicado o no.
+ *
+ * Es el único lugar desde donde se recupera una firma que el sondeo
+ * automático ya recogió. Se puede porque el CRM nunca borra del buzón —sólo
+ * marca `aplicada`— y porque la regla de lectura de `firmas.sql` es
+ * `using (public.crm_del_equipo())`, sin filtro por `aplicada`: lo recogido
+ * sigue ahí y sigue siendo legible. No hay nada que correr en el servidor.
+ *
+ * NO imprime la imagen de la firma: dice si está. Es una pantalla que se
+ * enseña en una oficina y que alguien acaba fotografiando.
+ */
+async function firmasRecibidas(e){
+  if (!nubeActiva()){ alert("Primero hay que entrar a la nube."); return; }
+  const b = e && e.currentTarget, antes = b && b.textContent;
+  if (b){ b.disabled = true; b.textContent = "Buscando…"; }
+  let filas;
+  try{
+    /* SIN el filtro `aplicada=is.false` —que es justo el que esconde el
+       caso— y con `select=*` por lo mismo que en `recogerFirmas`: enumerar
+       columnas amarra el CRM a la versión de firmas.sql que esté corrida. */
+    filas = await api("/rest/v1/crm_firmas?select=*");
+  }catch(ex){
+    alert(/crm_firmas|schema cache|does not exist|404|PGRST205/i.test(ex.message)
+      ? "El buzón de firmas todavía no existe en el servidor: falta correr firmas.sql."
+      : "No se pudo leer el buzón: " + ex.message);
+    return;
+  }finally{ if (b){ b.disabled = false; b.textContent = antes; } }
+
+  /* Se ordena aquí y no con `order=` en la petición: `creado` es de las
+     columnas que podrían no estar en un servidor viejo, y pedirle al
+     servidor ordenar por una columna que no tiene contesta 400 y no llega
+     nada. */
+  const lista = (filas || []).slice()
+    .sort((x, y) => String(y.creado || "").localeCompare(String(x.creado || "")))
+    .slice(0, 60);
+
+  const queLePaso = fl => {
+    const { tipo, id } = docDelBuzon(fl.convenio_id);
+    const info = infoDoc(tipo);
+    const v = (info.lista() || []).find(x => x.id === id);
+    const doc = v ? (v.folio || id) : id;
+    if (!v) return { doc, ok:false,
+      que:"Este equipo no tiene bajado ese documento, así que de aquí no se puede saber." };
+    if (soloEnPapel(v)) return { doc, ok:false,
+      que:"Los contratos se firman en papel, así que esta firma de pantalla no se aplicó. " +
+          "El cliente ya manifestó su aceptación: imprímelo, fírmenlo a mano y súbelo con " +
+          "«Registrar que se firmó en papel»." };
+    if (v[info.campoFirma]) return { doc, ok:true, que:"El documento está firmado." };
+    if (!fl.aplicada) return { doc, ok:true,
+      que:"Todavía no se recoge; entra en la siguiente sincronización." };
+    if (!v.tokenFirma || v.tokenFirma !== fl.token) return { doc, ok:false,
+      que:"Llegó con una clave que ya no corresponde —el enlace se rehízo después de " +
+          "mandárselo—. Vuelve a mandarle el enlace de ahora." };
+    return { doc, ok:false,
+      que:"Se recogió y el documento quedó sin firma. Vuelve a mandarle el enlace." };
+  };
+
+  modal(`
+    <div class="modal" style="max-width:640px">
+      <div class="modal-head"><h2>Firmas recibidas</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note">Esto es lo que han dejado los clientes en el buzón del servidor,
+          <b>se haya aplicado o no</b>. Aquí sale una firma aunque el sondeo ya la haya
+          recogido y descartado, que es lo que no se podía ver antes.</div>
+        ${!lista.length
+          ? `<p style="margin:14px 0 0">El buzón está vacío: ningún cliente ha firmado
+               desde su enlace todavía.</p>`
+          : lista.map(fl => {
+              const q = queLePaso(fl);
+              return `<div class="note${q.ok ? "" : " warn"}" style="margin-top:10px">
+                <b>${esc(q.doc)}</b> · ${esc(fl.nombre || "sin nombre")}${
+                  fl.puesto ? " <span class=\"hint\">· " + esc(fl.puesto) + "</span>" : ""}
+                <div class="hint" style="margin-top:4px">${esc(fechaHora(fl.creado))} · ${
+                  fl.aplicada ? "ya recogida" : "sin recoger"} · ${
+                  fl.img ? "con firma" : "SIN imagen de firma"}</div>
+                <div style="margin-top:6px">${esc(q.que)}</div></div>`;
+            }).join("")}
+        <p class="hint" style="margin-top:14px">Se enseñan las ${lista.length} más
+          recientes. La imagen de la firma no se imprime aquí a propósito.</p>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cerrar</button></div>
+    </div>`);
 }
 
 /** El nombre de un tipo de registro, para decírselo a una persona. */
@@ -9559,12 +9832,16 @@ function renderAjustes(){
           <div class="hint">Es una llave <b>pública</b>: va dentro de la página y no da acceso por
             sí sola. Quien entra a los datos son las cuentas de correo del equipo.</div></div>
         <div class="full" id="nbEstado"></div>
+        <!-- Las firmas que llegaron y no entraron. A la vista, no detrás de
+             un clic: es lo que nadie iba a ir a buscar. -->
+        <div class="full" id="nbAvisosFirma"></div>
       </div>
       <p style="margin:6px 0 0">
         <button class="btn primary" id="bNbGuardar">Guardar y conectar</button>
         <button class="btn" id="bNbProbar">Probar conexión</button>
         <button class="btn" id="bNbPerm">¿Por qué no veo algo?</button>
         <button class="btn" id="bNbFirmas">Buscar firmas de clientes</button>
+        <button class="btn" id="bNbRecibidas">Firmas recibidas</button>
         <button class="btn" id="bNbLiga">Copiar liga para otro equipo</button>
         <button class="btn" id="bNbFija">Copiar la línea del hotel</button>
         <button class="btn" id="bNbTodo">Volver a subir todo</button>
@@ -10756,7 +11033,9 @@ function renderAjustes(){
          <br><br>Y para no tener que mandar ninguna liga nunca más, <i>Copiar la línea del
          hotel</i> deja la conexión dentro de la propia aplicación. Eso se hace
          <b>únicamente con el repositorio en privado</b>; el botón lo explica antes de copiar.`;
-    p.querySelector("#bNbFirmas").style.display = nube.sesion ? "" : "none";
+    p.querySelector("#bNbFirmas").style.display    = nube.sesion ? "" : "none";
+    p.querySelector("#bNbRecibidas").style.display = nube.sesion ? "" : "none";
+    pintarAvisosFirma();
     p.querySelector("#bNbQuitar").style.display = (nube.url || nube.anon) ? "" : "none";
 
     p.querySelector("#bNbGuardar").onclick = () => {
@@ -10801,7 +11080,8 @@ function renderAjustes(){
       if (!nubeActiva()){ alert("Primero hay que entrar a la nube."); return; }
       pantallaPermisos();
     };
-    p.querySelector("#bNbFirmas").onclick = buscarFirmasAhora;
+    p.querySelector("#bNbFirmas").onclick    = buscarFirmasAhora;
+    p.querySelector("#bNbRecibidas").onclick = firmasRecibidas;
     p.querySelector("#bNbLiga").onclick = copiarInvitacion;
     p.querySelector("#bNbFija").onclick = copiarLineaDelHotel;
 

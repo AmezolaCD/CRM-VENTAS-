@@ -240,6 +240,28 @@ puede depositar pero no leer ni corregir, y de ahí la levanta el CRM en la sigu
 sincronización. Así, aunque alguien anduviera de mirón, no podría leer convenios ajenos ni
 alterar el suyo. La clave deja de servir en cuanto se firma.
 
+### Una firma que llega y no entra, se dice
+
+Hay tres casos en los que una firma llega al buzón y **no se aplica**: el documento es un
+contrato —y los contratos se firman en papel—, el documento ya estaba firmado, o el enlace se
+rehízo y la clave con la que firmaron ya no corresponde. Los tres rechazos son correctos.
+
+Lo que no era correcto es que se rechazaran **en silencio**. El CRM recoge el buzón en cada
+sincronización automática, y la explicación de por qué no entró se perdía ahí mismo mientras
+la fila quedaba marcada como recogida: el cliente firmaba, el hotel no se enteraba, y el botón
+de *Buscar firmas de clientes* ya no encontraba nada porque el sondeo automático siempre llega
+primero. Un contrato firmado por el cliente se quedó así, sin que nadie pudiera saber por qué.
+
+Ahora el aviso **se guarda en el equipo y aguanta la recarga**, sale en el chip de la nube
+—con menos prioridad que lo que falta subir— y se lee completo en *Ajustes → Nube y equipo*,
+con lo que hay que hacer en cada caso.
+
+Y al lado está **Firmas recibidas**, que le pregunta al servidor qué ha llegado al buzón **se
+haya aplicado o no**. Es lo que permite recuperar una firma vieja: una que recogió otro
+equipo, o una de antes de que existiera el aviso. Se puede porque el CRM nunca borra del
+buzón —sólo marca— y porque la regla de lectura de `firmas.sql` no filtra por eso. Esa
+pantalla no imprime la imagen de la firma: dice si está.
+
 Todo esto lo habilita `firmas.sql`. **Sin correrlo, el CRM funciona igual**: el enlace no se
 ofrece y quedan los otros dos caminos.
 

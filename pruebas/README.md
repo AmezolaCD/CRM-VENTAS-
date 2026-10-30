@@ -56,10 +56,19 @@ node pruebas/navegador/solo-las-ordenes.mjs         # el papel que sólo ve las 
 node pruebas/navegador/politicas-del-contrato.mjs   # el contrato de ventas, completo
 node pruebas/navegador/observaciones-del-convenio.mjs # las que sí salen en la carta
 node pruebas/navegador/subir-en-trozos.mjs          # la subida no truena por grande
+node pruebas/navegador/la-firma-que-no-entro.mjs    # una firma de cliente no se pierde callada
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
 servidor rechaza su firma, no ve letra de técnico ni se le encarga nada.
+
+`la-firma-que-no-entro.mjs` es la otra mitad: lo que pasa **del lado del hotel** cuando la firma
+ya llegó. Hay tres casos en los que no se aplica —se firma en papel, ya estaba firmado, la clave
+ya no corresponde— y los tres se rechazaban sin decirlo: el sondeo automático se comía la
+explicación y marcaba la fila como recogida. Se afirma que el aviso queda, que **aguanta una
+recarga**, que sale en el chip, que lo que falta subir le sigue ganando, y que *Firmas recibidas*
+encuentra una firma ya marcada sin imprimir su imagen. El grupo de control es el que no se puede
+romper: una firma buena se sigue aplicando sola y en silencio.
 
 `editar-antes-de-la-firma.mjs` cuida las dos mitades de una misma regla en las **tres**
 familias de documentos —convenios, contratos de hospedaje y banquetes—: que se pueda corregir
