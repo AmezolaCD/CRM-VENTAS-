@@ -1039,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.30-2";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.30-3";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -12319,6 +12319,150 @@ function engancharRenumTodos(cont, serie, visibles, repetidos){
   };
 }
 
+/**
+ * ¿Algún documento del hotel trae ya este folio?
+ *
+ * `duenioDelFolio` sólo mira convenios, y para corregir un folio a mano eso
+ * no alcanza: el número que se va a poner puede estar en una cotización, en
+ * un certificado o en un evento de banquetes, y ponerlo dos veces es
+ * exactamente lo que se está tratando de evitar.
+ */
+function quienTraeElFolio(folio, excluirId){
+  const f = String(folio || "").trim().toUpperCase();
+  if (!f) return null;
+  const donde = [
+    ["convenio",    state.convenios],
+    ["documento",   state.contratos],
+    ["certificado", state.certificados],
+    ["evento",      state.eventos]
+  ];
+  for (const [comoSeLlama, lista] of donde){
+    const d = (lista || []).find(x => x.id !== excluirId &&
+      String(x.folio || "").trim().toUpperCase() === f);
+    if (d) return { comoSeLlama, doc:d };
+  }
+  return null;
+}
+
+/**
+ * CORREGIR EL FOLIO DE UN DOCUMENTO, A MANO.
+ *
+ * Marco: «necesito que el folio de este contrato sea el CT-2026-027, que es
+ * el que está en el contrato firmado».
+ *
+ * Hasta hoy no había cómo. El folio lo reparte el contador al emitir y nada
+ * lo vuelve a tocar, que es lo correcto el 99% de las veces. Pero queda el
+ * caso que de verdad pasó: el documento se renumeró por detrás —ver
+ * `resolverFoliosRepetidos`, que ya no lo hace a ciegas— y el papel que el
+ * cliente firmó y devolvió trae el número viejo. Ahí manda el papel: lo que
+ * está mal es el sistema, y obligar a reimprimir y refirmar un contrato por
+ * un número es peor que el problema.
+ *
+ * Por eso existe, y por eso lleva candados:
+ *
+ *   · sólo la administración, porque un folio mal puesto no se nota hasta
+ *     que hay dos documentos iguales;
+ *   · el número nuevo NO puede estar en ningún otro documento del hotel
+ *     —convenios, cotizaciones, certificados y banquetes—, se mire por donde
+ *     se mire;
+ *   · se ANOTA en el contador antes de ponerlo, y se espera la respuesta: si
+ *     esa anotación se pierde, el contador lo volvería a repartir y
+ *     acabaríamos con dos documentos con el mismo número. Es el mismo cuidado
+ *     que ya tiene `subirDocumentoExterno`;
+ *   · y queda escrito en la bitácora del cliente, con los dos números y el
+ *     porqué. Un folio que cambia sin rastro es cómo empezó todo esto.
+ *
+ * El número que se suelta NO se recicla: ya se apartó en el contador y
+ * reasignarlo sería volver a lo mismo. Queda como hueco, y el libro de folios
+ * lo enseña.
+ */
+function corregirFolio(doc, serie, alTerminar){
+  if (!esAdmin()){
+    alert("Sólo la administración puede corregirle el folio a un documento.");
+    return;
+  }
+  const viejo = String(doc.folio || "").trim();
+  const ov = modal(`
+    <div class="modal" style="max-width:520px">
+      <div class="modal-head"><h2>Corregir el folio</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note warn"><b>Esto se hace cuando el papel y el sistema no coinciden</b>
+          —el documento se renumeró por detrás y el cliente firmó el número anterior—.
+          Manda el papel: lo que está mal es el sistema.</div>
+        <div class="grid">
+          <div class="full"><label class="lbl">Folio de ahora</label>
+            <input class="field" value="${esc(viejo || "sin folio")}" disabled></div>
+          <div class="full"><label class="lbl">El folio que dice el papel</label>
+            <input class="field mono" id="cfNuevoFolio" placeholder="${esc(serie.prefijo)}-${
+              new Date().getFullYear()}-000" autocomplete="off" spellcheck="false"
+              style="text-transform:uppercase"></div>
+          <div class="full"><label class="lbl">¿Por qué se corrige?</label>
+            <input class="field" id="cfPorQue"
+              value="El cliente firmó y devolvió el documento con ese folio."></div>
+        </div>
+        <p class="hint" style="margin:12px 0 0">El número que se suelta no se reutiliza:
+          ya se apartó en el contador y queda como hueco. Sale en
+          <i>El libro de folios</i>.</p>
+        <div id="cfErrFolio" style="margin-top:10px"></div>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="cfOkFolio">Corregir el folio</button></div>
+    </div>`);
+
+  ov.querySelector("#cfOkFolio").onclick = async e => {
+    const err = ov.querySelector("#cfErrFolio");
+    const nuevo = ov.querySelector("#cfNuevoFolio").value.trim().toUpperCase();
+    const porQue = ov.querySelector("#cfPorQue").value.trim();
+    const malo = t => { err.innerHTML = `<div class="errbox">${t}</div>`; };
+
+    if (!nuevo) return malo("Escribe el folio que dice el papel.");
+    if (nuevo === viejo.toUpperCase())
+      return malo("Ése es el folio que ya tiene.");
+    const m = /^([A-Z]+)-(\d{4})-(\d+)$/.exec(nuevo);
+    if (!m) return malo(`No tiene la forma de un folio. Se escribe así:
+      <b>${esc(serie.prefijo)}-${new Date().getFullYear()}-027</b>.`);
+    if (m[1] !== serie.prefijo)
+      return malo(`Los ${esc(serie.unos)} llevan <b>${esc(serie.prefijo)}</b> adelante,
+        no <b>${esc(m[1])}</b>. Un folio de otra serie aquí sería un documento imposible
+        de encontrar.`);
+
+    const ya = quienTraeElFolio(nuevo, doc.id);
+    if (ya) return malo(`Ese folio ya lo trae otro ${esc(ya.comoSeLlama)} del hotel
+      —<b>${esc(nombreCli(ya.doc.clienteId) || "otro cliente")}</b>—. Dos documentos con el
+      mismo número es justo lo que se está evitando.`);
+
+    const b = e.currentTarget, antes = b.textContent;
+    b.disabled = true; b.textContent = "Apartándolo…";
+    /* Se anota ANTES de ponerlo y se espera la respuesta: si se pierde, el
+       contador volvería a repartir ese número. Mismo cuidado que al registrar
+       un documento externo con su folio de papel. */
+    const quedo = await anotarFolio(serie.tipo, nuevo);
+    b.disabled = false; b.textContent = antes;
+    if (quedo === false && !confirm(
+        `No se pudo apartar el folio ${nuevo} en el contador del hotel.\n\n` +
+        "Si se pone así, el contador puede volver a repartir ese número y quedarían dos " +
+        "documentos con el mismo folio.\n\n¿Ponerlo de todos modos?"))
+      return;
+
+    doc.folio = nuevo;
+    doc.folioDelContador = true;     // apartado en el contador: ya no se renumera solo
+    delete doc.folioRepetido;
+    doc.updatedAt = new Date().toISOString();
+    registrarAuto(doc.clienteId,
+      `${serie.uno.charAt(0).toUpperCase() + serie.uno.slice(1)} ${viejo || "sin folio"} ` +
+      `se corrigió a ${nuevo}`,
+      (porQue || "Se corrigió el folio a mano.") +
+      `\nLo hizo ${miNombre() || "alguien"} desde el CRM. El folio ${viejo || "anterior"} ` +
+      "queda sin documento y no se reutiliza.", miNombre());
+    guardar(); render();
+    ov.remove();
+    if (alTerminar) alTerminar();
+    alert(`Listo: ahora dice ${nuevo}.\n\nEl documento y el papel firmado ya coinciden.`);
+  };
+}
+
 function editarConvenio(id, clientePre, alCerrar){
   const existente = id ? state.convenios.find(v => v.id === id) : null;
 
@@ -16805,6 +16949,8 @@ function verContrato(id, alCerrar, pedirFirma){
         <button class="btn" id="bPrintCt">Imprimir</button>
         <button class="btn" id="bPdfCt">Descargar PDF</button>
         ${sePuedeEditar(k, "contratos") ? `<button class="btn" id="bEditCt">Editar</button>` : ""}
+        ${esAdmin() && k.folio ? `<button class="btn sm" id="bCtFolio"
+          title="Cuando el papel firmado trae otro número">Corregir el folio</button>` : ""}
         <div class="spacer"></div>
         ${!emitido ? (papel
           ? `<button class="btn ok" id="bCtEmitir">Emitir y numerar</button>`
@@ -16845,6 +16991,14 @@ function verContrato(id, alCerrar, pedirFirma){
 
   const be = ov.querySelector("#bEditCt");
   if (be) be.onclick = () => { ov.remove(); editarContrato(k.id, null, alCerrar); };
+
+  /* Para cuando el papel firmado trae un número y el sistema otro. Ver
+     `corregirFolio`: no es un campo editable más, es una excepción con
+     candados y con rastro en la bitácora. */
+  const bf = ov.querySelector("#bCtFolio");
+  if (bf) bf.onclick = () => corregirFolio(k, SERIES_FOLIO.contratos, () => {
+    ov.remove(); verContrato(k.id, alCerrar);
+  });
 
   const em = ov.querySelector("#bCtEmitir");
   if (em) em.onclick = async () => {

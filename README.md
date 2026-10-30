@@ -263,6 +263,15 @@ es único por construcción: en un choque, el adivinado es siempre el otro.
 La lista de contratos también gana **búsqueda por folio**, que es lo que hace falta el día que
 regresa un papel con su número impreso.
 
+Y queda el caso en que el daño ya está hecho: el documento se renumeró por detrás y **el papel
+que el cliente firmó y devolvió trae el número anterior**. Ahí manda el papel, y obligar a
+reimprimir y refirmar un contrato por un número es peor que el problema. En la ficha del
+documento, **Corregir el folio** lo alinea con el papel. No es un campo editable más: sólo la
+administración, el número nuevo no puede estar en ningún otro documento del hotel, se **aparta en
+el contador antes de ponerlo** —y se espera la respuesta, o volvería a repartirse— y queda escrito
+en la bitácora del cliente con los dos números y el porqué. El número que se suelta no se
+recicla: queda como hueco y el libro de folios lo enseña.
+
 ### Una firma que llega y no entra, se dice
 
 Hay tres casos en los que una firma llega al buzón y **no se aplica**: el documento es un

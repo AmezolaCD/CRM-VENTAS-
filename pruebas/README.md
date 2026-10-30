@@ -68,7 +68,10 @@ renumeración automática **se inventaba** el número nuevo —contando lo que e
 bajado— y **no se lo avisaba al contador del servidor**, así que éste lo volvía a repartir y se
 volvía a chocar: un contrato acabó con tres folios y dos huecos en la serie. Se afirma que el
 número sale del contador, que **después de renumerar el contador ya no lo reparte** —la rueda—,
-y que sin contador **no se inventa nada**. Sus dos grupos de control son lo que no puede
+y que sin contador **no se inventa nada**. También cuida *Corregir el folio*, que es la salida
+para cuando el papel firmado trae el número anterior: que lo deje poner, que **no** deje poner uno
+que ya trae otro documento ni uno de otra serie, que el número corregido quede apartado en el
+contador, y que una ejecutiva no pueda hacerlo. Sus grupos de control son lo que no puede
 romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
 borradores que de verdad chocan se siguen arreglando solos.
 

@@ -144,7 +144,13 @@ async function equipo(docs, comoAdmin = true){
                                       ejecutivo:'Quien Sea', estatus:'nuevo' })];
     state.contratos = (d || []).map(saneaContrato);
     guardar();
+    /* A un administrador el CRM le pregunta en qué departamento entra, y esa
+       ventana se pone encima de todo —incluida la que está midiendo la
+       prueba— y se come el clic. Se contesta aquí para que no aparezca. */
+    ponDepto('ventas');
   }, { d: docs, admin: comoAdmin });
+  await p.waitForTimeout(250);
+  await p.evaluate(() => document.querySelectorAll('.overlay').forEach(o => o.remove()));
 }
 
 const folios = () => p.evaluate(() => state.contratos.map(k => ({
@@ -328,6 +334,112 @@ await bloque('9 · se puede buscar un contrato por su folio', async () => {
     return document.getElementById('tblContratos').innerText;
   });
   afirma('y si no está, dice dónde más buscarlo', /libro de folios/i.test(nada));
+});
+
+/* --- 10 -------------------------------------------------------------------
+   CORREGIR EL FOLIO A MANO. El caso de Marco, la otra mitad: el papel que el
+   cliente firmó y devolvió trae el número viejo, y ahí manda el papel. */
+await bloque('10 · el folio se puede corregir al del papel firmado', async () => {
+  servidor.libro = [
+    { tipo:'contratos', anio:ANIO, numero:27, folio:`CT-${ANIO}-027`, quien:'Carmen',
+      creado:'2026-10-28T18:00:00Z' },
+    { tipo:'contratos', anio:ANIO, numero:29, folio:`CT-${ANIO}-029`, quien:'Carmen',
+      creado:'2026-10-29T09:10:00Z' }];
+  servidor.vivo = true;
+  await equipo([{ id:'kA', folio:`CT-${ANIO}-029`, tipo:'contrato', clienteId:'c1',
+                  estado:'aceptado', fecha:`${ANIO}-10-28` }]);
+
+  await p.evaluate(() => corregirFolio(state.contratos[0], SERIES_FOLIO.contratos));
+  await p.locator('#cfNuevoFolio').waitFor({ timeout:8000 });
+  await p.locator('#cfNuevoFolio').fill(`ct-${ANIO}-027`);   // en minúsculas, a propósito
+  p.once('dialog', d => d.accept());
+  await p.locator('#cfOkFolio').click();
+  await p.waitForFunction(a => state.contratos[0].folio === `CT-${a}-027`, ANIO,
+    { timeout:8000 }).catch(() => {});
+
+  const k = (await folios())[0];
+  afirma('EL DOCUMENTO YA DICE LO QUE DICE EL PAPEL', k.folio === `CT-${ANIO}-027`);
+  afirma('y queda protegido de la renumeración automática', k.delContador === true);
+
+  const bitacora = await p.evaluate(() => state.actividades.map(a => a.asunto + ' | ' + a.notas));
+  afirma('queda escrito en la bitácora, con los dos números',
+    bitacora.some(t => t.includes(`CT-${ANIO}-029`) && t.includes(`CT-${ANIO}-027`)));
+  afirma('y dice que el número viejo no se reutiliza',
+    bitacora.some(t => /no se reutiliza/i.test(t)));
+});
+
+/* --- 11 -------------------------------------------------------------------
+   LOS CANDADOS. Un folio mal puesto a mano no se nota hasta que hay dos
+   documentos iguales, que es justo lo que llevamos dos días persiguiendo. */
+await bloque('11 · no deja poner un folio que ya trae otro documento', async () => {
+  servidor.libro = []; servidor.vivo = true;
+  await equipo([
+    { id:'kA', folio:`CT-${ANIO}-029`, tipo:'contrato', clienteId:'c1',
+      estado:'aceptado', fecha:`${ANIO}-10-28` },
+    { id:'kB', folio:`CT-${ANIO}-027`, tipo:'contrato', clienteId:'c1',
+      estado:'aceptado', fecha:`${ANIO}-10-01` }]);
+
+  await p.evaluate(() => corregirFolio(state.contratos[0], SERIES_FOLIO.contratos));
+  await p.locator('#cfNuevoFolio').waitFor({ timeout:8000 });
+  await p.locator('#cfNuevoFolio').fill(`CT-${ANIO}-027`);
+  await p.locator('#cfOkFolio').click();
+  await p.locator('#cfErrFolio .errbox').waitFor({ timeout:8000 });
+
+  const dice = await p.locator('#cfErrFolio').innerText();
+  afirma('LO RECHAZA', /ya lo trae otro/i.test(dice));
+  afirma('y no le cambió el folio a nadie',
+    (await folios()).map(x => x.folio).join() === `CT-${ANIO}-029,CT-${ANIO}-027`);
+
+  // Y lo que tampoco deja: una serie que no es la suya.
+  await p.locator('#cfNuevoFolio').fill(`CV-${ANIO}-050`);
+  await p.locator('#cfOkFolio').click();
+  await p.waitForTimeout(300);
+  const otraSerie = await p.locator('#cfErrFolio').innerText();
+  console.log('        dice: ' + otraSerie.replace(/\s+/g, ' ').slice(0, 110));
+  afirma('ni un folio de otra serie', /otra serie/i.test(otraSerie));
+
+  await p.locator('#cfNuevoFolio').fill('veintisiete');
+  await p.locator('#cfOkFolio').click();
+  await p.waitForTimeout(300);
+  afirma('ni algo que no es un folio',
+    /no tiene la forma/i.test(await p.locator('#cfErrFolio').innerText()));
+});
+
+/* --- 12 -------------------------------------------------------------------
+   Y que el número corregido quede APARTADO: si no, el contador lo reparte
+   otra vez y volvemos a dos documentos con el mismo folio. */
+await bloque('12 · el folio corregido queda apartado en el contador', async () => {
+  servidor.libro = []; servidor.vivo = true;     // el contador no conoce el 027
+  await equipo([{ id:'kA', folio:`CT-${ANIO}-029`, tipo:'contrato', clienteId:'c1',
+                  estado:'aceptado', fecha:`${ANIO}-10-28` }]);
+
+  await p.evaluate(() => corregirFolio(state.contratos[0], SERIES_FOLIO.contratos));
+  await p.locator('#cfNuevoFolio').waitFor({ timeout:8000 });
+  await p.locator('#cfNuevoFolio').fill(`CT-${ANIO}-027`);
+  p.once('dialog', d => d.accept());
+  await p.locator('#cfOkFolio').click();
+  await p.waitForFunction(a => state.contratos[0].folio === `CT-${a}-027`, ANIO,
+    { timeout:8000 }).catch(() => {});
+
+  afirma('el contador ya lo tiene anotado',
+    servidor.libro.some(x => x.folio === `CT-${ANIO}-027`));
+  const siguiente = await p.evaluate(() => apartarFolio('contratos', 'CT',
+    new Date().getFullYear()));
+  afirma('Y YA NO SE LO DA A NADIE MÁS', siguiente !== `CT-${ANIO}-027`);
+});
+
+/* --- 13 -------------------------------------------------------------------
+   GRUPO DE CONTROL: no es un campo editable más. */
+await bloque('13 · una ejecutiva no le puede cambiar el folio a un documento', async () => {
+  servidor.libro = []; servidor.vivo = true;
+  await equipo([{ id:'kA', folio:`CT-${ANIO}-029`, tipo:'contrato', clienteId:'c1',
+                  estado:'aceptado', fecha:`${ANIO}-10-28` }], false);   // ejecutivo
+
+  p.once('dialog', d => d.accept());
+  await p.evaluate(() => corregirFolio(state.contratos[0], SERIES_FOLIO.contratos));
+  await p.waitForTimeout(400);
+  afirma('NO SE LE ABRE LA VENTANA', await p.locator('#cfNuevoFolio').count() === 0);
+  afirma('y el folio sigue igual', (await folios())[0].folio === `CT-${ANIO}-029`);
 });
 
 await br.close(); srv.close();
