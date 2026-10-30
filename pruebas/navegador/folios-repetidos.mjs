@@ -96,8 +96,10 @@ const montar = () => p.evaluate(() => {
 
 await bloque('1 · al sincronizar se detecta el repetido', async () => {
   await montar();
-  const r = await p.evaluate(() => {
-    const hubo = resolverFoliosRepetidos();
+  const r = await p.evaluate(async () => {
+    /* `await`: la función pide el número al contador del hotel, así que es
+       async. Sin esperarla se mide el estado de antes de que renumere. */
+    const hubo = await resolverFoliosRepetidos();
     return { hubo, marcados: state.contratos.filter(k => k.folioRepetido).map(k => k.id),
              folios: state.contratos.map(k => k.id + ':' + k.folio) };
   });
@@ -146,10 +148,10 @@ await bloque('3 · el botón le pide un número nuevo al contador del hotel', as
 });
 
 await bloque('4 · un borrador repetido se arregla solo, sin molestar a nadie', async () => {
-  const r = await p.evaluate(() => {
+  const r = await p.evaluate(async () => {
     state.contratos.push(saneaContrato({ id:'k4', folio:'CT-2026-007', clienteId:'c2',
       tipo:'cotizacion', estado:'borrador', createdAt:'2026-10-03T10:00:00.000Z' }));
-    resolverFoliosRepetidos();
+    await resolverFoliosRepetidos();
     const k4 = state.contratos.find(k => k.id === 'k4');
     return { folio:k4.folio, marcado:!!k4.folioRepetido };
   });

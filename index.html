@@ -1039,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.30-1";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.30-2";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3391,6 +3391,12 @@ function saneaCertificado(c){
     o.yaSalio = !!o.yaSalio;
     if (!o.yaSalio) delete o.yaSalio;
   }
+  /* De dónde salió el folio: ver `folioParaFirmar`. Nace al usarse, como
+     `yaSalio`. */
+  if (o.folioDelContador !== undefined){
+    o.folioDelContador = !!o.folioDelContador;
+    if (!o.folioDelContador) delete o.folioDelContador;
+  }
   return o;
 }
 
@@ -3486,6 +3492,12 @@ function saneaEvento(e){
   if (o.yaSalio !== undefined){
     o.yaSalio = !!o.yaSalio;
     if (!o.yaSalio) delete o.yaSalio;
+  }
+  /* De dónde salió el folio: ver `folioParaFirmar`. Nace al usarse, como
+     `yaSalio`. */
+  if (o.folioDelContador !== undefined){
+    o.folioDelContador = !!o.folioDelContador;
+    if (!o.folioDelContador) delete o.folioDelContador;
   }
   /* La clave del enlace con el que el cliente firma en su pantalla, lo que él
      escribió ahí, y si el ejecutivo ya lo vio.
@@ -3682,6 +3694,12 @@ function saneaContrato(k){
     o.yaSalio = !!o.yaSalio;
     if (!o.yaSalio) delete o.yaSalio;
   }
+  /* De dónde salió el folio: ver `folioParaFirmar`. Nace al usarse, como
+     `yaSalio`. */
+  if (o.folioDelContador !== undefined){
+    o.folioDelContador = !!o.folioDelContador;
+    if (!o.folioDelContador) delete o.folioDelContador;
+  }
   /* ¿Las tarifas son comisionables, y a qué porcentaje?
 
      Lo pidió la ejecutiva de ventas: el machote del hotel dice siempre
@@ -3760,6 +3778,12 @@ function saneaConv(c){
   o.firmaManual  = saneaManual(o.firmaManual);
   o.avisado      = !!o.avisado;
   o.folioRepetido = String(o.folioRepetido || "");
+  /* De dónde salió el folio: ver `folioParaFirmar`. Nace al usarse, como
+     `yaSalio`. */
+  if (o.folioDelContador !== undefined){
+    o.folioDelContador = !!o.folioDelContador;
+    if (!o.folioDelContador) delete o.folioDelContador;
+  }
   /* Varios a la vez, sin repetir y sin inventados: si mañana se quita uno del
      catálogo, los convenios viejos dejan de enseñarlo en vez de sacar basura. */
   o.desayunos = (Array.isArray(o.desayunos) ? o.desayunos : [])
@@ -6185,7 +6209,7 @@ async function sincronizar(){
     if (!nube.sinBuzonWa && (await recogerWhatsApp()).hubo) render();
     // Y las órdenes que levantaron los jefes de área desde su liga.
     if (!nube.sinBuzonOdts && (await recogerOdts()).hubo) render();
-    if (resolverFoliosRepetidos()) render();
+    if (await resolverFoliosRepetidos()) render();
 
     const actuales = filasDeEstado();
     /* Lo que roles.sql sólo deja escribir al administrador ni se intenta
@@ -9842,6 +9866,7 @@ function renderAjustes(){
         <button class="btn" id="bNbPerm">¿Por qué no veo algo?</button>
         <button class="btn" id="bNbFirmas">Buscar firmas de clientes</button>
         <button class="btn" id="bNbRecibidas">Firmas recibidas</button>
+        <button class="btn" id="bNbFolios">El libro de folios</button>
         <button class="btn" id="bNbLiga">Copiar liga para otro equipo</button>
         <button class="btn" id="bNbFija">Copiar la línea del hotel</button>
         <button class="btn" id="bNbTodo">Volver a subir todo</button>
@@ -11035,6 +11060,7 @@ function renderAjustes(){
          <b>únicamente con el repositorio en privado</b>; el botón lo explica antes de copiar.`;
     p.querySelector("#bNbFirmas").style.display    = nube.sesion ? "" : "none";
     p.querySelector("#bNbRecibidas").style.display = nube.sesion ? "" : "none";
+    p.querySelector("#bNbFolios").style.display     = nube.sesion ? "" : "none";
     pintarAvisosFirma();
     p.querySelector("#bNbQuitar").style.display = (nube.url || nube.anon) ? "" : "none";
 
@@ -11082,6 +11108,7 @@ function renderAjustes(){
     };
     p.querySelector("#bNbFirmas").onclick    = buscarFirmasAhora;
     p.querySelector("#bNbRecibidas").onclick = firmasRecibidas;
+    p.querySelector("#bNbFolios").onclick    = libroDeFolios;
     p.querySelector("#bNbLiga").onclick = copiarInvitacion;
     p.querySelector("#bNbFija").onclick = copiarLineaDelHotel;
 
@@ -11914,7 +11941,20 @@ async function folioParaFirmar(doc, tipo, prefijo, anio, local){
   const suyo = String((doc && doc.folio) || "").trim();
   if (suyo) return suyo;
   if (!nubeActiva()) return local ? local() : "";
-  return await apartarFolio(tipo, prefijo, anio);
+  const nuevo = await apartarFolio(tipo, prefijo, anio);
+  /* QUEDA APUNTADO DE DÓNDE SALIÓ, y no es un adorno.
+
+     Un número del contador es único por construcción. Así que cuando dos
+     documentos aparecen con el mismo folio, el adivinado es SIEMPRE el otro
+     —el que se contó aquí, sin servidor—, y es ése y nada más ése el que se
+     puede renumerar. Sin esta marca, `resolverFoliosRepetidos` no tenía cómo
+     distinguirlos y podía cambiarle el número al bueno.
+
+     Nace al usarse, nunca en los `Object.assign` de los saneadores: un campo
+     nuevo en todos los renglones los haría verse editados y se volverían a
+     subir enteros en la primera sincronización. */
+  if (nuevo && doc) doc.folioDelContador = true;
+  return nuevo;
 }
 
 /** Lo que se le dice a alguien cuando no se pudo apartar el número. */
@@ -12015,8 +12055,13 @@ const SERIES_FOLIO = {
    limpia el enviado —ver `reabrirParaCorregir`—, así que las otras tres
    preguntas contestan que no y sin esto se volvería renumerable. Su número ya
    se apartó en el contador del hotel y puede andar impreso en el correo de
-   alguien. Un borrador que NUNCA salió sí se renumera solo, como siempre. */
-const folioIntocable = d => d.estado !== "borrador" || d.enviado || d.firmaHotel || d.yaSalio;
+   alguien. Un borrador que NUNCA salió sí se renumera solo, como siempre.
+
+   Y `folioDelContador`, que es el que cierra la puerta de verdad: un número
+   que repartió el servidor es único por construcción, así que en un choque el
+   adivinado es siempre el otro. Ver `folioParaFirmar`. */
+const folioIntocable = d => d.estado !== "borrador" || d.enviado || d.firmaHotel ||
+                            d.yaSalio || d.folioDelContador;
 
 /**
  * Dos ejecutivos capturando a la vez, cada uno en su equipo, pueden tomar el
@@ -12025,8 +12070,22 @@ const folioIntocable = d => d.estado !== "borrador" || d.enviado || d.firmaHotel
  * segundos después.
  *
  * Se renumera el que se creó después, y sólo si sigue en borrador.
+ *
+ * EL NÚMERO NUEVO SE LO PIDE AL CONTADOR DEL HOTEL. Antes se lo inventaba
+ * —`serie.libre(d)`, que es `máximo + 1` sobre lo que ESE equipo tiene
+ * bajado— y además no se lo avisaba a nadie. Eso no arreglaba el choque: lo
+ * convertía en una rueda. El contador del servidor no se enteraba de que el
+ * número ya estaba gastado, se lo repartía al siguiente que firmara, volvían a
+ * chocar y se volvía a renumerar. Marco lo vio como un contrato con tres
+ * folios —CT-2026-027, luego 029, luego 030— y dos huecos en la serie que
+ * nadie podía explicar.
+ *
+ * Y si el contador no contesta, AQUÍ NO SE INVENTA NADA: el documento se queda
+ * con su folio marcado como repetido y lo resuelve una persona con el botón de
+ * la lista, que sí pide número y sabe avisar que hay que reenviar el PDF.
+ * Inventar es lo que arrancó la rueda.
  */
-function resolverFoliosRepetidos(){
+async function resolverFoliosRepetidos(){
   let cambio = false;
   for (const serie of Object.values(SERIES_FOLIO)){
     const porFolio = new Map();
@@ -12038,15 +12097,28 @@ function resolverFoliosRepetidos(){
     }
     for (const [folio, grupo] of porFolio){
       if (grupo.length < 2) continue;
-      // El primero en crearse se queda con el folio.
-      grupo.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+      /* Quién se queda con el folio: primero el que lo sacó del contador
+         —ése es único por construcción, así que el adivinado es el otro— y
+         entre iguales, el que se creó antes. */
+      grupo.sort((a, b) =>
+        (b.folioDelContador ? 1 : 0) - (a.folioDelContador ? 1 : 0) ||
+        String(a.createdAt).localeCompare(String(b.createdAt)));
       for (const d of grupo.slice(1)){
         if (folioIntocable(d)){ d.folioRepetido = folio; continue; }
-        const nuevo = serie.libre(d);
+        /* SIN SERVIDOR es otra cosa, y es la misma razón que en
+           `folioParaFirmar`: un CRM suelto —«Sólo este equipo»— es el único
+           que reparte folios, no hay con quién chocar, y contar aquí da la
+           misma serie seguida. Con servidor, el número lo da el contador o no
+           se toca nada. */
+        const nuevo = nubeActiva()
+          ? await apartarFolio(serie.tipo, serie.prefijo, serie.anio(d))
+          : serie.libre(d);
+        if (!nuevo){ d.folioRepetido = folio; continue; }
         registrarAuto(d.clienteId, `${serie.uno} ${d.folio} se renumeró como ${nuevo}`,
           `Otro equipo había tomado el folio ${d.folio} al mismo tiempo. Como éste seguía ` +
-          "en borrador, se le dio el siguiente libre.", "");
+          "en borrador, se le dio el siguiente del contador del hotel.", "");
         d.folio = nuevo;
+        if (nubeActiva()) d.folioDelContador = true;
         delete d.folioRepetido;
         d.updatedAt = new Date().toISOString();
         cambio = true;
@@ -12055,6 +12127,123 @@ function resolverFoliosRepetidos(){
   }
   if (cambio) guardar();
   return cambio;
+}
+
+/* ===========================================================================
+   EL LIBRO DE FOLIOS · QUÉ PASÓ CON CADA NÚMERO
+
+   Marco: «tengo un solo contrato con tres números de folio distintos, y en el
+   CRM sólo aparece uno; los otros dos se los saltó».
+
+   Hasta hoy no había manera de contestar eso. El contador vive en el servidor
+   —`crm_folios`, con quién apartó cada número y cuándo, ver folios.sql— y los
+   documentos viven en otra tabla. Nadie los había puesto uno junto al otro, así
+   que un número apartado que ningún documento acabó usando era invisible: un
+   hueco en la serie y ninguna explicación.
+
+   Esta pantalla los cruza. Para cada número: quién lo pidió, cuándo, y qué
+   documento lo trae puesto — o que no lo trae ninguno.
+
+   HONESTIDAD OBLIGATORIA: este equipo sólo ve los documentos que los papeles
+   le dejan ver (ver roles.sql). A quien no es administrador, un «no lo usa
+   nadie» sería mentira: sería «no lo veo yo». Por eso la pantalla cambia lo
+   que dice según quién la abre. Un hueco falso mandaría a alguien a reclamar
+   un folio que sí tiene dueño, y ahí sí habría dos documentos con el mismo
+   número.
+   =========================================================================== */
+async function libroDeFolios(e){
+  if (!nubeActiva()){ alert("El contador de folios vive en el servidor del hotel; " +
+    "primero hay que entrar a la nube."); return; }
+  const b = e && e.currentTarget, antes = b && b.textContent;
+  if (b){ b.disabled = true; b.textContent = "Consultando…"; }
+  const anio = Number(String(hoyISO()).slice(0, 4));
+  let filas;
+  try{
+    /* `select=*` por lo mismo que en el buzón de firmas: enumerar columnas
+       amarra el CRM a la versión de folios.sql que esté corrida allá. */
+    filas = await api(`/rest/v1/crm_folios?select=*&anio=eq.${anio}&order=tipo.asc`);
+  }catch(ex){
+    alert(noExisteLaFuncion(ex)
+      ? "El contador de folios todavía no existe en el servidor: falta correr folios.sql."
+      : "No se pudo leer el contador: " + ex.message);
+    return;
+  }finally{ if (b){ b.disabled = false; b.textContent = antes; } }
+
+  const todo = puedeVerTodo();
+  const series = Object.values(SERIES_FOLIO);
+  /* Las series de banquetes no están en SERIES_FOLIO —no se renumeran solas—
+     pero sí gastan números del contador, así que el libro las enseña igual. */
+  const dondeEsta = tipo => {
+    if (tipo === "eventos_ev" || tipo === "eventos_cb") return state.eventos;
+    const serie = series.find(x => x.tipo === tipo);
+    return serie ? serie.lista() : null;
+  };
+  const comoSeLlama = {
+    convenios:"Convenios", contratos:"Contratos y cotizaciones",
+    certificados:"Certificados", eventos_ev:"Cotizaciones de banquetes",
+    eventos_cb:"Contratos de banquetes"
+  };
+
+  const porTipo = new Map();
+  for (const fl of filas || []){
+    if (!porTipo.has(fl.tipo)) porTipo.set(fl.tipo, []);
+    porTipo.get(fl.tipo).push(fl);
+  }
+  let huecos = 0;
+
+  const seccion = (tipo, lista) => {
+    const docs = dondeEsta(tipo);
+    lista.sort((a, b) => Number(b.numero) - Number(a.numero));
+    const renglones = lista.map(fl => {
+      const folio = String(fl.folio || "").trim().toUpperCase();
+      const d = docs && docs.find(x => String(x.folio || "").trim().toUpperCase() === folio);
+      if (!d) huecos++;
+      return `<tr>
+        <td><b>${esc(fl.folio)}</b></td>
+        <td class="nowrap">${esc(fl.quien || "—")}</td>
+        <td class="nowrap">${esc(fechaHora(fl.creado))}</td>
+        <td>${d
+          ? esc(nombreCli(d.clienteId) || d.titulo || "un documento")
+          : `<span style="color:var(--warn)"><b>${docs
+              ? (todo ? "Ningún documento lo trae"
+                      : "Ningún documento de los que ves lo trae")
+              : "—"}</b></span>`}</td></tr>`;
+    }).join("");
+    return `<h3 class="sec">${esc(comoSeLlama[tipo] || tipo)}</h3>
+      <table class="data"><thead><tr><th>Folio</th><th>Lo pidió</th><th>Cuándo</th>
+        <th>Qué documento lo trae</th></tr></thead><tbody>${renglones}</tbody></table>`;
+  };
+
+  const cuerpo = porTipo.size
+    ? [...porTipo].map(([tipo, lista]) => seccion(tipo, lista)).join("")
+    : `<p style="margin:14px 0 0">El contador no ha repartido ningún folio en ${anio}.</p>`;
+
+  modal(`
+    <div class="modal" style="max-width:760px">
+      <div class="modal-head"><h2>El libro de folios · ${anio}</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note">Cada número que el contador del hotel repartió este año, quién lo
+          pidió y qué documento lo trae puesto. <b>Un número que no trae ningún documento es
+          un hueco en la serie</b>: se apartó y se perdió por el camino.</div>
+        ${huecos ? `<div class="note warn"><b>${huecos === 1
+            ? "Hay un número que no trae ningún documento"
+            : "Hay " + huecos + " números que no traen ningún documento"}.</b>
+          Abajo salen marcados. Eso es un folio que se apartó y se quedó sin documento:
+          o el documento se borró, o el número se pidió dos veces, o se perdió el cambio
+          que lo guardaba.</div>` : ""}
+        ${cuerpo}
+        ${todo ? "" : `<div class="note warn" style="margin-top:14px">Esto es lo que
+          <b>tu equipo alcanza a ver</b>. Un folio que aquí sale sin documento puede estar
+          en la cartera de otra persona. Antes de darlo por perdido, que lo revise un
+          administrador.</div>`}
+        <p class="hint" style="margin-top:14px">Un hueco no se puede reusar desde aquí a
+          propósito: el número ya se apartó y reasignarlo a mano es justo lo que acaba con
+          dos documentos iguales. Si hace falta, se emite uno nuevo.</p>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cerrar</button></div>
+    </div>`);
 }
 
 /** El aviso de arriba de la lista, cuando quedaron folios repetidos. */
@@ -12113,6 +12302,7 @@ function engancharRenumTodos(cont, serie, visibles, repetidos){
       const nuevo = await apartarFolio(serie.tipo, serie.prefijo, serie.anio(d));
       if (!nuevo){ fallidos.push(viejo); continue; }
       d.folio = nuevo;
+      d.folioDelContador = true;
       delete d.folioRepetido;
       d.updatedAt = new Date().toISOString();
       registrarAuto(d.clienteId, `${serie.uno} ${viejo} se renumeró como ${nuevo}`,
@@ -16114,7 +16304,14 @@ function cuerpoContrato(k, c){
 
 function renderContratos(){
   const cont = document.getElementById("tblContratos");
+  /* SE BUSCA POR FOLIO, como en certificados (`renderCertificados`). Faltaba,
+     y se notó el día que regresó un contrato firmado con su número impreso:
+     no había dónde teclearlo. Con treinta documentos en la lista eso es ir
+     renglón por renglón. */
+  const q = String(filtros.q || "").trim().toLowerCase();
   const ks = state.contratos.filter(contratoEsMio)
+    .filter(k => !q || (k.folio + " " + nombreCli(k.clienteId) + " " + (k.titulo || "") +
+                        " " + infoTipoCt(k.tipo).name).toLowerCase().includes(q))
     .sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const conEje = puedeVerTodo();
   const repetidos = ks.filter(k => k.folioRepetido);
@@ -16122,7 +16319,7 @@ function renderContratos(){
   const cab = avisoFoliosRepetidos(SERIES_FOLIO.contratos, repetidos) +
     `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
       <b style="font-size:15px">Contratos y cotizaciones</b>
-      <span class="hint">${ks.length} en total</span>
+      <span class="hint">${ks.length}${q ? " que coinciden con «" + esc(q) + "»" : " en total"}</span>
       <span style="flex:1"></span>
       <button class="btn" id="bSubirExtCt">Subir uno firmado</button>
       <button class="btn primary" id="bNuevoCt">+ Nuevo contrato</button></div>
@@ -16131,8 +16328,13 @@ function renderContratos(){
       empresa de todo el año— y vive en su propia pestaña.</div>`;
 
   if (!ks.length){
-    cont.innerHTML = cab + `<div class="vacio">Todavía no hay contratos.<br>
-      Se crean desde aquí o desde la ficha de un cliente.</div>`;
+    cont.innerHTML = cab + (q
+      ? `<div class="vacio">Ningún contrato coincide con <b>${esc(q)}</b>.<br>
+          Se busca por folio, cliente o título. Si el folio que traes no sale, puede estar
+          a nombre de otra persona: revísalo en <i>El libro de folios</i>, en
+          Ajustes → Nube y equipo.</div>`
+      : `<div class="vacio">Todavía no hay contratos.<br>
+          Se crean desde aquí o desde la ficha de un cliente.</div>`);
   } else {
     cont.innerHTML = cab + `<table class="data">
       <thead><tr><th>Folio</th><th>Cliente</th>${conEje ? "<th>Ejecutivo</th>" : ""}
@@ -17156,9 +17358,22 @@ function pedirEscaneado({ titulo, explica, quienDef, boton, alSubir }){
     if (!f){ err.innerHTML = `<div class="errbox">Elige el archivo escaneado.</div>`; return; }
     const MAX = hayDeposito() ? MAX_ARCHIVO_NUBE : MAX_ARCHIVO;
     if (f.size > MAX){
-      err.innerHTML = `<div class="errbox">Pesa ${Math.round(f.size/1024/1024*10)/10} MB y el límite
-        son ${Math.round(MAX/1024/1024)} MB. Vuelve a escanearlo en blanco y negro o a menor
-        resolución, o toma una foto.</div>`;
+      /* El mensaje decía el número y nada más, y ahí se acababa el camino:
+         un contrato firmado de 2.9 MB con el tope en 2 no se puede registrar
+         y la pantalla no dice que el tope se sube. Sin almacén los
+         escaneados viven DENTRO de la base y viajan a todos los equipos en
+         cada sincronización; con almacén se van aparte y caben 20 MB. */
+      err.innerHTML = `<div class="errbox"><b>Pesa ${Math.round(f.size/1024/1024*10)/10} MB
+        y aquí el límite son ${Math.round(MAX/1024/1024)} MB.</b>` +
+        (hayDeposito()
+          ? ` Vuelve a escanearlo en blanco y negro o a menor resolución, o toma una foto.`
+          : `<br><br>Son 2 MB porque el archivo se guarda dentro de la base y viaja a todos
+             los equipos. Con el <b>almacén del proyecto</b> montado el límite sube a
+             <b>20 MB</b> y los archivos dejan de viajar: se corre una vez
+             <code>archivos.sql</code> en Supabase, y está explicado en
+             <b>Ajustes → Nube y equipo</b>.<br><br>Mientras tanto: vuelve a escanearlo en
+             blanco y negro o a menor resolución, o toma una foto del documento.`) +
+        `</div>`;
       return;
     }
     b.disabled = true; b.textContent = "Subiendo…";
@@ -17565,7 +17780,34 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
                         : tipo === "cotizacionbq" ? folioEvento("cotizacion", anio)
                         : tipo === "contratobq"   ? folioEvento("contrato", anio)
                                                   : folioContrato(anio);
-      const elFolio = await folioParaFirmar({ folio }, serie[0], serie[1], anio, local);
+      /* ESTA PANTALLA CREA UN REGISTRO APARTE, y eso casi nunca es lo que
+         quiere quien tiene en la mano un documento que regresó firmado.
+
+         Si el cliente ya tiene un documento con folio, lo más probable es que
+         éste sea ese mismo papel de vuelta. Entonces no va aquí: va con
+         «Registrar que se firmó en papel» sobre el documento que ya existe,
+         que le conserva su número y lo cierra. Registrarlo aquí gasta otro
+         folio y deja DOS registros para un solo contrato — que es la mitad de
+         lo que Marco vio como «un contrato con tres folios». */
+      if (!folio){
+        const donde = tipo === "convenio" ? state.convenios
+                    : (tipo === "cotizacionbq" || tipo === "contratobq") ? state.eventos
+                    : state.contratos;
+        const yaHay = donde.filter(d => d.clienteId === cid && !d.externo &&
+                                        String(d.folio || "").trim());
+        if (yaHay.length && !confirm(
+            `Este cliente ya tiene ${yaHay.length === 1 ? "un documento" :
+              yaHay.length + " documentos"} con folio:\n\n` +
+            yaHay.slice(0, 8).map(d => "· " + d.folio).join("\n") +
+            "\n\nSi lo que tienes es uno de ésos que regresó firmado, NO lo registres " +
+            "aquí: ábrelo en la lista y usa «Registrar que se firmó en papel». Así " +
+            "conserva su folio y queda cerrado.\n\nRegistrarlo aquí gasta un folio " +
+            "NUEVO y deja dos documentos para un mismo trato.\n\n¿Registrarlo de todos modos?"))
+          return;
+      }
+
+      const marca = { folio };
+      const elFolio = await folioParaFirmar(marca, serie[0], serie[1], anio, local);
       if (!elFolio){ alert(AVISO_SIN_CONTADOR.replace("no se firmó", "no se registró")); return; }
 
       /* Si el folio venía escrito —del papel— hay que anotarlo, y hay que
@@ -17588,6 +17830,7 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
           fecha, vigenciaDesde:fecha, vigenciaHasta:vig, notas,
           firmaManual: manual, createdAt:new Date().toISOString()
         });
+        if (marca.folioDelContador) v.folioDelContador = true;
         state.convenios.push(v);
         cerrarConvenio(v, null, `Documento externo. Se subió el archivo "${f.name}".`, quien);
         v.avisado = true;     // lo registró el propio equipo: no hay novedad que avisar
@@ -17600,6 +17843,7 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
           bloques: vig ? [saneaBloqueEv({ fecha: vig })] : [],
           firmaManual: manual, destinatario: dest, createdAt:new Date().toISOString()
         });
+        if (marca.folioDelContador) ev.folioDelContador = true;
         state.eventos.push(ev);
         tocaBanquetes(ev);
         registrarAuto(cid, `${nombre} ${ev.folio} registrada desde un documento externo`,
@@ -17611,6 +17855,7 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
           fecha, vigencia:vig, notas, estado:"aceptado",
           firmaManual: manual, destinatario: dest, createdAt:new Date().toISOString()
         });
+        if (marca.folioDelContador) k.folioDelContador = true;
         state.contratos.push(k);
         registrarAuto(cid, `${nombre} ${k.folio} registrada desde un documento externo`,
           `Se subió el archivo "${f.name}".`, quien);

@@ -57,10 +57,20 @@ node pruebas/navegador/politicas-del-contrato.mjs   # el contrato de ventas, com
 node pruebas/navegador/observaciones-del-convenio.mjs # las que sí salen en la carta
 node pruebas/navegador/subir-en-trozos.mjs          # la subida no truena por grande
 node pruebas/navegador/la-firma-que-no-entro.mjs    # una firma de cliente no se pierde callada
+node pruebas/navegador/los-folios-no-se-pierden.mjs # el folio nuevo lo da el contador
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
 servidor rechaza su firma, no ve letra de técnico ni se le encarga nada.
+
+`los-folios-no-se-pierden.mjs` cuida el contador. Cuando dos equipos toman el mismo folio, la
+renumeración automática **se inventaba** el número nuevo —contando lo que ese equipo tiene
+bajado— y **no se lo avisaba al contador del servidor**, así que éste lo volvía a repartir y se
+volvía a chocar: un contrato acabó con tres folios y dos huecos en la serie. Se afirma que el
+número sale del contador, que **después de renumerar el contador ya no lo reparte** —la rueda—,
+y que sin contador **no se inventa nada**. Sus dos grupos de control son lo que no puede
+romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
+borradores que de verdad chocan se siguen arreglando solos.
 
 `la-firma-que-no-entro.mjs` es la otra mitad: lo que pasa **del lado del hotel** cuando la firma
 ya llegó. Hay tres casos en los que no se aplica —se firma en papel, ya estaba firmado, la clave

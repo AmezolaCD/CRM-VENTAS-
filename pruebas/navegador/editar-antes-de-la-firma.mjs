@@ -203,7 +203,7 @@ await bloque('6 · al guardar, vuelve a borrador y conserva su folio', async () 
    El folio ya apartado no se renumera por detrás, aunque el documento se vea
    como un borrador recién hecho. Era el agujero que abrió este cambio. */
 await bloque('7 · a un documento reabierto no se le cambia el folio solo', async () => {
-  const r = await p.evaluate(() => {
+  const r = await p.evaluate(async () => {
     const viejo = saneaContrato({ id:'ka', clienteId:'c1', tipo:'cotizacion',
       folio:'CT-2026-050', estado:'aceptado', createdAt:'2026-10-01T10:00:00.000Z',
       firmaCliente:{ nombre:'x', fecha:'2026-10-02T10:00:00.000Z', img:'data:image/png;base64,AA' } });
@@ -214,7 +214,8 @@ await bloque('7 · a un documento reabierto no se le cambia el folio solo', asyn
       folio:'CT-2026-050', estado:'borrador', createdAt:'2026-10-04T10:00:00.000Z' });
     state.contratos = [viejo, reabierto, nunca];
     guardar();
-    resolverFoliosRepetidos();
+    // Async: el número nuevo se lo pide al contador del hotel.
+    await resolverFoliosRepetidos();
     const de = id => state.contratos.find(k => k.id === id);
     return { reabierto: de('kb').folio, marcado: !!de('kb').folioRepetido,
              nunca: de('nunca') ? '' : de('kc').folio };

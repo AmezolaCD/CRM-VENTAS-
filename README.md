@@ -240,6 +240,29 @@ puede depositar pero no leer ni corregir, y de ahí la levanta el CRM en la sigu
 sincronización. Así, aunque alguien anduviera de mirón, no podría leer convenios ajenos ni
 alterar el suyo. La clave deja de servir en cuanto se firma.
 
+### El libro de folios
+
+El número de cada documento lo reparte el servidor —`crm_aparta_folio`, en `folios.sql`— y queda
+anotado con quién lo pidió y cuándo. Los documentos viven en otra tabla, y hasta ahora nadie
+había puesto las dos cosas una junto a la otra: un número apartado que ningún documento acabó
+usando era invisible. Un hueco en la serie y ninguna explicación.
+
+**Ajustes → Nube y equipo → El libro de folios** las cruza: por cada número del año dice quién lo
+pidió, cuándo, y qué documento lo trae puesto — o que no lo trae ninguno. A quien no ve toda la
+cartera se lo dice acotado a lo que su equipo alcanza a ver, porque un «no lo usa nadie» que en
+realidad es «no lo veo yo» mandaría a reclamar un folio con dueño.
+
+Y la causa de los huecos quedó cerrada. Cuando dos equipos tomaban el mismo folio, la
+renumeración automática se **inventaba** el número nuevo —máximo + 1 sobre lo que ese equipo
+tiene bajado— y **no se lo avisaba al contador**. El contador volvía a repartirlo, volvían a
+chocar y se volvía a renumerar: un contrato llegó a tener tres folios. Ahora el número lo da el
+contador, y si el contador no contesta **no se inventa nada**: el documento se marca como
+repetido y lo resuelve una persona. Un folio que vino del contador ya no se renumera nunca, porque
+es único por construcción: en un choque, el adivinado es siempre el otro.
+
+La lista de contratos también gana **búsqueda por folio**, que es lo que hace falta el día que
+regresa un papel con su número impreso.
+
 ### Una firma que llega y no entra, se dice
 
 Hay tres casos en los que una firma llega al buzón y **no se aplica**: el documento es un
