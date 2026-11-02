@@ -60,6 +60,7 @@ node pruebas/navegador/la-firma-que-no-entro.mjs    # una firma de cliente no se
 node pruebas/navegador/los-folios-no-se-pierden.mjs # el folio nuevo lo da el contador
 node pruebas/navegador/un-documento-no-se-cae-solo.mjs # sin cliente no es sin documento
 node pruebas/navegador/la-version-a-la-vista.mjs    # qué versión traigo, y actualizar
+node pruebas/navegador/varias-tarifas-en-el-convenio.mjs # una tarifa por desayuno
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
@@ -76,6 +77,15 @@ que ya trae otro documento ni uno de otra serie, que el número corregido quede 
 contador, y que una ejecutiva no pueda hacerlo. Sus grupos de control son lo que no puede
 romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
 borradores que de verdad chocan se siguen arreglando solos.
+
+`varias-tarifas-en-el-convenio.mjs` cuida el convenio con una tarifa por modalidad de desayuno.
+Su primer bloque es el grupo de control, y va primero a propósito: **un convenio de una sola
+tarifa tiene que salir exactamente igual que antes**, porque los que ya andan firmados no pueden
+cambiar. Después mide lo nuevo: una tabla por tarifa, la habitación que no se ofrece con cierto
+desayuno ausente de esa tabla, el saneador que no deja entrar modalidades inventadas ni tarifas
+en cero, la exportación con un renglón por tarifa, y el editor manejado como lo maneja una
+persona —picándole a las pastillas, que es lo único que se puede picar: el `input` está escondido
+a propósito—.
 
 `la-version-a-la-vista.mjs` cuida el número de versión de abajo a la izquierda y el botón que
 actualiza: que se vea sin entrar a Ajustes, que el programa se entere solo de que hay una versión

@@ -272,6 +272,25 @@ el contador antes de ponerlo** —y se espera la respuesta, o volvería a repart
 en la bitácora del cliente con los dos números y el porqué. El número que se suelta no se
 recicla: queda como hueco y el libro de folios lo enseña.
 
+### Varias tarifas en un mismo convenio
+
+Hay empresas cuyos huéspedes escogen: unos con desayuno y otros sin él. Y no son dos opciones,
+son cuatro —americano, bariátrico, larga estancia y sin desayuno—.
+
+En el editor del convenio, el apartado **Varias tarifas**: se marcan dos o más y cada habitación
+gana una casilla por cada una. La carta imprime **una tabla por tarifa**, con su nombre en la
+columna del precio —*Con desayuno americano*, *Sin desayuno*—. Se escogió tablas separadas y no
+columnas porque cuatro columnas de números no se leen.
+
+Una habitación puede quedarse sin tarifa en alguna modalidad: entonces **no sale en esa tabla**,
+porque no todas se ofrecen con todos los desayunos. Y la exportación saca **un renglón por
+tarifa**, no por habitación: con cuatro tarifas, sacar sólo una daría un número verdadero y tres
+escondidos.
+
+Con una sola modalidad marcada —o con ninguna— el convenio es el de siempre, de una tarifa: las
+modalidades **nacen al usarse**, así que ni un solo convenio de los que ya están firmados cambia
+de forma.
+
 ### Qué versión traigo, y el botón para actualizar
 
 El número de versión sólo salía en Ajustes, y a Ajustes no entra un ejecutivo: Carmen no tenía

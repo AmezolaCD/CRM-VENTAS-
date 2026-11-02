@@ -676,6 +676,9 @@
   .doc-body h2{font-size:12px; font-weight:700; letter-spacing:.05em; margin:18px 0 6px;
     text-transform:uppercase; color:#39104e; border-bottom:1px solid #e0dbe7; padding-bottom:3px}
   .doc-body table.tar{width:100%; border-collapse:collapse; margin:4px 0 8px; font-size:12px}
+  /* Con varias tarifas van tres o cuatro tablas seguidas, y pegadas se leen
+     como una sola larga. Un respiro entre ellas y cada una se ve lo que es. */
+  .doc-body table.tar + table.tar{margin-top:14px}
   .doc-body table.tar th{background:#39104e; color:#fff; text-align:left; padding:6px 9px;
     font-size:11px; letter-spacing:.02em; border:1px solid #39104e}
   .doc-body table.tar th.num, .doc-body table.tar td.num{text-align:right}
@@ -1049,7 +1052,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.02-1";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.02-2";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1460,6 +1463,40 @@ const DESAYUNOS = [
   { id:"larga_estancia", name:"Larga estancia" }
 ];
 const infoDesayuno = id => DESAYUNOS.find(d => d.id === id) || { id, name: id };
+
+/* ===========================================================================
+   VARIAS TARIFAS EN UN MISMO CONVENIO
+
+   Marco: «hay clientes que piden dos tarifas, una con desayuno y otra sin
+   desayuno, porque habrá huéspedes de esa misma empresa que quieran uno u
+   otro». Y al preguntarle, resultó que no son dos: son cuatro —americano,
+   bariátrico, larga estancia y sin desayuno—.
+
+   Una MODALIDAD es cada una de esas tarifas. «Sin desayuno» vive aquí y no en
+   DESAYUNOS a propósito: es una modalidad de tarifa, no un desayuno, y
+   meterla allá la metería en la línea de «Desayuno incluido», que diría una
+   tontería.
+
+   Un convenio con menos de dos modalidades es el de siempre, con una sola
+   tarifa. Las modalidades nacen al usarse: ver `o.modalidades` en `saneaConv`.
+   =========================================================================== */
+const SIN_DESAYUNO = { id:"ninguno", name:"Sin desayuno" };
+const MODALIDADES  = DESAYUNOS.concat([SIN_DESAYUNO]);
+const infoModalidad = id => MODALIDADES.find(m => m.id === id) || { id, name: id };
+
+/** Cómo se llama esa tarifa en la carta: «Con desayuno americano», «Sin desayuno». */
+const tituloModalidad = id => id === SIN_DESAYUNO.id
+  ? SIN_DESAYUNO.name
+  : "Con desayuno " + infoModalidad(id).name.toLowerCase();
+
+/** Las modalidades de un convenio. Vacío quiere decir «una sola tarifa, como siempre». */
+const modalidadesDe = v =>
+  (v && Array.isArray(v.modalidades) && v.modalidades.length > 1) ? v.modalidades : [];
+
+/** La tarifa de una habitación: la de esa modalidad, o la única que hay. */
+const tarifaDe = (h, mod) => mod
+  ? Number((h.porModalidad || {})[mod]) || 0
+  : Number(h.convenio) || 0;
 
 /** Cómo se leen en la carta: "Americano y Bariátrico", "A, B y C". */
 function listaDesayunos(ids){
@@ -3861,12 +3898,35 @@ function saneaConv(c){
         email:o.destinatario.email || "" }
     : null;
   o.grupos = saneaGrupos(o.grupos);
-  o.habitaciones = (Array.isArray(o.habitaciones) ? o.habitaciones : []).map(h => ({
-    tipoId: h.tipoId || "", codigo: h.codigo || "", nombre: h.nombre || "",
-    grupo: GRUPOS.some(g => g.id === h.grupo) ? h.grupo : "deluxe",
-    publica: h.publica === null || h.publica === "" || h.publica === undefined ? null : Number(h.publica) || 0,
-    convenio: Number(h.convenio) || 0
-  }));
+  /* Las modalidades de tarifa. NACEN AL USARSE: un convenio que no las trae
+     es de una sola tarifa y su carta sale exactamente igual que siempre. Con
+     menos de dos no son modalidades, es la tarifa de toda la vida, y se
+     quitan para no dejar una llave que no significa nada. */
+  if (o.modalidades !== undefined){
+    o.modalidades = (Array.isArray(o.modalidades) ? o.modalidades : [])
+      .filter((x, i, a) => MODALIDADES.some(m => m.id === x) && a.indexOf(x) === i);
+    if (o.modalidades.length < 2) delete o.modalidades;
+  }
+  o.habitaciones = (Array.isArray(o.habitaciones) ? o.habitaciones : []).map(h => {
+    const f = {
+      tipoId: h.tipoId || "", codigo: h.codigo || "", nombre: h.nombre || "",
+      grupo: GRUPOS.some(g => g.id === h.grupo) ? h.grupo : "deluxe",
+      publica: h.publica === null || h.publica === "" || h.publica === undefined ? null : Number(h.publica) || 0,
+      convenio: Number(h.convenio) || 0
+    };
+    /* La tarifa de cada modalidad, también al usarse. Una habitación puede no
+       tener tarifa en alguna: no todas se ofrecen con todos los desayunos, y
+       entonces no sale en esa tabla. */
+    if (h.porModalidad && typeof h.porModalidad === "object"){
+      const pm = {};
+      for (const m of MODALIDADES){
+        const n = Number(h.porModalidad[m.id]) || 0;
+        if (n > 0) pm[m.id] = n;
+      }
+      if (Object.keys(pm).length) f.porModalidad = pm;
+    }
+    return f;
+  });
   /* Las observaciones que SÍ se imprimen en la carta. Marco las pidió
      «adicional al de observaciones internas»: `notas` se queda como está —son
      del equipo y no salen—, y esto es lo que el ejecutivo quiere que lea el
@@ -12782,28 +12842,59 @@ function editarConvenio(id, clientePre, alCerrar){
      las tarifas negociadas en blanco: quien le diera Guardar perdía el trabajo
      de la negociación, sin un solo aviso. */
   const previos = new Map();
+  const previosMod = new Map();
   for (const h of v.habitaciones){
-    if (h.tipoId) previos.set("id:" + h.tipoId, h.convenio);
-    if (claveHab(h.codigo)) previos.set("cod:" + claveHab(h.codigo), h.convenio);
+    if (h.tipoId){ previos.set("id:" + h.tipoId, h.convenio);
+                   previosMod.set("id:" + h.tipoId, h.porModalidad || {}); }
+    if (claveHab(h.codigo)){ previos.set("cod:" + claveHab(h.codigo), h.convenio);
+                             previosMod.set("cod:" + claveHab(h.codigo), h.porModalidad || {}); }
   }
-  const yaNegociada = h =>
-    previos.has("id:" + h.id)                 ? previos.get("id:" + h.id)
-  : previos.has("cod:" + claveHab(h.codigo))  ? previos.get("cod:" + claveHab(h.codigo))
-  : "";
-  const filas = state.habitaciones.map(h => ({
-    tipoId:h.id, codigo:h.codigo, nombre:h.nombre, grupo:h.grupo, publica:h.publica,
-    convenio: yaNegociada(h)
-  }));
+  const deLosPrevios = (mapa, h, siNo) =>
+    mapa.has("id:" + h.id)                 ? mapa.get("id:" + h.id)
+  : mapa.has("cod:" + claveHab(h.codigo))  ? mapa.get("cod:" + claveHab(h.codigo))
+  : siNo;
+  const yaNegociada    = h => deLosPrevios(previos, h, "");
+  const yaNegociadaMod = h => Object.assign({}, deLosPrevios(previosMod, h, {}));
+  const filas = state.habitaciones.map(h => {
+    const pm = yaNegociadaMod(h), conv = yaNegociada(h);
+    return { tipoId:h.id, codigo:h.codigo, nombre:h.nombre, grupo:h.grupo, publica:h.publica,
+             convenio: conv, porModalidad: pm,
+             /* Marcada va en el modelo, no sólo en la casilla de la pantalla:
+                las tablas se repintan al cambiar de modalidades y una palomita
+                que sólo viva en el HTML se pierde en el camino. */
+             sel: (conv !== "" && conv !== null) || Object.keys(pm).length > 0 };
+  });
+
+  /* LAS MODALIDADES DE ESTE CONVENIO.
+
+     Con menos de dos, el editor es el de siempre: una columna de tarifa y su
+     descuento. Con dos o más, una columna por modalidad —y el descuento se
+     va, porque cuatro columnas de números y cuatro de porcentajes ya no se
+     leen—. Ver `MODALIDADES`. */
+  let modsSel = (v.modalidades || []).slice();
+  const variasTarifas = () => modsSel.length > 1;
 
   const bloque = gid => {
     const fs = filas.filter(f => f.grupo === gid);
     if (!fs.length) return `<p class="hint">No hay habitaciones de este bloque en el catálogo (pestaña Ajustes).</p>`;
+    const varias = variasTarifas();
+    const cols = varias ? modsSel : [""];
+    const ancho = varias ? Math.max(110, Math.round(340 / cols.length)) : 170;
+    const casilla = (f, mod, on) => {
+      const val = varias ? (f.porModalidad[mod] || "") : f.convenio;
+      return `<td class="num"><input class="field conv" inputmode="decimal"
+              data-mod="${esc(mod)}" data-pub="${f.publica === null ? "" : f.publica}"
+              value="${on && val !== "" && val !== null ? esc(val) : ""}" placeholder="—"
+              style="width:100%;text-align:right"${on ? "" : " disabled"}></td>`;
+    };
     return `<table class="data"><thead><tr>
         <th style="width:44px"></th><th style="width:80px">Clave</th><th>Tipo de habitación</th>
         <th class="num" style="width:150px">Tarifa pública</th>
-        <th class="num" style="width:170px">Tarifa convenio</th><th class="num" style="width:100px">Dcto.</th>
+        ${cols.map(m => `<th class="num" style="width:${ancho}px">${
+          esc(m ? infoModalidad(m).name : "Tarifa convenio")}</th>`).join("")}
+        ${varias ? "" : `<th class="num" style="width:100px">Dcto.</th>`}
       </tr></thead><tbody>${fs.map(f => {
-        const on = f.convenio !== "" && f.convenio !== null;
+        const on = !!f.sel;
         return `<tr data-tipo="${f.tipoId}"${on ? "" : ' class="off"'}>
         <td class="selcell"><input type="checkbox" class="sel"${on ? " checked" : ""}
               title="Incluir esta habitación en el convenio"></td>
@@ -12811,10 +12902,8 @@ function editarConvenio(id, clientePre, alCerrar){
         <td><b>${esc(f.nombre)}</b></td>
         <td class="num">${f.publica === null ? `<b>N/A</b>` : `<b>${esc(moneyMN(f.publica))}</b>`}
           <div class="hint">fija</div></td>
-        <td class="num"><input class="field conv" inputmode="decimal" data-pub="${f.publica === null ? "" : f.publica}"
-              value="${on ? esc(f.convenio) : ""}" placeholder="—" style="width:100%;text-align:right"
-              ${on ? "" : "disabled"}></td>
-        <td class="num desc">—</td></tr>`; }).join("")}</tbody></table>`;
+        ${cols.map(m => casilla(f, m, on)).join("")}
+        ${varias ? "" : `<td class="num desc">—</td>`}</tr>`; }).join("")}</tbody></table>`;
   };
 
   const ov = modal(`
@@ -12864,6 +12953,17 @@ function editarConvenio(id, clientePre, alCerrar){
               v.desayunos.includes(d.id) ? " checked" : ""}>`, d.name)).join("")}
         </div>
 
+        <h3 class="sec">Varias tarifas</h3>
+        <p class="hint" style="margin-top:0">Para la empresa cuyos huéspedes escogen: unos con
+          desayuno y otros sin él. <b>Marca dos o más</b> y cada habitación lleva una tarifa por
+          cada una; la carta imprime <b>una tabla por tarifa</b>. Con una sola marcada —o con
+          ninguna— el convenio es el de siempre, de una tarifa.</p>
+        <div class="opciones" id="cModalidades">
+          ${MODALIDADES.map(m => pildora(
+            `<input type="checkbox" class="modal" value="${m.id}"${
+              (v.modalidades || []).includes(m.id) ? " checked" : ""}>`, m.name)).join("")}
+        </div>
+
         <p><label><input type="checkbox" id="cRec" ${v.incluyeRecovery ? "checked" : ""}>
           Considerar también habitaciones ${esc(infoGrupo("recovery").nombre)} en este convenio</label></p>
         <div id="bRecovery" ${v.incluyeRecovery ? "" : 'style="display:none"'}>${bloque("recovery")}</div>
@@ -12892,11 +12992,15 @@ function editarConvenio(id, clientePre, alCerrar){
       </div>
     </div>`);
 
+  /* Todas las casillas de tarifa del renglón: una, o una por modalidad. */
+  const convsDe = tr => [...tr.querySelectorAll(".conv")];
+
   const recalcular = () => ov.querySelectorAll("tr[data-tipo]").forEach(tr => {
+    const celda = tr.querySelector(".desc");
+    if (!celda) return;          // con varias tarifas no hay columna de descuento
     const inp = tr.querySelector(".conv");
     const sel = tr.querySelector(".sel").checked;
     const pub = inp.dataset.pub === "" ? null : Number(inp.dataset.pub);
-    const celda = tr.querySelector(".desc");
     const val = inp.value.trim();
     if (!sel || !val || pub === null || !pub){ celda.textContent = "—"; celda.style.color = ""; return; }
     const pct = Math.round((1 - parseMoney(val)/pub) * 100);
@@ -12907,14 +13011,13 @@ function editarConvenio(id, clientePre, alCerrar){
   /** La casilla manda: sin marcar, la tarifa ni se captura. */
   function sincroniza(tr, foco){
     const sel = tr.querySelector(".sel").checked;
-    const inp = tr.querySelector(".conv");
-    inp.disabled = !sel;
+    const inps = convsDe(tr);
+    inps.forEach(inp => { inp.disabled = !sel; });
     tr.classList.toggle("off", !sel);
     if (!sel){
-      inp.value = "";
+      inps.forEach(inp => { inp.value = ""; inp.classList.remove("err"); });
       tr.classList.remove("row-err");
-      inp.classList.remove("err");
-    } else if (foco) inp.focus();
+    } else if (foco && inps[0]) inps[0].focus();
     recalcular();
   }
 
@@ -12928,6 +13031,41 @@ function editarConvenio(id, clientePre, alCerrar){
     recalcular();
   });
   recalcular();
+
+  /* Cambiar las modalidades rehace las tablas. Lo tecleado se guarda antes y
+     se devuelve después: nadie pierde una negociación por marcar una pastilla. */
+  ov.querySelector("#cModalidades").addEventListener("change", () => {
+    guardarLoTecleado();
+    modsSel = [...ov.querySelectorAll(".modal:checked")].map(x => x.value);
+    redibujarTarifas();
+  });
+
+  /** Lo que está en la pantalla, de vuelta al modelo. */
+  function guardarLoTecleado(){
+    const porId = new Map(filas.map(f => [f.tipoId, f]));
+    ov.querySelectorAll("tr[data-tipo]").forEach(tr => {
+      const f = porId.get(tr.dataset.tipo);
+      if (!f) return;
+      f.sel = tr.querySelector(".sel").checked;
+      for (const inp of convsDe(tr)){
+        const mod = inp.dataset.mod || "";
+        if (mod) f.porModalidad[mod] = inp.value.trim();
+        else f.convenio = inp.value.trim();
+      }
+      /* Las modalidades que ya no están marcadas conservan su número en el
+         modelo: si alguien se arrepiente y la vuelve a marcar, ahí sigue. */
+    });
+  }
+
+  /** Vuelve a dibujar las dos tablas con las modalidades de ahora. */
+  function redibujarTarifas(){
+    ov.querySelector("#bloqueDeluxe").innerHTML = bloque("deluxe");
+    ov.querySelector("#bRecovery").innerHTML    = bloque("recovery");
+    /* Los manejadores viven en el contenedor, no en cada fila, así que
+       repintar no los desconecta. */
+    ov.querySelectorAll("tr[data-tipo]").forEach(tr => sincroniza(tr, false));
+    recalcular();
+  }
 
   ov.querySelector("#cRec").onchange = e => {
     ov.querySelector("#bRecovery").style.display = e.target.checked ? "" : "none";
@@ -12951,32 +13089,14 @@ function editarConvenio(id, clientePre, alCerrar){
    * manera de provocar el error que se quiere evitar.
    */
   const actualizarTarifas = () => {
-    const puestas = new Map();
-    ov.querySelectorAll("tr[data-tipo]").forEach(tr => {
-      puestas.set(tr.dataset.tipo, {
-        conv: tr.querySelector(".conv").value,
-        sel:  tr.querySelector(".sel").checked
-      });
-    });
+    guardarLoTecleado();          // lo negociado se conserva tal cual
     for (const f of filas){
       const h = state.habitaciones.find(x => x.id === f.tipoId);
       if (h) f.publica = h.publica;
     }
-    ov.querySelector("#bloqueDeluxe").innerHTML = bloque("deluxe");
-    ov.querySelector("#bRecovery").innerHTML    = bloque("recovery");
-    /* Los manejadores viven en el contenedor, no en cada fila, así que
-       repintar las tablas no los desconecta. Sólo hay que devolver lo que
-       estaba tecleado y volver a poner cada renglón en su estado. */
-    ov.querySelectorAll("tr[data-tipo]").forEach(tr => {
-      const p = puestas.get(tr.dataset.tipo);
-      if (!p) return;
-      tr.querySelector(".conv").value  = p.conv;
-      tr.querySelector(".sel").checked = p.sel;
-      sincroniza(tr, false);
-    });
+    redibujarTarifas();
     tarifasCambiadas = null;
     avisarTarifas();
-    recalcular();
   };
   ov.addEventListener("click", e => {
     if (e.target.closest("[data-actualizar-tarifas]")) actualizarTarifas();
@@ -13025,7 +13145,16 @@ function editarConvenio(id, clientePre, alCerrar){
     return [...ov.querySelectorAll("tr[data-tipo]")].map(tr => {
       const cat = state.habitaciones.find(h => h.id === tr.dataset.tipo);
       if (!cat || (cat.grupo === "recovery" && !incRec)) return null;
-      return { tr, cat, sel: tr.querySelector(".sel").checked, val: tr.querySelector(".conv").value.trim() };
+      const vals = {};
+      for (const inp of convsDe(tr)) vals[inp.dataset.mod || ""] = inp.value.trim();
+      /* `val` es «la tarifa» para lo de siempre, y con varias modalidades la
+         primera que traiga número: sirve para saber si el renglón está
+         capturado y para `convenio`, que es lo que leen la lista, el reporte
+         y la exportación. */
+      const val = variasTarifas()
+        ? (modsSel.map(m => vals[m]).find(x => parseMoney(x) > 0) || "")
+        : (vals[""] || "");
+      return { tr, cat, sel: tr.querySelector(".sel").checked, val, vals };
     }).filter(Boolean);
   }
 
@@ -13045,7 +13174,7 @@ function editarConvenio(id, clientePre, alCerrar){
   function validar(){
     ov.querySelectorAll("tr[data-tipo]").forEach(tr => {
       tr.classList.remove("row-err");
-      tr.querySelector(".conv").classList.remove("err");
+      convsDe(tr).forEach(inp => inp.classList.remove("err"));
     });
 
     const vigentes = filasVigentes();
@@ -13057,11 +13186,13 @@ function editarConvenio(id, clientePre, alCerrar){
       problemas.push("Marca al menos un tipo de habitación para este convenio.");
 
     if (sinTarifa.length){
-      problemas.push("Captura la tarifa convenio de: " +
+      problemas.push((variasTarifas()
+        ? "Cada habitación marcada necesita tarifa en al menos una de las modalidades. Falta en: "
+        : "Captura la tarifa convenio de: ") +
         sinTarifa.map(f => f.cat.codigo || f.cat.nombre).join(", ") + ".");
       sinTarifa.forEach(f => {
         f.tr.classList.add("row-err");
-        f.tr.querySelector(".conv").classList.add("err");
+        convsDe(f.tr).forEach(inp => inp.classList.add("err"));
       });
     }
 
@@ -13075,10 +13206,24 @@ function editarConvenio(id, clientePre, alCerrar){
       if (primera) primera.scrollIntoView({ block:"center", behavior:"smooth" });
       return null;
     }
-    return marcadas.map(f => ({
-      tipoId: f.cat.id, codigo: f.cat.codigo, nombre: f.cat.nombre, grupo: f.cat.grupo,
-      publica: f.cat.publica, convenio: parseMoney(f.val)
-    }));
+    return marcadas.map(f => {
+      const h = {
+        tipoId: f.cat.id, codigo: f.cat.codigo, nombre: f.cat.nombre, grupo: f.cat.grupo,
+        publica: f.cat.publica, convenio: parseMoney(f.val)
+      };
+      /* Las tarifas por modalidad, sólo las que traen número: una habitación
+         puede no ofrecerse con todos los desayunos, y entonces no sale en esa
+         tabla de la carta. Nace al usarse: sin modalidades ni se escribe. */
+      if (variasTarifas()){
+        const pm = {};
+        for (const m of modsSel){
+          const n = parseMoney(f.vals[m]);
+          if (n > 0) pm[m] = n;
+        }
+        if (Object.keys(pm).length) h.porModalidad = pm;
+      }
+      return h;
+    });
   }
 
   /**
@@ -13123,6 +13268,12 @@ function editarConvenio(id, clientePre, alCerrar){
       grupos: saneaGrupos(state.ajustes.grupos),
       updatedAt: new Date().toISOString()
     });
+    /* Las modalidades nacen al usarse. Con menos de dos NO se escribe la
+       llave y, si el convenio la traía, se le quita: volvió a ser de una sola
+       tarifa y dejarla puesta haría que la carta siguiera buscando tablas que
+       ya no existen. */
+    if (variasTarifas()) v.modalidades = modsSel.slice();
+    else delete v.modalidades;
     /* `Object.assign` suma, no quita: las observaciones nacen al escribirse,
        así que se van en cuanto se vacían —y no al recargar—. Un convenio sin
        observaciones no carga la llave. */
@@ -15979,10 +16130,15 @@ function cuerpoConvenio(v, c){
     String(t.beneficios || "").split("\n").map(claveDeRenglon).filter(Boolean));
 
   const incluyeDelBloque = (g, gid, v) => {
-    const suyos = (gid === "deluxe" && v.desayunos && v.desayunos.length) ? v.desayunos : null;
+    /* Con varias tarifas, el desayuno lo dice CADA TABLA en su encabezado, y
+       repetirlo aquí abajo diría una cosa para todas: «Desayuno incluido:
+       Americano» debajo de una tabla que también trae la de sin desayuno. */
+    const varias = modalidadesDe(v).length > 0;
+    const suyos = (gid === "deluxe" && !varias && v.desayunos && v.desayunos.length)
+      ? v.desayunos : null;
     const texto = String(g.incluye || "")
       .split("\n")
-      .filter(l => !(suyos && /desayuno/i.test(l)))
+      .filter(l => !((suyos || varias) && /desayuno/i.test(l)))
       .filter(l => !yaDichoArriba.has(claveDeRenglon(l)))
       .join("\n").trim();
     /* Todo en UNA sola tira, no en varias pegadas. Cada `.inc` lleva su
@@ -16011,19 +16167,41 @@ function cuerpoConvenio(v, c){
     return incluyeDelBloque(infoGrupo(gid, v), gid, v);
   };
 
+  /* UNA TABLA POR MODALIDAD cuando el convenio lleva varias tarifas.
+
+     Marco lo pidió así —tablas separadas, no columnas— porque son hasta
+     cuatro: americano, bariátrico, larga estancia y sin desayuno. Cuatro
+     columnas de números no se leen; cuatro tablas con su título sí. Una
+     habitación sin tarifa en esa modalidad no sale en esa tabla: no todas se
+     ofrecen con todos los desayunos.
+
+     Sin modalidades sale UNA tabla, letra por letra la de siempre. */
   const tablaGrupo = (gid, conIncluye) => {
     const hs = v.habitaciones.filter(x => x.grupo === gid);
     if (!hs.length) return "";
     const g = infoGrupo(gid, v);
-    return `<table class="tar"><thead><tr>
+    const mods = modalidadesDe(v);
+
+    const tabla = (filas, titulo) => `<table class="tar"><thead><tr>
         <th>${esc(g.nombre)} / ${esc(h.nombre)}</th>
         <th class="num" style="width:150px">Tarifa pública</th>
-        <th class="num" style="width:150px">Tarifa convenio</th></tr></thead>
-      <tbody>${hs.map(x => `<tr>
+        <th class="num" style="width:150px">${esc(titulo)}</th></tr></thead>
+      <tbody>${filas}</tbody></table>`;
+
+    const renglon = (x, mod) => `<tr>
         <td>${esc(x.nombre)}</td>
         <td class="num">${x.publica === null ? "N/A" : esc(moneyMN(x.publica))}</td>
-        <td class="num"><b>${esc(moneyMN(x.convenio))}</b></td></tr>`).join("")}</tbody></table>
-      ${conIncluye ? incluyeDelBloque(g, gid, v) : ""}`;
+        <td class="num"><b>${esc(moneyMN(tarifaDe(x, mod)))}</b></td></tr>`;
+
+    const cuerpo = mods.length
+      ? mods.map(m => {
+          const conTarifa = hs.filter(x => tarifaDe(x, m) > 0);
+          if (!conTarifa.length) return "";
+          return tabla(conTarifa.map(x => renglon(x, m)).join(""), tituloModalidad(m));
+        }).filter(Boolean).join("")
+      : tabla(hs.map(x => renglon(x, "")).join(""), "Tarifa convenio");
+
+    return cuerpo + (conIncluye ? incluyeDelBloque(g, gid, v) : "");
   };
 
   const bloqueFirma = (f, titulo, nombreDef, puestoDef, celDef) => `
@@ -23660,16 +23838,27 @@ function abrirExportar(){
                      p.evento, p.capturadoPor, p.clienteId ? "Sí" : "No", p.notas]))), "text/csv");
   };
   ov.querySelector("#eConv").onclick = () => {
+    /* UN RENGLÓN POR TARIFA, no por habitación. Un convenio con varias
+       modalidades tiene hasta cuatro tarifas por habitación, y sacar sólo
+       `h.convenio` daría un número verdadero y tres escondidos: quien use la
+       exportación para cobrar o para un reporte estaría trabajando con menos
+       de la mitad. La columna «Tarifa» dice de cuál es. */
     const fs = [["Folio","Empresa","Fecha","Vigencia desde","Vigencia hasta","Bloque","Clave","Tipo de habitación",
-                 "Tarifa pública","Tarifa convenio","Estado","Firmó hotel","Firmó empresa","Observaciones"]];
+                 "Tarifa","Tarifa pública","Tarifa convenio","Estado","Firmó hotel","Firmó empresa","Observaciones"]];
     for (const v of state.convenios){
       const base = [v.folio, nombreCli(v.clienteId), v.fecha, v.vigenciaDesde, v.vigenciaHasta];
       const cola = [ESTADOS_CONV[v.estado].name, (v.firmaHotel||{}).nombre || "",
                     (v.firmaEmpresa||{}).nombre || "", v.notas];
-      if (!v.habitaciones.length) fs.push(base.concat(["","","","",""], cola));
-      for (const h of v.habitaciones)
-        fs.push(base.concat([infoGrupo(h.grupo, v).nombre, h.codigo, h.nombre,
-                             h.publica === null ? "N/A" : h.publica, h.convenio], cola));
+      const mods = modalidadesDe(v);
+      if (!v.habitaciones.length) fs.push(base.concat(["","","","","",""], cola));
+      for (const h of v.habitaciones){
+        const cuales = mods.length ? mods.filter(m => tarifaDe(h, m) > 0) : [""];
+        for (const m of cuales)
+          fs.push(base.concat([infoGrupo(h.grupo, v).nombre, h.codigo, h.nombre,
+                               m ? tituloModalidad(m) : "Única",
+                               h.publica === null ? "N/A" : h.publica,
+                               tarifaDe(h, m)], cola));
+      }
     }
     descargar(`convenios-${hoy}.csv`, toCSV(fs), "text/csv");
   };
