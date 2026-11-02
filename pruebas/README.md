@@ -61,6 +61,7 @@ node pruebas/navegador/los-folios-no-se-pierden.mjs # el folio nuevo lo da el co
 node pruebas/navegador/un-documento-no-se-cae-solo.mjs # sin cliente no es sin documento
 node pruebas/navegador/la-version-a-la-vista.mjs    # qué versión traigo, y actualizar
 node pruebas/navegador/varias-tarifas-en-el-convenio.mjs # una tarifa por desayuno
+node pruebas/navegador/buscar-documentos.mjs       # buscar por folio en las listas
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
@@ -77,6 +78,12 @@ que ya trae otro documento ni uno de otra serie, que el número corregido quede 
 contador, y que una ejecutiva no pueda hacerlo. Sus grupos de control son lo que no puede
 romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
 borradores que de verdad chocan se siguen arreglando solos.
+
+`buscar-documentos.mjs` cuida el buscador de las cuatro listas de documentos: que encuentre por
+folio y por cliente, que deje fuera lo que no coincide, que diga cuántos coinciden y qué hacer
+cuando no hay ninguno. Y una aserción que no es cosmética: **que la caja se vea**. Una caja
+escondida que filtra es peor que no tener buscador —los renglones desaparecen y nadie puede
+vaciarla—, y eso ya pasó una vez con contratos.
 
 `varias-tarifas-en-el-convenio.mjs` cuida el convenio con una tarifa por modalidad de desayuno.
 Su primer bloque es el grupo de control, y va primero a propósito: **un convenio de una sola

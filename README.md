@@ -272,6 +272,21 @@ el contador antes de ponerlo** —y se espera la respuesta, o volvería a repart
 en la bitácora del cliente con los dos números y el porqué. El número que se suelta no se
 recicla: queda como hueco y el libro de folios lo enseña.
 
+### Buscar en las listas de documentos
+
+Las cuatro listas —convenios, contratos y cotizaciones, cotizaciones de evento y contratos de
+banquetes— se buscan por **folio, cliente, título** y, en convenios, también por tipo de
+habitación. Es la caja de arriba de siempre, la misma de clientes y actividades; en estas
+pantallas cambia de leyenda para decir que aquí se busca por folio.
+
+Hace falta el día que regresa un papel con su número impreso: con treinta renglones, encontrarlo
+era ir uno por uno.
+
+Una advertencia que costó aprender: **si la lista filtra, la caja se tiene que ver**. Cuando a
+contratos se le puso la búsqueda por folio, la caja quedó escondida en esa pantalla y los
+documentos desaparecían por un cuadro de texto que nadie podía vaciar. Hay una prueba dedicada a
+eso.
+
 ### Varias tarifas en un mismo convenio
 
 Hay empresas cuyos huéspedes escogen: unos con desayuno y otros sin él. Y no son dos opciones,

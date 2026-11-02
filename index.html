@@ -1052,7 +1052,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.02-2";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.02-3";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -7817,6 +7817,23 @@ const actsVisiblesDe = id => {
 const ultimaAct   = id => actsVisiblesDe(id)[0] || null;
 const nombreCli   = id => (cliente(id) || {}).empresa || "(cliente eliminado)";
 
+/* ===========================================================================
+   BUSCAR EN LAS LISTAS DE DOCUMENTOS
+
+   Marco: «agrega un buscador de convenios y de contratos y cotizaciones».
+
+   Las listas de documentos no tenían ninguno, y se nota el día que regresa un
+   papel con su folio impreso: con treinta renglones hay que ir uno por uno.
+   Usan la misma caja de arriba que clientes y actividades —`filtros.q`—, así
+   que no hay un cuadro nuevo que aprender: es el de siempre, y ahora también
+   sirve aquí.
+   =========================================================================== */
+const loQueBuscan = () => String(filtros.q || "").trim().toLowerCase();
+
+/** ¿Alguna de estas cosas trae lo que se está buscando? */
+const coincide = (q, ...partes) =>
+  !q || partes.filter(Boolean).join(" ").toLowerCase().includes(q);
+
 /**
  * ¿Este documento perdió a su cliente?
  *
@@ -7880,12 +7897,18 @@ function render(){
   document.querySelectorAll(".view").forEach(v =>
     v.id === "v-" + vista ? v.setAttribute("data-on","") : v.removeAttribute("data-on"));
 
-  /* `contratos` entra aquí porque su lista filtra por `filtros.q` desde que
-     se le puso la búsqueda por folio. Sin esto la caja queda escondida y
-     filtrando: los contratos desaparecían de la lista por un cuadro de texto
-     que nadie podía ver ni vaciar. */
-  const buscando = ["tablero","clientes","actividades","certificados","contratos"]
-    .includes(vista);
+  /* Las cuatro listas de documentos filtran por `filtros.q`, así que la caja
+     tiene que verse en las cuatro. Cuando no se ve y filtra, los renglones
+     desaparecen por un cuadro de texto que nadie puede vaciar: ya pasó con
+     contratos el día que se le puso la búsqueda por folio. */
+  const buscando = ["tablero","clientes","actividades","certificados",
+                    "contratos","convenios","eventos","contratosbq"].includes(vista);
+  /* Y que diga qué se busca aquí: en un documento se busca por folio, no por
+     teléfono. */
+  document.getElementById("q").placeholder =
+    ["contratos","convenios","eventos","contratosbq"].includes(vista)
+      ? "Buscar folio, cliente, título…"
+      : "Buscar empresa, contacto, teléfono…";
   const porEjecutivo = vista === "tablero" || vista === "clientes";
   document.getElementById("q").style.display      = buscando ? "" : "none";
   document.getElementById("fEje").style.display   = porEjecutivo ? "" : "none";
@@ -8160,21 +8183,32 @@ const nombresConvenio = v => v.habitaciones
 
 function renderConvenios(){
   const cont = document.getElementById("tblConvenios");
+  const q = loQueBuscan();
   const vs = state.convenios.filter(convenioEsMio)
+    .filter(v => coincide(q, v.folio, nombreCli(v.clienteId), ejecutivoDe(v),
+                          nombresConvenio(v)))
     .sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   // A un ejecutivo la columna le diría siempre lo mismo: sólo se pone a quien ve a varios.
   const conEje = puedeVerTodo();
   const repetidos = vs.filter(v => v.folioRepetido);
-  const cab = avisoFoliosRepetidos(SERIES_FOLIO.convenios, repetidos) + `
+  /* Sobre TODA la lista, no sobre la filtrada: un documento suelto no se
+     puede esconder detrás de una búsqueda. */
+  const sueltos = state.convenios.filter(convenioEsMio).filter(sinCliente);
+  const cab = avisoSinCliente(sueltos) +
+    avisoFoliosRepetidos(SERIES_FOLIO.convenios, repetidos) + `
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-      <b style="font-size:15px">Convenios</b><span class="hint">${vs.length} en total</span>
+      <b style="font-size:15px">Convenios</b><span class="hint">${
+        vs.length}${q ? " que coinciden con «" + esc(q) + "»" : " en total"}</span>
       <span style="flex:1"></span>
       <button class="btn" id="bSubirExtConv">Subir uno firmado</button>
       <button class="btn primary" id="bNuevoConv">+ Nuevo convenio</button></div>`;
 
   if (!vs.length){
-    cont.innerHTML = cab + `<div class="vacio">Todavía no hay convenios.<br>
-      Se crean desde aquí o desde la ficha de un cliente.</div>`;
+    cont.innerHTML = cab + (q
+      ? `<div class="vacio">Ningún convenio coincide con <b>${esc(q)}</b>.<br>
+          Se busca por folio, cliente, ejecutivo o tipo de habitación.</div>`
+      : `<div class="vacio">Todavía no hay convenios.<br>
+          Se crean desde aquí o desde la ficha de un cliente.</div>`);
   } else {
     cont.innerHTML = cab + `<table class="data">
       <thead><tr><th>Folio</th><th>Cliente</th>${conEje ? "<th>Ejecutivo</th>" : ""}<th>Fecha</th><th>Vigencia</th>
@@ -8183,7 +8217,10 @@ function renderConvenios(){
         const ec = ESTADOS_CONV[v.estado];
         return `<tr class="row-link" data-id="${v.id}">
           <td><b>${esc(v.folio || "—")}</b>${v.externo
-            ? ` <span class="pill" title="Se subió escaneado; no se armó aquí">externo</span>` : ""}${v.folioRepetido
+            ? ` <span class="pill" title="Se subió escaneado; no se armó aquí">externo</span>` : ""}${
+            sinCliente(v)
+            ? ` <span class="pill" style="background:var(--warn-soft);color:var(--warn)"
+                 title="Su cliente ya no está en la cartera. El convenio no se pierde: hay que volver a ligarlo">sin cliente</span>` : ""}${v.folioRepetido
             ? ` <span class="pill" style="background:var(--bad-soft);color:var(--bad)"
                  title="Otro convenio tiene este mismo folio">repetido</span>` : ""}</td>
           <td>${esc(nombreCli(v.clienteId))}</td>
@@ -8216,6 +8253,7 @@ function renderConvenios(){
    * con el número, que es el que ya anda circulando desde hace más tiempo.
    */
   engancharRenumTodos(cont, SERIES_FOLIO.convenios, vs, repetidos);
+  engancharLigarSueltos(cont, sueltos, "Convenio");
 
   cont.querySelector("#bNuevoConv").onclick = () => editarConvenio(null);
   cont.querySelector("#bSubirExtConv").onclick = () => subirDocumentoExterno("convenio");
@@ -16902,14 +16940,13 @@ function cuerpoContrato(k, c){
 
 function renderContratos(){
   const cont = document.getElementById("tblContratos");
-  /* SE BUSCA POR FOLIO, como en certificados (`renderCertificados`). Faltaba,
-     y se notó el día que regresó un contrato firmado con su número impreso:
-     no había dónde teclearlo. Con treinta documentos en la lista eso es ir
-     renglón por renglón. */
-  const q = String(filtros.q || "").trim().toLowerCase();
+  /* Se busca por folio, igual que en las demás listas de documentos: ver
+     `loQueBuscan`. Faltaba, y se notó el día que regresó un contrato firmado
+     con su número impreso y no había dónde teclearlo. */
+  const q = loQueBuscan();
   const ks = state.contratos.filter(contratoEsMio)
-    .filter(k => !q || (k.folio + " " + nombreCli(k.clienteId) + " " + (k.titulo || "") +
-                        " " + infoTipoCt(k.tipo).name).toLowerCase().includes(q))
+    .filter(k => coincide(q, k.folio, nombreCli(k.clienteId), k.titulo,
+                          infoTipoCt(k.tipo).name))
     .sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const conEje = puedeVerTodo();
   const repetidos = ks.filter(k => k.folioRepetido);
@@ -18886,13 +18923,17 @@ function renderContratosBq(){ pintarListaEv("contrato", "tblContratosBq"); }
 
 function pintarListaEv(tipo, idCaja){
   const cont = document.getElementById(idCaja);
-  const es = eventosVisibles(tipo);
+  const q = loQueBuscan();
+  const es = eventosVisibles(tipo)
+    .filter(e => coincide(q, e.folio, nombreCli(e.clienteId), e.titulo,
+                          infoTipoEv(e.tipo).name));
   const conEje = puedeVerTodo();
   const esCot = tipo === "cotizacion";
 
   const cab = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
       <b style="font-size:15px">${esCot ? "Cotizaciones de evento" : "Contratos de banquetes"}</b>
-      <span class="hint">${es.length} en total</span>
+      <span class="hint">${es.length}${
+        q ? " que coinciden con «" + esc(q) + "»" : " en total"}</span>
       <span style="flex:1"></span>
       <button class="btn" data-subirev="${tipo}">Subir uno firmado</button>
       <button class="btn primary" data-nuevoev="${tipo}">+ ${esCot ? "Nueva cotización" : "Nuevo contrato"}</button></div>
