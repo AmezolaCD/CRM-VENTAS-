@@ -272,6 +272,35 @@ el contador antes de ponerlo** —y se espera la respuesta, o volvería a repart
 en la bitácora del cliente con los dos números y el porqué. El número que se suelta no se
 recicla: queda como hueco y el libro de folios lo enseña.
 
+### Un documento sin cliente no es un documento borrado
+
+Fue el peor error que ha tenido este CRM. `sanear()` descartaba todo contrato, convenio, evento o
+actividad cuyo `clienteId` ya no estuviera en la cartera —un `return false` dentro de
+`conCliente`—, y `sanear` corre en **cada** reconstrucción del estado: al abrir la aplicación y
+en cada sincronización. Dos renglones más abajo, un prospecto en la misma situación siempre se
+conservó y sólo se le quitó la liga; a un contrato se le tiraba. Nadie se enteraba: esa lista de
+caídos no se enseñaba en ninguna pantalla.
+
+Y en el arranque no corren las protecciones que sí hay dentro de la sincronización, así que el
+primer `guardar()` podía ver el documento como desaparecido y ponerle **lápida** — y una lápida
+viaja con los datos vacíos, de modo que después no hay de dónde recuperarlo. Un contrato firmado
+se perdió así, en todos los equipos.
+
+Ahora **el documento se queda**. Sale en su lista con una etiqueta **«sin cliente»** y un aviso
+arriba que los cuenta y ofrece **volver a ligarlos** escogiendo a quién pertenecen. Y una lápida
+nunca nace de un descarte: `anotarLoQueSeFue` ignora lo que se haya caído por no encontrar a su
+cliente. Lo peor que puede pasar ahora es no ver un documento en una pantalla, que se arregla;
+borrarlo para todo el hotel, no.
+
+### El importe de un documento que se sube ya firmado
+
+Uno registrado con *Subir uno firmado* no trae desglose —no se vuelve a armar el documento, se
+guarda el escaneado—, así que su total era **$0** y el reporte de ingresos contaba un contrato de
+verdad como cero. Ahora el formulario pide el **importe total** tal cual lo dice el papel, con la
+opción de si ya trae impuestos, y se puede corregir después desde la ficha del documento. La
+ficha además dice *«Sin capturar · no cuenta en los reportes»* cuando falta, que es algo que no
+se podía adivinar mirándola.
+
 ### Una firma que llega y no entra, se dice
 
 Hay tres casos en los que una firma llega al buzón y **no se aplica**: el documento es un

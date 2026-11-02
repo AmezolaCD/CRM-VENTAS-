@@ -1039,7 +1039,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.30-3";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.10.30-4";   // sale en Ajustes, para saber qué está publicado
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2605,13 +2605,32 @@ function sanear(s){
       ladaPais: (s.ajustes && s.ajustes.ladaPais) || "52"
     }
   };
+  /* LOS QUE PERDIERON A SU CLIENTE SE QUEDAN. ANTES SE TIRABAN.
+
+     Esto le costó un contrato firmado al hotel. Un documento cuyo `clienteId`
+     ya no resuelve se descartaba aquí —`return false`— y `sanear` corre en
+     cada reconstrucción del estado: al abrir y en cada sincronización. Peor:
+     en el arranque no corren las dos protecciones que sí hay dentro de
+     `sincronizar` (`alDiaSinTumbar` y `olvidarHuerfanos`), así que el
+     `guardar()` que sigue lo veía desaparecido, le ponía LÁPIDA —ver
+     `anotarLoQueSeFue`— y la siguiente sincronización lo borraba para todo el
+     hotel. Marco lo contó así: «después de un rato ese contrato se borró de
+     la lista», no volvió al recargar, y tampoco le aparecía a nadie más. La
+     recarga era lo que lo mataba.
+
+     Y no había dónde enterarse: `huerfanos` no se enseña en ninguna pantalla.
+
+     Dos renglones más abajo, un prospecto en la misma situación SIEMPRE se
+     conservó y nada más se le quitó la liga. No había razón para que a un
+     contrato se le hiciera otra cosa. Ahora se hace lo mismo con todos: se
+     quedan, se apuntan, y quien los ve puede volver a ligarlos. Un documento
+     que el hotel registró no se cae en silencio. */
   const ids = new Set(out.clientes.map(c => c.id));
   huerfanos = new Set();
-  const conCliente = (tipo, arr) => arr.filter(o => {
-    if (ids.has(o.clienteId)) return true;
-    huerfanos.add(tipo + ":" + o.id);
-    return false;
-  });
+  const conCliente = (tipo, arr) => {
+    for (const o of arr) if (!ids.has(o.clienteId)) huerfanos.add(tipo + ":" + o.id);
+    return arr;
+  };
   out.actividades = conCliente("actividades", out.actividades);
   out.convenios   = conCliente("convenios",   out.convenios);
   out.contratos   = conCliente("contratos",   out.contratos);
@@ -3734,11 +3753,49 @@ function saneaContrato(k){
     o.comision = Number(o.comision) || 0;
     if (!o.comision || !o.comisionable) delete o.comision;
   }
+  /* EL IMPORTE DE UN DOCUMENTO QUE SE SUBIÓ YA FIRMADO.
+
+     Uno registrado con «Subir uno firmado» no trae renglones —no se vuelve a
+     armar el documento, se guarda el escaneado—, así que `cuentasContrato`
+     sumaba cero y el reporte de ingresos contaba un contrato de verdad como
+     $0. Marco: «no sale el total de ese contrato así que afectará en los
+     reportes de ingreso».
+
+     Con esto se captura el total tal cual lo dice el papel. Nace al usarse,
+     como los de arriba: un campo nuevo en todos los renglones los haría verse
+     editados y se volverían a subir enteros en la primera sincronización. */
+  if (o.importe !== undefined){
+    o.importe = parseMoney(o.importe);
+    if (!o.importe) delete o.importe;
+  }
+  /* Si el importe capturado ya trae impuestos. Sin marcar se entiende que SÍ,
+     que es como viene escrito en un papel firmado; sólo existe la llave
+     cuando alguien dice lo contrario. */
+  if (o.importeConImpuestos !== undefined){
+    o.importeConImpuestos = !!o.importeConImpuestos;
+    if (o.importeConImpuestos) delete o.importeConImpuestos;
+  }
   return o;
 }
 
 /** Lo que cuesta cada renglón y lo que suma todo, con y sin impuestos. */
 function cuentasContrato(k){
+  /* Un documento sin renglones pero con importe capturado vale lo que diga su
+     importe. Es el caso del que se subió ya firmado: ver `o.importe` en
+     `saneaContrato`. Si trae renglones mandan los renglones, que es lo que
+     cuadra con lo impreso. */
+  if (!k.hospedaje.length && Number(k.importe) > 0){
+    const total = Number(k.importe);
+    const factor = 1 + (Number(k.impuestos) || 0) / 100;
+    /* `importeConImpuestos` también nace al usarse. Sin marcar se entiende que
+       el importe YA trae los impuestos, que es como viene en un papel
+       firmado. */
+    const sub = k.importeConImpuestos === false ? total : total / (factor || 1);
+    return { lineas:[], noches:0,
+             subtotal: Math.round(sub * 100) / 100,
+             total: k.importeConImpuestos === false
+                      ? Math.round(total * factor * 100) / 100 : total };
+  }
   const factor = 1 + (Number(k.impuestos) || 0) / 100;
   const lineas = k.hospedaje.map(l => {
     const subtotal = (Number(l.noches) || 0) * (Number(l.precio) || 0);
@@ -4065,7 +4122,22 @@ function alDiaSinTumbar(limpiar){
 function anotarLoQueSeFue(){
   const ahora = new Set(filasDeEstado().map(f => f.id));
   if (idsGuardados){
-    for (const id of idsGuardados) if (!ahora.has(id)) tumbas.add(id);
+    for (const id of idsGuardados){
+      if (ahora.has(id)) continue;
+      /* CINTURÓN Y TIRANTES. Un renglón que se CAYÓ del estado por no
+         encontrar a su cliente no es un borrado: nadie lo mandó borrar. Y
+         ponerle lápida aquí es lo que convertía un documento invisible en un
+         documento borrado para todo el hotel —ver el comentario de
+         `conCliente` en `sanear`—.
+
+         Hoy `sanear` ya no tira nada, así que esto no debería tener trabajo.
+         Se queda igual: si mañana algo vuelve a descartar un renglón, que lo
+         peor que pase sea no verlo en una pantalla, nunca borrarlo para
+         todos. Un dato se recupera de una pantalla que no lo enseña; de una
+         lápida no, porque viaja con los datos vacíos. */
+      if (huerfanos.has(id)) continue;
+      tumbas.add(id);
+    }
   }
   idsGuardados = ahora;
 }
@@ -7675,6 +7747,15 @@ const actsVisiblesDe = id => {
 const ultimaAct   = id => actsVisiblesDe(id)[0] || null;
 const nombreCli   = id => (cliente(id) || {}).empresa || "(cliente eliminado)";
 
+/**
+ * ¿Este documento perdió a su cliente?
+ *
+ * Antes la respuesta no le importaba a nadie porque esos documentos se
+ * tiraban —ver `conCliente` en `sanear`, que es donde se perdió un contrato
+ * firmado—. Ahora se quedan, así que hay que poder señalarlos.
+ */
+const sinCliente = d => !!d && !cliente(d.clienteId);
+
 /* ----- Lo que una columna dice en cada departamento -----------------------
    El cliente lleva dos etapas y dos ejecutivos: los de ventas y los de
    banquetes. Cuál par se lee lo decide el departamento en el que se está, y se
@@ -7729,7 +7810,12 @@ function render(){
   document.querySelectorAll(".view").forEach(v =>
     v.id === "v-" + vista ? v.setAttribute("data-on","") : v.removeAttribute("data-on"));
 
-  const buscando = ["tablero","clientes","actividades","certificados"].includes(vista);
+  /* `contratos` entra aquí porque su lista filtra por `filtros.q` desde que
+     se le puso la búsqueda por folio. Sin esto la caja queda escondida y
+     filtrando: los contratos desaparecían de la lista por un cuadro de texto
+     que nadie podía ver ni vaciar. */
+  const buscando = ["tablero","clientes","actividades","certificados","contratos"]
+    .includes(vista);
   const porEjecutivo = vista === "tablero" || vista === "clientes";
   document.getElementById("q").style.display      = buscando ? "" : "none";
   document.getElementById("fEje").style.display   = porEjecutivo ? "" : "none";
@@ -12246,6 +12332,73 @@ async function libroDeFolios(e){
     </div>`);
 }
 
+/* ===========================================================================
+   LOS DOCUMENTOS QUE PERDIERON A SU CLIENTE
+
+   Antes se tiraban en silencio y la recarga los borraba para todo el hotel.
+   Ahora se quedan, y esto es lo que los enseña y los vuelve a ligar. Ver el
+   comentario de `conCliente` en `sanear`.
+   =========================================================================== */
+
+/** El aviso de arriba de la lista. */
+function avisoSinCliente(sueltos){
+  if (!sueltos.length) return "";
+  return `<div class="note warn" id="avisoSinCliente">
+    <b>${sueltos.length === 1 ? "Un documento quedó sin cliente"
+                              : sueltos.length + " documentos quedaron sin cliente"}.</b>
+    El cliente al que colgaban ya no está en la cartera: lo borraron aquí, o se fue en un
+    cambio de otro equipo. <b>No se pierden y siguen contando</b>; lo único que les falta es
+    a quién pertenecen.
+    <br>${sueltos.slice(0, 8).map(d => esc(d.folio || "sin folio")).join(" · ")}${
+      sueltos.length > 8 ? " …" : ""}
+    <p style="margin:12px 0 0"><button class="btn" id="bLigarSueltos">Volver a ligarlos</button>
+      <span class="hint">Se escoge el cliente y el documento vuelve a su ficha.</span></p>
+    </div>`;
+}
+
+/** El botón del aviso: una ventana para escogerle cliente a cada uno. */
+function engancharLigarSueltos(cont, sueltos, comoSeLlaman){
+  const b = cont.querySelector("#bLigarSueltos");
+  if (!b) return;
+  b.onclick = () => {
+    const ov = modal(`
+      <div class="modal" style="max-width:620px">
+        <div class="modal-head"><h2>Volver a ligar ${sueltos.length === 1
+            ? "un documento" : sueltos.length + " documentos"}</h2>
+          <button class="btn" data-close>✕</button></div>
+        <div class="modal-body">
+          <div class="note">Escoge a qué cliente pertenece cada uno. Lo que no asignes se
+            queda como está —no se borra nada—.</div>
+          ${sueltos.map((d, i) => `<div style="margin-top:14px">
+            <label class="lbl"><b>${esc(d.folio || "sin folio")}</b>${d.titulo
+              ? ` · ${esc(d.titulo)}` : ""}${d.fecha ? ` · ${esc(fechaCorta(d.fecha))}` : ""}</label>
+            ${buscadorCliente("", "suelto" + i)}</div>`).join("")}
+        </div>
+        <div class="modal-foot"><div class="spacer"></div>
+          <button class="btn" data-close>Cancelar</button>
+          <button class="btn primary" id="bLigarOk">Ligarlos</button></div>
+      </div>`);
+
+    ov.querySelector("#bLigarOk").onclick = () => {
+      let hechos = 0;
+      sueltos.forEach((d, i) => {
+        const sel = ov.querySelector("#suelto" + i);
+        const cid = sel ? sel.value : "";
+        if (!cid) return;
+        d.clienteId = cid;
+        d.updatedAt = new Date().toISOString();
+        registrarAuto(cid, `${comoSeLlaman} ${d.folio || "sin folio"} se volvió a ligar`,
+          "El documento se había quedado sin cliente y se le asignó éste.", miNombre());
+        hechos++;
+      });
+      if (!hechos){ alert("No escogiste ningún cliente."); return; }
+      guardar(); render();
+      ov.remove();
+      alert(`Listo: ${hechos} documento(s) volvieron a su ficha.`);
+    };
+  };
+}
+
 /** El aviso de arriba de la lista, cuando quedaron folios repetidos. */
 function avisoFoliosRepetidos(serie, repetidos){
   if (!repetidos.length) return "";
@@ -16459,8 +16612,12 @@ function renderContratos(){
     .sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const conEje = puedeVerTodo();
   const repetidos = ks.filter(k => k.folioRepetido);
+  /* Sobre TODA la lista, no sobre la filtrada: un documento suelto no se puede
+     esconder detrás de una búsqueda. */
+  const sueltos = state.contratos.filter(contratoEsMio).filter(sinCliente);
 
-  const cab = avisoFoliosRepetidos(SERIES_FOLIO.contratos, repetidos) +
+  const cab = avisoSinCliente(sueltos) +
+    avisoFoliosRepetidos(SERIES_FOLIO.contratos, repetidos) +
     `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
       <b style="font-size:15px">Contratos y cotizaciones</b>
       <span class="hint">${ks.length}${q ? " que coinciden con «" + esc(q) + "»" : " en total"}</span>
@@ -16489,6 +16646,9 @@ function renderContratos(){
         return `<tr class="row-link" data-id="${k.id}">
           <td><b>${esc(k.folio || "—")}</b>${k.externo
             ? ` <span class="pill" title="Se subió escaneado; no se armó aquí">externo</span>` : ""}${
+            sinCliente(k)
+            ? ` <span class="pill" style="background:var(--warn-soft);color:var(--warn)"
+                 title="Su cliente ya no está en la cartera. El documento no se pierde: hay que volver a ligarlo">sin cliente</span>` : ""}${
             k.folioRepetido
             ? ` <span class="pill" style="background:var(--bad-soft);color:var(--bad)"
                  title="Otro documento del hotel tiene este mismo folio">repetido</span>` : ""}</td>
@@ -16514,6 +16674,7 @@ function renderContratos(){
     }));
   }
   engancharRenumTodos(cont, SERIES_FOLIO.contratos, ks, repetidos);
+  engancharLigarSueltos(cont, sueltos, "Documento");
   cont.querySelector("#bNuevoCt").onclick = () => editarContrato(null);
   cont.querySelector("#bSubirExtCt").onclick = () => subirDocumentoExterno("cotizacion");
 }
@@ -17790,6 +17951,15 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
             <div class="hint">PDF o foto, <b>máximo 2 MB</b>. El archivo viaja a todos los
               equipos en cada sincronización: uno pesado los vuelve lentos a todos. Si el
               escáner lo saca grande, escanéalo en blanco y negro o toma una foto.</div></div>
+          <div><label class="lbl">Importe total <span class="hint">(el del papel)</span></label>
+            <input class="field" id="exImporte" inputmode="decimal" placeholder="73,337.00">
+            <div class="hint">Sin esto el documento vale <b>$0</b> en los reportes de ingreso.
+              Aquí no se arma el desglose: se captura el total tal cual lo dice el papel.</div></div>
+          <div><label class="lbl">¿Ese importe ya trae impuestos?</label>
+            <select class="field" id="exImpIncl">
+              <option value="si">Sí, es el total que paga el cliente</option>
+              <option value="no">No, hay que sumarle impuestos</option>
+            </select></div>
           <div class="full"><label class="lbl">Observaciones <span class="hint">(opcional)</span></label>
             <textarea class="field" id="exNotas" style="min-height:60px"
               placeholder="Convenio 2025 que venía en Word, firmado en papel."></textarea></div>
@@ -17918,6 +18088,8 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
       const fecha = ov.querySelector("#exFecha").value || hoy;
       const vig   = ov.querySelector("#exVig").value;
       const notas = ov.querySelector("#exNotas").value.trim();
+      const importe = parseMoney(ov.querySelector("#exImporte").value);
+      const conImp  = ov.querySelector("#exImpIncl").value !== "no";
       const dest = c ? { empresa:c.empresa, contacto:c.contacto, ubicacion:c.ubicacion,
                          telefono:c.telefono, email:c.email } : null;
       const nombre = TIPOS_EXTERNO.find(t => t.id === tipo).name;
@@ -18003,12 +18175,12 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
         registrarAuto(cid, `${nombre} ${ev.folio} registrada desde un documento externo`,
           `Se subió el archivo "${f.name}".`, quien);
       } else {
-        const k = saneaContrato({
+        const k = saneaContrato(Object.assign({
           clienteId:cid, ejecutivo:quien, externo:true, tipo,
           folio: elFolio,
           fecha, vigencia:vig, notas, estado:"aceptado",
           firmaManual: manual, destinatario: dest, createdAt:new Date().toISOString()
-        });
+        }, importe ? { importe, importeConImpuestos: conImp } : {}));
         if (marca.folioDelContador) k.folioDelContador = true;
         state.contratos.push(k);
         registrarAuto(cid, `${nombre} ${k.folio} registrada desde un documento externo`,
@@ -18030,7 +18202,16 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
  * No se dibuja una carta: no hay de dónde. Se enseñan los datos que se
  * capturaron y el archivo tal cual lo subieron.
  */
-function fichaExterna(titulo, etiqueta, filas, manual, alBorrar){
+/**
+ * La ficha de un documento que vino de fuera.
+ *
+ * `extra` es opcional —{ texto, alHacer }— y la usa el contrato de hospedaje
+ * para poder corregirle el importe: un documento que se sube ya firmado no
+ * trae renglones, así que su total se captura a mano y hay que poder
+ * arreglarlo sin borrar y volver a subir. Los demás llamadores no lo mandan y
+ * no cambian en nada.
+ */
+function fichaExterna(titulo, etiqueta, filas, manual, alBorrar, extra){
   const ov = modal(`
     <div class="modal">
       <div class="modal-head"><h2>${esc(titulo)}</h2>
@@ -18045,11 +18226,13 @@ function fichaExterna(titulo, etiqueta, filas, manual, alBorrar){
       </div>
       <div class="modal-foot">
         <button class="btn danger" id="bDelEx">Eliminar</button>
+        ${extra ? `<button class="btn" id="bExtraEx">${esc(extra.texto)}</button>` : ""}
         <div class="spacer"></div>
         <button class="btn primary" id="bVerEsc">Ver el documento</button>
         <button class="btn" data-close>Cerrar</button></div>
     </div>`);
   ov.querySelector("#bVerEsc").onclick = () => verEscaneado(manual, titulo);
+  if (extra) ov.querySelector("#bExtraEx").onclick = () => { ov.remove(); extra.alHacer(); };
   ov.querySelector("#bDelEx").onclick = () => {
     if (!confirm("¿Eliminar este documento del CRM?\n\nSe borra también el archivo subido.")) return;
     // El archivo del almacén se va con el registro; si no, quedaría ocupando
@@ -18078,18 +18261,61 @@ function verConvenioExterno(v, alCerrar){
 
 function verContratoExterno(k, alCerrar){
   const c = cliente(k.clienteId);
+  const cu = cuentasContrato(k);
   fichaExterna(`${infoTipoCt(k.tipo).name} ${k.folio || ""}`, "Externo · firmado", [
     ["Cliente", (c && c.empresa) || nombreCli(k.clienteId)],
     ["Ejecutivo", ejecutivoDeCt(k)],
     ["Fecha del documento", fechaCorta(k.fecha)],
     ["Vigencia hasta", k.vigencia ? fechaCorta(k.vigencia) : ""],
+    /* El importe se enseña SIEMPRE, y cuando falta lo dice con todas sus
+       letras: un documento en cero es un documento que no cuenta en los
+       reportes de ingreso, y eso no se puede adivinar mirando la ficha. */
+    ["Importe", cu.total ? money(cu.total, k.moneda)
+                         : "Sin capturar · no cuenta en los reportes"],
     ["Archivo", k.firmaManual && k.firmaManual.archivo],
     ["Lo registró", k.firmaManual && k.firmaManual.quien],
     ["Observaciones", k.notas]
   ], k.firmaManual, () => {
     state.contratos = state.contratos.filter(x => x.id !== k.id);
     guardar(); render(); if (alCerrar) alCerrar();
-  });
+  }, { texto: cu.total ? "Corregir el importe" : "Capturar el importe",
+       alHacer: () => importeExterno(k, () => verContratoExterno(k, alCerrar)) });
+}
+
+/** Capturar o corregir el total de un documento que se subió ya firmado. */
+function importeExterno(k, alTerminar){
+  const ov = modal(`
+    <div class="modal" style="max-width:460px">
+      <div class="modal-head"><h2>Importe del documento</h2>
+        <button class="btn" data-close>✕</button></div>
+      <div class="modal-body">
+        <div class="note">Un documento que se sube ya firmado no trae desglose, así que su
+          total se captura aquí. <b>Sin esto vale $0 en los reportes de ingreso.</b></div>
+        <div class="grid">
+          <div class="full"><label class="lbl">Importe total <span class="hint">(el del papel)</span></label>
+            <input class="field" id="impTotal" inputmode="decimal"
+              value="${k.importe ? esc(String(k.importe)) : ""}" placeholder="73,337.00"></div>
+          <div class="full"><label class="lbl">¿Ese importe ya trae impuestos?</label>
+            <select class="field" id="impIncl">
+              <option value="si"${k.importeConImpuestos === false ? "" : " selected"}>Sí, es el total que paga el cliente</option>
+              <option value="no"${k.importeConImpuestos === false ? " selected" : ""}>No, hay que sumarle impuestos</option>
+            </select></div>
+        </div>
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-close>Cancelar</button>
+        <button class="btn primary" id="bImpOk">Guardar</button></div>
+    </div>`);
+  ov.querySelector("#bImpOk").onclick = () => {
+    const v = parseMoney(ov.querySelector("#impTotal").value);
+    const conImp = ov.querySelector("#impIncl").value !== "no";
+    if (v) { k.importe = v; k.importeConImpuestos = conImp; }
+    else { delete k.importe; delete k.importeConImpuestos; }
+    k.updatedAt = new Date().toISOString();
+    guardar(); render();
+    ov.remove();
+    if (alTerminar) alTerminar();
+  };
 }
 
 /** Enseña el escaneado que se subió, sin sacarlo de la aplicación. */

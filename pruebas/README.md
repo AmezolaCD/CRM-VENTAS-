@@ -58,6 +58,7 @@ node pruebas/navegador/observaciones-del-convenio.mjs # las que sí salen en la 
 node pruebas/navegador/subir-en-trozos.mjs          # la subida no truena por grande
 node pruebas/navegador/la-firma-que-no-entro.mjs    # una firma de cliente no se pierde callada
 node pruebas/navegador/los-folios-no-se-pierden.mjs # el folio nuevo lo da el contador
+node pruebas/navegador/un-documento-no-se-cae-solo.mjs # sin cliente no es sin documento
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
@@ -74,6 +75,15 @@ que ya trae otro documento ni uno de otra serie, que el número corregido quede 
 contador, y que una ejecutiva no pueda hacerlo. Sus grupos de control son lo que no puede
 romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
 borradores que de verdad chocan se siguen arreglando solos.
+
+`un-documento-no-se-cae-solo.mjs` nace del peor error que ha tenido este CRM: un contrato
+firmado que **desapareció de todos los equipos**. `sanear()` descartaba cualquier documento cuyo
+cliente ya no estuviera en la cartera, y eso corre en cada sincronización y en cada arranque. Se
+afirma que ahora **se queda**, que sobrevive a la recarga, que sale marcado y que se puede volver
+a ligar. Su grupo de control es el que no se puede romper: **borrar a propósito sigue mandando su
+lápida**. Dos aserciones están marcadas como *guardia* a propósito: cuidan que esa caída no se
+convierta en lápida, pero contra la versión vieja salen verdes, así que no miden —lo dice el
+encabezado del archivo—.
 
 `la-firma-que-no-entro.mjs` es la otra mitad: lo que pasa **del lado del hotel** cuando la firma
 ya llegó. Hay tres casos en los que no se aplica —se firma en papel, ya estaba firmado, la clave
