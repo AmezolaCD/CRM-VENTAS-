@@ -59,6 +59,7 @@ node pruebas/navegador/subir-en-trozos.mjs          # la subida no truena por gr
 node pruebas/navegador/la-firma-que-no-entro.mjs    # una firma de cliente no se pierde callada
 node pruebas/navegador/los-folios-no-se-pierden.mjs # el folio nuevo lo da el contador
 node pruebas/navegador/un-documento-no-se-cae-solo.mjs # sin cliente no es sin documento
+node pruebas/navegador/la-version-a-la-vista.mjs    # qué versión traigo, y actualizar
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
@@ -75,6 +76,14 @@ que ya trae otro documento ni uno de otra serie, que el número corregido quede 
 contador, y que una ejecutiva no pueda hacerlo. Sus grupos de control son lo que no puede
 romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
 borradores que de verdad chocan se siguen arreglando solos.
+
+`la-version-a-la-vista.mjs` cuida el número de versión de abajo a la izquierda y el botón que
+actualiza: que se vea sin entrar a Ajustes, que el programa se entere solo de que hay una versión
+nueva publicada, que lo **diga** en vez de recargarle la página a alguien por su cuenta, que el
+botón se salte la copia guardada del navegador —o la recarga serviría otra vez la vieja— y que
+cuando no hay nada nuevo **lo diga**, en vez de hacer como que actualizó. Es una función nueva,
+así que contra la versión de antes se pone roja porque las funciones no existen, no porque mida
+una regresión.
 
 `un-documento-no-se-cae-solo.mjs` nace del peor error que ha tenido este CRM: un contrato
 firmado que **desapareció de todos los equipos**. `sanear()` descartaba cualquier documento cuyo

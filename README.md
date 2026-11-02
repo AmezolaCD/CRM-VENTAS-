@@ -272,6 +272,24 @@ el contador antes de ponerlo** —y se espera la respuesta, o volvería a repart
 en la bitácora del cliente con los dos números y el porqué. El número que se suelta no se
 recicla: queda como hueco y el libro de folios lo enseña.
 
+### Qué versión traigo, y el botón para actualizar
+
+El número de versión sólo salía en Ajustes, y a Ajustes no entra un ejecutivo: Carmen no tenía
+manera de saber qué versión estaba usando. Ahora vive **abajo a la izquierda, a la vista de
+todos** —al cliente que viene a firmar no se le enseña, que no es asunto suyo—.
+
+Y resuelve lo otro que se sentía como «tarda mucho en actualizar de un equipo a otro». No era la
+publicación ni el navegador guardando de más: las cabeceras ya piden revalidar en cada carga. Es
+que **la pestaña no se recarga**. El CRM es la pantalla de trabajo del día; se deja abierta el
+lunes y se sigue usando el miércoles, y revalidar sólo pasa al abrir la página de nuevo.
+
+Así que el programa pregunta solo, cada diez minutos y al volver a la pestaña, si hay una versión
+más nueva publicada —una petición de unos cientos de bytes, no el millón que pesa el archivo—. Si
+la hay, el número se pone en ámbar y dice **«Versión nueva · Actualizar»**. **Nunca recarga
+sola**: puede haber un formulario a medio llenar. Con un clic actualiza, refrescando antes la
+copia guardada del navegador, porque si no la recarga volvería a servir la vieja. Y si no hay
+nada nuevo lo dice, en vez de hacer como que actualizó.
+
 ### Un documento sin cliente no es un documento borrado
 
 Fue el peor error que ha tenido este CRM. `sanear()` descartaba todo contrato, convenio, evento o

@@ -220,6 +220,14 @@
   .pill.strong{background:var(--accent-soft); color:var(--accent); border-color:transparent}
   .pill.good{background:var(--ok-soft); color:var(--ok); border-color:transparent}
   .pill.warn{background:var(--warn-soft); color:var(--warn); border-color:transparent}
+  /* La versión, abajo a la izquierda y para TODOS: Carmen no entra a Ajustes,
+     así que no tenía manera de saber qué versión está usando. Por debajo de
+     las ventanas (z-index 50) para no taparle nada a nadie. */
+  #versionCore{position:fixed; left:10px; bottom:10px; z-index:30; cursor:pointer;
+    opacity:.6; transition:opacity .15s}
+  #versionCore:hover, #versionCore.warn{opacity:1}
+  body.sin-sesion #versionCore, body.con-kiosco #versionCore{display:none !important}
+  @media print{ #versionCore{display:none !important} }
   .card-acts{display:flex; gap:4px; margin-top:8px}
   .card-acts button{flex:1; background:var(--panel-2); border:1px solid var(--line); color:var(--muted);
     border-radius:4px; padding:2px 0; cursor:pointer; font-size:12px; line-height:1.6}
@@ -1021,6 +1029,8 @@ window.CORE_NUBE = { url:"", anon:"" };
   <section class="view" id="v-ajustes"><div class="table-wrap" id="panelAjustes"></div></section>
 </main>
 
+<button id="versionCore" class="pill" type="button" style="display:none"></button>
+
 <button id="bIA" type="button" title="Preguntarle a la IA"
   aria-label="Preguntarle a la IA" style="display:none">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
@@ -1039,7 +1049,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.10.30-4";   // sale en Ajustes, para saber qué está publicado
+const VERSION = "2026.11.02-1";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -7828,6 +7838,7 @@ function render(){
 
   renderEjecutivos();
   pintarNube();
+  pintarVersion();
   pintarDepto();
   pintarBotonIA();
   pintarAvisos();
@@ -12397,6 +12408,118 @@ function engancharLigarSueltos(cont, sueltos, comoSeLlaman){
       alert(`Listo: ${hechos} documento(s) volvieron a su ficha.`);
     };
   };
+}
+
+/* ===========================================================================
+   LA VERSIÓN, A LA VISTA · Y EL BOTÓN QUE ACTUALIZA
+
+   Marco: «Carmen no puede saber en qué actualización está porque no lo
+   muestra en ninguna pantalla y no tiene acceso a ajustes, y tarda mucho en
+   actualizar de un equipo a otro».
+
+   Las dos cosas son la misma. El número de versión sólo salía en Ajustes, que
+   un ejecutivo no abre. Y lo de «tarda mucho» no es la publicación ni el
+   navegador guardando de más —las cabeceras ya piden revalidar en cada
+   carga—: es que LA PESTAÑA NO SE RECARGA. El CRM es la pantalla de trabajo
+   del día; Carmen la deja abierta el lunes y la sigue usando el miércoles, y
+   revalidar sólo pasa cuando la página se abre de nuevo. Por eso podía jurar
+   que algo "no existe" dos días después de publicado.
+
+   Así que la versión vive abajo a la izquierda, se ve siempre, y el programa
+   pregunta solo si hay una más nueva publicada. Cuando la hay, lo dice; y
+   con un clic se actualiza. Sin esperar a que a alguien se le ocurra
+   recargar, y sin recargarle la página a nadie por su cuenta —se la puede
+   estar llevando un formulario a medio llenar—.
+
+   Cómo se sabe si hay versión nueva: una petición HEAD al propio archivo y se
+   compara su huella —`etag`, y si no la hay la fecha o el tamaño—. Son unos
+   cientos de bytes, no el millón del index.html, así que se puede preguntar
+   seguido sin gastarle los datos al teléfono de nadie.
+   =========================================================================== */
+let selloPublicado = "";     // la huella de lo que está corriendo en esta pestaña
+let hayVersionNueva = false;
+
+/** La huella de lo que el servidor está sirviendo AHORA. "" si no se pudo saber. */
+async function selloDelServidor(){
+  try{
+    const r = await fetch(location.pathname, { method:"HEAD", cache:"no-store" });
+    if (!r.ok) return "";
+    return r.headers.get("etag") || r.headers.get("last-modified") ||
+           r.headers.get("content-length") || "";
+  }catch(e){ return ""; }
+}
+
+function pintarVersion(){
+  const el = document.getElementById("versionCore");
+  if (!el) return;
+  /* Ni el cliente que firma, ni quien llega de un anuncio, ni la tableta en
+     modo cliente tienen por qué ver la versión del CRM del hotel. */
+  if (enlaceDeFirma() || enlaceDeAlta() || enlaceDeOdt() ||
+      document.body.classList.contains("con-kiosco")){
+    el.style.display = "none";
+    return;
+  }
+  el.style.display = "";
+  el.className = "pill" + (hayVersionNueva ? " warn" : "");
+  el.textContent = hayVersionNueva ? "Versión nueva · Actualizar" : "CORE " + VERSION;
+  el.title = hayVersionNueva
+    ? "Hay una versión más nueva publicada.\nClic para actualizarla."
+    : "Estás en la versión " + VERSION + ".\nClic para buscar una más nueva y actualizar.";
+}
+
+/** Pregunta en silencio. Si hay algo nuevo, lo dice; nunca recarga sola. */
+async function mirarSiHayVersionNueva(){
+  if (hayVersionNueva) return;
+  const sello = await selloDelServidor();
+  if (!sello) return;                       // no se pudo saber: no se inventa
+  if (!selloPublicado){ selloPublicado = sello; return; }
+  if (sello !== selloPublicado){ hayVersionNueva = true; pintarVersion(); }
+}
+
+/**
+ * El botón. Garantiza que quien lo aprieta se queda en la más nueva.
+ *
+ * No recarga a ciegas: primero pregunta. Y si no se puede saber —el servidor
+ * no manda huella, o no hay señal—, recarga de todos modos, porque es peor
+ * decirle a alguien que está al día cuando no se sabe.
+ */
+async function actualizarAhora(){
+  const el = document.getElementById("versionCore");
+  if (!el) return;
+  /* La recarga se lleva lo que esté a medio capturar. Se pregunta primero,
+     igual que en los demás lugares que reemplazan el estado. */
+  if (hayFormularioAbierto() &&
+      !confirm("Hay algo abierto sin guardar y actualizar lo va a cerrar.\n\n¿Continuar?"))
+    return;
+
+  const antes = el.textContent;
+  el.disabled = true; el.textContent = "Buscando…";
+  const sello = await selloDelServidor();
+  const alDia = sello && selloPublicado && sello === selloPublicado && !hayVersionNueva;
+  if (alDia){
+    el.disabled = false; el.textContent = antes; pintarVersion();
+    alert("Ya tienes la versión más nueva: " + VERSION + ".");
+    return;
+  }
+  el.textContent = "Actualizando…";
+  /* Se refresca la copia guardada del navegador ANTES de recargar: sin esto,
+     la recarga puede volver a servir la de la caché y no cambiaría nada. */
+  try{ await fetch(location.pathname, { cache:"reload" }); }catch(e){}
+  location.reload();
+}
+
+function arrancarVersion(){
+  const el = document.getElementById("versionCore");
+  if (!el) return;
+  el.onclick = actualizarAhora;
+  pintarVersion();
+  selloDelServidor().then(s => { selloPublicado = s; });
+  /* Cada diez minutos, y además al volver a la pestaña: el caso de siempre es
+     alguien que regresa de comer a una pestaña que lleva horas abierta. */
+  setInterval(() => mirarSiHayVersionNueva().catch(() => {}), 10 * 60 * 1000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) mirarSiHayVersionNueva().catch(() => {});
+  });
 }
 
 /** El aviso de arriba de la lista, cuando quedaron folios repetidos. */
@@ -23726,6 +23849,7 @@ try{
     if (!cargaRota) guardar();   // con la carga rota, no se pisa lo que quedó
     render();
 
+    arrancarVersion();
     arrancarNube();
     // A quien alcanza más de un departamento se le pregunta en cuanto se puede
     // ver la pantalla; antes se quedaría detrás de la animación de entrada.
