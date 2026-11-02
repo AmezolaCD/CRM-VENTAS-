@@ -80,6 +80,14 @@ contador, y que una ejecutiva no pueda hacerlo. Sus grupos de control son lo que
 romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
 borradores que de verdad chocan se siguen arreglando solos.
 
+`beneficios-del-convenio.mjs` cuida además los **textos atrasados**. Un convenio guarda su copia
+de los textos el día que nace, así que uno viejo no imprime los beneficios —ese texto no existía
+cuando nació— y hasta ahora no había cómo enterarse ni cómo arreglarlo. Se afirma que la ficha lo
+dice y lo explica, que el botón los pone al día y queda en la bitácora, y dos grupos de control:
+a una carta **firmada por el cliente no se le ofrece** —cambiarle las palabras es otra cosa— y un
+convenio con sus textos al día **no enseña ningún aviso**, porque un aviso que sale siempre deja
+de leerse.
+
 `de-cotizacion-a-contrato.mjs` cuida las dos letras de hospedaje y el paso de una a otra: que
 una cotización se numere CO y un contrato CT, que al convertir se conserve el número y **no se
 gaste otro del contador**, que la cotización se quede pero **su dinero deje de contarse** —si no,

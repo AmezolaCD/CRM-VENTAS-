@@ -1052,7 +1052,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.02-4";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.02-5";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -17890,6 +17890,102 @@ function enviarContrato(k, c){
   });
 }
 
+/* ===========================================================================
+   UN CONVENIO GUARDA SUS TEXTOS, Y A VECES HAY QUE PONERLOS AL DÍA
+
+   Marco, sobre un convenio de agosto reimpreso con vigencia 2027: «no
+   aparecen los beneficios, ¿por qué?».
+
+   Porque un convenio guarda SU COPIA de los textos el día que nace, para que
+   una carta que ya está en manos del cliente no se mueva debajo de él. El de
+   agosto nació antes de que existiera el texto de beneficios, así que su
+   copia no trae esa llave y `saneaConv` se la deja vacía a propósito: una
+   carta firmada en agosto no puede empezar a ofrecer algo que nadie le
+   ofreció a ese cliente.
+
+   El editor los refresca, pero sólo mientras el convenio no haya salido. El
+   de agosto ya salió, así que nunca se ponía al día — y, peor, NO HABÍA CÓMO
+   ENTERARSE. Eso es lo que faltaba: no el refresco, sino poder ver por qué.
+   =========================================================================== */
+
+/** Cómo se llama cada texto en Ajustes, para poder nombrarlo. */
+const NOMBRE_TEXTO = {
+  saludo:"Párrafo de apertura", especificaciones:"Especificaciones de tarifas",
+  valores:"Valores agregados", beneficios:"Beneficios del convenio",
+  servicios:"Nuestros servicios", condiciones:"Condiciones",
+  reservaciones:"Reservaciones", politicas:"Políticas", cierre:"Párrafo de cierre",
+  recoveryTitulo:"Título del bloque Recovery", recoveryCol1Titulo:"Recovery · título 1",
+  recoveryCol1:"Recovery · columna 1", recoveryCol2Titulo:"Recovery · título 2",
+  recoveryCol2:"Recovery · columna 2"
+};
+
+/**
+ * En qué textos se quedó atrás este convenio respecto a los del hotel.
+ *
+ * Sólo los que salen en la carta-convenio: los de confirmación (`conf…`) son
+ * de otro documento y compararlos sacaría un aviso por algo que aquí no se
+ * imprime.
+ */
+function textosAtrasados(v){
+  const delHotel = state.ajustes.textos || {};
+  const suyos = v.textos || {};
+  return Object.keys(NOMBRE_TEXTO).filter(k =>
+    String(suyos[k] || "") !== String(delHotel[k] || ""));
+}
+
+/** El aviso de la ficha, cuando el convenio trae textos de antes. */
+function avisoTextosAtrasados(v, sePuede){
+  const faltan = textosAtrasados(v);
+  if (!faltan.length) return "";
+  /* Se nombran los beneficios aparte cuando son uno de los que cambiaron:
+     es la pregunta que de verdad llega —«¿por qué no salen?»— y la
+     respuesta tiene que estar donde se ve el problema. */
+  const sinBeneficios = faltan.includes("beneficios") &&
+    !String((v.textos || {}).beneficios || "").trim();
+  return `<div class="modal-body no-imprimir"><div class="note warn" style="margin:0">
+    <b>Este convenio guarda los textos de cuando se creó.</b>
+    El hotel ha cambiado ${faltan.length === 1 ? "uno desde entonces"
+      : faltan.length + " desde entonces"}:
+    ${esc(faltan.map(k => NOMBRE_TEXTO[k]).join(", "))}.
+    ${sinBeneficios ? `<br><b>Por eso no salen los beneficios en esta carta</b>
+      —gimnasio, spa, transportación—: cuando nació este convenio ese texto todavía
+      no existía.` : ""}
+    <br><br>${sePuede
+      ? `Se guardan así a propósito, para que una carta que ya anda con el cliente no
+         cambie sola. Si quieres que ésta diga lo de hoy, ponla al día — y vuelve a
+         mandársela, porque la que tiene dice otra cosa.`
+      : `<b>Esta carta ya la firmó el cliente, así que su texto no se toca.</b>
+         Cambiarle las palabras a un documento firmado es otra cosa. Si los beneficios
+         tienen que constar, va un convenio nuevo.`}
+    ${sePuede ? `<p style="margin:12px 0 0"><button class="btn" id="bTextosAlDia">Poner
+      los textos al día</button></p>` : ""}
+  </div></div>`;
+}
+
+/** El botón del aviso. */
+function engancharTextosAlDia(ov, v, alTerminar){
+  const b = ov.querySelector("#bTextosAlDia");
+  if (!b) return;
+  b.onclick = () => {
+    const faltan = textosAtrasados(v);
+    if (!faltan.length) return;
+    if (!confirm(`Se van a reemplazar ${faltan.length} texto(s) de esta carta por los del ` +
+        `hotel:\n\n${faltan.map(k => "· " + NOMBRE_TEXTO[k]).join("\n")}\n\n` +
+        "LA CARTA VA A DECIR OTRA COSA. Si ya se la mandaste al cliente, habrá que " +
+        "volver a mandársela.\n\n¿Continuar?")) return;
+    v.textos = Object.assign({}, state.ajustes.textos);
+    v.updatedAt = new Date().toISOString();
+    registrarAuto(v.clienteId, `Se pusieron al día los textos del convenio ${v.folio || ""}`,
+      "Se reemplazaron por los del hotel:\n" +
+      faltan.map(k => "· " + NOMBRE_TEXTO[k]).join("\n") +
+      "\n\nLa carta dice otra cosa que antes: hay que volver a mandársela al cliente.",
+      miNombre() || ejecutivoDe(v));
+    guardar(); render();
+    ov.remove();
+    if (alTerminar) alTerminar();
+  };
+}
+
 function verConvenio(id, alCerrar, pedirFirma){
   const v = state.convenios.find(x => x.id === id);
   if (!v) return;
@@ -17910,6 +18006,7 @@ function verConvenio(id, alCerrar, pedirFirma){
         <span class="estado-chip" style="background:${ec.bg};color:${ec.fg}">${esc(ec.name)}</span>
         <button class="btn" data-close>✕</button>
       </div>
+      ${avisoTextosAtrasados(v, !v.firmaEmpresa && !v.firmaManual)}
       <div class="doc-body">
         ${agua ? `<div class="doc-agua">${agua}</div>` : ""}
         <div class="doc-contenido">${cuerpoConvenio(v, c)}</div>
@@ -17967,6 +18064,8 @@ function verConvenio(id, alCerrar, pedirFirma){
     ov.remove();
     verConvenio(v.id, alCerrar);
   };
+
+  engancharTextosAlDia(ov, v, () => verConvenio(v.id, alCerrar, pedirFirma));
 
   ov.querySelector("#bPrint").onclick = () => {
     fijarPagina(false);

@@ -272,6 +272,26 @@ el contador antes de ponerlo** —y se espera la respuesta, o volvería a repart
 en la bitácora del cliente con los dos números y el porqué. El número que se suelta no se
 recicla: queda como hueco y el libro de folios lo enseña.
 
+### Un convenio guarda sus textos, y a veces hay que ponerlos al día
+
+Un convenio guarda **su copia** de los textos de la carta el día que nace. Es a propósito: una
+carta que ya está en manos del cliente no puede cambiar debajo de él, y una firmada en agosto no
+puede empezar a ofrecer algo que nadie le ofreció.
+
+El efecto secundario es que **un convenio viejo no imprime los beneficios**: cuando nació, ese
+texto todavía no existía. El editor los refresca solo, pero nada más mientras el convenio siga
+siendo un borrador que no ha salido; uno ya emitido no se ponía al día nunca — y, peor, no había
+manera de enterarse de por qué faltaban.
+
+Ahora la ficha de la carta lo dice con todas sus letras, nombra qué textos cambiaron en el hotel
+y, cuando faltan los beneficios, lo dice aparte porque es la pregunta que llega. El botón
+**Poner los textos al día** los reemplaza por los de hoy, avisa de lo que implica —la carta va a
+decir otra cosa y hay que volver a mandársela— y lo deja escrito en la bitácora del cliente.
+
+**A una carta que el cliente ya firmó no se le ofrece.** Cambiarle las palabras a un documento
+firmado es otra cosa; ahí el aviso dice que si los beneficios tienen que constar, va un convenio
+nuevo.
+
 ### CO para cotizar, CT para contratar · un solo número
 
 Las cotizaciones de hospedaje se numeran **CO-aaaa-00X** y los contratos **CT-aaaa-00X**. Dos

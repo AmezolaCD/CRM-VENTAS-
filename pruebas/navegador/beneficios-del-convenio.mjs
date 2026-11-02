@@ -344,6 +344,125 @@ await bloque('9 · al hotel que ya tiene los beneficios guardados le llega el gi
     /Transportaci[óo]n/i.test(viejo));
 });
 
+/* --- 10 ------------------------------------------------------------------
+   EL CASO DE MARCO. Un convenio de agosto, reimpreso en noviembre: «no
+   aparecen los beneficios, ¿por qué?».
+
+   Porque guarda SU copia de los textos y nació antes de que existiera el de
+   beneficios. La regla es deliberada —una carta no cambia debajo del
+   cliente—, pero faltaba poder enterarse y poder arreglarlo. */
+const convenioViejo = (id, extra) => p.evaluate(({ id, extra }) => {
+  const v = saneaConv(Object.assign({
+    id, clienteId:'c1', ejecutivo:'Sistemas', folio:'CV-2026-030',
+    fecha:'2026-08-22', estado:'firmado_hotel',
+    firmaHotel:{ nombre:'Sistemas', fecha:'2026-08-22T10:00:00Z', img:'data:image/png;base64,AA' },
+    habitaciones:[{ grupo:'deluxe', tipoId:'h1', codigo:'STKN', nombre:'Standard King',
+                    publica:5300, convenio:2700 }],
+    /* Sus textos SIN la llave de beneficios: así nacieron los de antes. */
+    textos: (() => { const x = Object.assign({}, state.ajustes.textos);
+                     delete x.beneficios; return x; })()
+  }, extra || {}));
+  state.convenios = [v];
+  guardar();
+  return v.id;
+}, { id, extra });
+
+await bloque('10 · un convenio viejo no imprime los beneficios, y la ficha dice por qué', async () => {
+  await convenioViejo('v20');
+
+  const carta = await p.evaluate(() => {
+    const caja = document.createElement('div');
+    caja.innerHTML = cuerpoConvenio(state.convenios[0], cliente('c1'));
+    return caja.innerText;
+  });
+  /* El marcador es el SPA y no el gimnasio: «Acceso a Gimnasio» también sale
+     en los valores agregados del bloque Deluxe, así que buscarlo daría un
+     verde falso. El descuento del spa sólo está en los beneficios. */
+  afirma('en efecto, la carta no los trae',
+    !/20% de descuento en SENSES SPA/i.test(carta));
+
+  await p.evaluate(() => verConvenio('v20'));
+  await p.locator('.overlay').waitFor({ timeout:8000 });
+  const ficha = await p.locator('.overlay').innerText();
+  afirma('LA FICHA DICE QUE GUARDA TEXTOS DE CUANDO SE CREÓ',
+    /textos de cuando se cre/i.test(ficha));
+  afirma('Y DICE QUE POR ESO NO SALEN LOS BENEFICIOS',
+    /por eso no salen los beneficios/i.test(ficha));
+  afirma('y ofrece ponerlos al día',
+    await p.locator('#bTextosAlDia').count() === 1);
+  await p.evaluate(() => document.querySelectorAll('.overlay').forEach(o => o.remove()));
+});
+
+await bloque('11 · el botón los pone al día y entonces sí salen', async () => {
+  await convenioViejo('v21');
+  await p.evaluate(() => verConvenio('v21'));
+  await p.locator('#bTextosAlDia').waitFor({ timeout:8000 });
+
+  // Los diálogos ya los acepta el manejador de arriba; otro aquí los pelea.
+  await p.locator('#bTextosAlDia').click();
+  await p.waitForTimeout(500);
+
+  const r = await p.evaluate(() => {
+    const v = state.convenios[0];
+    const caja = document.createElement('div');
+    caja.innerHTML = cuerpoConvenio(v, cliente('c1'));
+    return { carta: caja.innerText,
+             atrasados: textosAtrasados(v).length,
+             bitacora: state.actividades.map(a => a.asunto + ' | ' + a.notas) };
+  });
+  afirma('AHORA SÍ SALEN LOS BENEFICIOS',
+    /20% de descuento en SENSES SPA/i.test(r.carta));
+  afirma('ya no hay textos atrasados', r.atrasados === 0);
+  afirma('QUEDA ESCRITO EN LA BITÁCORA, con qué cambió',
+    r.bitacora.some(t => /pusieron al d[ií]a los textos/i.test(t) &&
+                         /Beneficios del convenio/.test(t)));
+  afirma('y avisa que hay que reenviárselo al cliente',
+    r.bitacora.some(t => /volver a mand/i.test(t)));
+  await p.evaluate(() => document.querySelectorAll('.overlay').forEach(o => o.remove()));
+});
+
+/* --- 12 ------------------------------------------------------------------
+   GRUPO DE CONTROL, EL QUE NO SE PUEDE ROMPER. A una carta que el cliente ya
+   firmó no se le cambian las palabras. */
+await bloque('12 · a un convenio firmado por el cliente no se le ofrece', async () => {
+  await convenioViejo('v22', { estado:'firmado',
+    firmaEmpresa:{ nombre:'Ana Ruiz', fecha:'2026-08-25T10:00:00Z',
+                   img:'data:image/png;base64,AA' } });
+  await p.evaluate(() => verConvenio('v22'));
+  await p.locator('.overlay').waitFor({ timeout:8000 });
+  const ficha = await p.locator('.overlay').innerText();
+
+  afirma('NO HAY BOTÓN', await p.locator('#bTextosAlDia').count() === 0);
+  afirma('y dice por qué, sin rodeos', /ya la firmó el cliente/i.test(ficha));
+  afirma('y qué hacer en su lugar', /convenio nuevo/i.test(ficha));
+  await p.evaluate(() => document.querySelectorAll('.overlay').forEach(o => o.remove()));
+});
+
+/* --- 13 ------------------------------------------------------------------
+   GRUPO DE CONTROL. Un aviso que sale siempre deja de leerse. */
+await bloque('13 · con los textos al día no sale ningún aviso', async () => {
+  await p.evaluate(() => {
+    const v = saneaConv({ id:'v23', clienteId:'c1', ejecutivo:'Sistemas',
+      folio:'CV-2026-031', fecha:'2026-11-01', estado:'borrador',
+      habitaciones:[{ grupo:'deluxe', tipoId:'h1', codigo:'STKN', nombre:'Standard King',
+                      publica:5300, convenio:2700 }],
+      textos: Object.assign({}, state.ajustes.textos) });
+    state.convenios = [v];
+    guardar();
+  });
+  afirma('no hay nada atrasado',
+    await p.evaluate(() => textosAtrasados(state.convenios[0]).length) === 0);
+
+  await p.evaluate(() => verConvenio('v23'));
+  await p.locator('.overlay').waitFor({ timeout:8000 });
+  const ficha = await p.locator('.overlay').innerText();
+  afirma('NO SALE NINGÚN AVISO', !/textos de cuando se cre/i.test(ficha));
+  afirma('ni el botón', await p.locator('#bTextosAlDia').count() === 0);
+  afirma('y la carta sí trae los beneficios, como siempre',
+    /20% de descuento en SENSES SPA/i.test(ficha));
+  await p.evaluate(() => document.querySelectorAll('.overlay').forEach(o => o.remove()));
+});
+
 await br.close(); srv.close();
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTodo en verde.\n');
 process.exit(fallas ? 1 : 0);
