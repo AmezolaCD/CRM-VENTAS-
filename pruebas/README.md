@@ -62,6 +62,7 @@ node pruebas/navegador/un-documento-no-se-cae-solo.mjs # sin cliente no es sin d
 node pruebas/navegador/la-version-a-la-vista.mjs    # qué versión traigo, y actualizar
 node pruebas/navegador/varias-tarifas-en-el-convenio.mjs # una tarifa por desayuno
 node pruebas/navegador/buscar-documentos.mjs       # buscar por folio en las listas
+node pruebas/navegador/de-cotizacion-a-contrato.mjs # CO y CT, con un solo número
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
@@ -78,6 +79,14 @@ que ya trae otro documento ni uno de otra serie, que el número corregido quede 
 contador, y que una ejecutiva no pueda hacerlo. Sus grupos de control son lo que no puede
 romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
 borradores que de verdad chocan se siguen arreglando solos.
+
+`de-cotizacion-a-contrato.mjs` cuida las dos letras de hospedaje y el paso de una a otra: que
+una cotización se numere CO y un contrato CT, que al convertir se conserve el número y **no se
+gaste otro del contador**, que la cotización se quede pero **su dinero deje de contarse** —si no,
+el mismo ingreso se contaría dos veces— y que un contrato y su cotización **no se tomen por un
+folio repetido**, que es lo que pasa cuando la cotización es de las viejas y los dos folios
+quedan idénticos. Sus grupos de control: una cotización vieja con CT no se toca, y un repetido de
+verdad se sigue marcando.
 
 `buscar-documentos.mjs` cuida el buscador de las cuatro listas de documentos: que encuentre por
 folio y por cliente, que deje fuera lo que no coincide, que diga cuántos coinciden y qué hacer

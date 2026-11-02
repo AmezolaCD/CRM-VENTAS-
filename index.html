@@ -1052,7 +1052,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.02-3";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.02-4";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1208,6 +1208,26 @@ const TIPOS_CONTRATO = [
     ayuda:"Ya confirmado y firmado por ambas partes." }
 ];
 const infoTipoCt = id => TIPOS_CONTRATO.find(t => t.id === id) || TIPOS_CONTRATO[0];
+
+/* ===========================================================================
+   CO PARA COTIZAR, CT PARA CONTRATAR · UN SOLO NÚMERO
+
+   Marco: «que el folio de cotizaciones sea CO-yyyy-00X, y que de la
+   cotización CO-2026-001 pase a contrato CT-2026-001».
+
+   O sea: dos prefijos, UN SOLO NÚMERO. El contador del hotel sigue siendo
+   uno por año para toda la serie de hospedaje, y lo único que cambia es la
+   letra según lo que sea el documento. Por eso el paso de cotización a
+   contrato puede conservar el número: no se está pidiendo otro, se está
+   diciendo lo mismo con la letra que toca.
+
+   Con dos contadores separados esto no se podría: el CT-2026-001 ya sería de
+   otro trato.
+
+   Las cotizaciones que ya andan por ahí con CT NO se tocan. Su folio está
+   impreso en un PDF que el cliente tiene, y cambiárselo por detrás es
+   justamente lo que llevamos dos semanas arreglando. */
+const prefijoCt = k => (k && k.tipo === "contrato") ? "CT" : "CO";
 
 const ESTADOS_CT = {
   borrador:         { name:"Borrador",           bg:"var(--col)",      fg:"var(--muted)" },
@@ -3765,6 +3785,14 @@ function saneaContrato(k){
   if (o.folioDelContador !== undefined){
     o.folioDelContador = !!o.folioDelContador;
     if (!o.folioDelContador) delete o.folioDelContador;
+  }
+  /* De qué cotización salió este contrato. Nace al usarse, como en banquetes
+     (`cotizacionId` en `saneaEvento`). Sirve para dos cosas: que a una
+     cotización ya convertida no se le ofrezca convertirla otra vez, y que su
+     dinero no se cuente dos veces en el reporte de ingresos. */
+  if (o.cotizacionId !== undefined){
+    o.cotizacionId = String(o.cotizacionId || "").trim();
+    if (!o.cotizacionId) delete o.cotizacionId;
   }
   /* ¿Las tarifas son comisionables, y a qué porcentaje?
 
@@ -12220,21 +12248,28 @@ function duenioDelFolio(folio, excluirId){
 const SERIES_FOLIO = {
   convenios: {
     uno:"convenio", unos:"convenios", articulo:"el",
-    tipo:"convenios", prefijo:"CV",
+    tipo:"convenios", prefijo:"CV", prefijos:["CV"],
+    prefijoDe: () => "CV",
     lista: () => state.convenios,
     anio:  v => anioConvenio(v),
     libre: v => folioLibre(anioConvenio(v), v.id)
   },
+  /* Hospedaje lleva DOS letras y UN SOLO NÚMERO: CO para cotizar y CT para
+     contratar. Ver `prefijoCt`. Por eso `prefijoDe` depende del documento y
+     `prefijos` trae las dos: un folio CO es tan válido como uno CT en esta
+     serie, y las cotizaciones viejas siguen trayendo CT. */
   contratos: {
     uno:"documento", unos:"documentos", articulo:"el",
-    tipo:"contratos", prefijo:"CT",
+    tipo:"contratos", prefijo:"CT", prefijos:["CO","CT"],
+    prefijoDe: k => prefijoCt(k),
     lista: () => state.contratos,
     anio:  k => anioContrato(k),
-    libre: k => folioContrato(anioContrato(k), k.id)
+    libre: k => folioContrato(anioContrato(k), k.id, prefijoCt(k))
   },
   certificados: {
     uno:"certificado", unos:"certificados", articulo:"el",
-    tipo:"certificados", prefijo:"CE",
+    tipo:"certificados", prefijo:"CE", prefijos:["CE"],
+    prefijoDe: () => "CE",
     lista: () => state.certificados,
     anio:  c => anioCertificado(c),
     libre: c => folioCertificado(anioCertificado(c), c.id)
@@ -12299,6 +12334,15 @@ async function resolverFoliosRepetidos(){
         (b.folioDelContador ? 1 : 0) - (a.folioDelContador ? 1 : 0) ||
         String(a.createdAt).localeCompare(String(b.createdAt)));
       for (const d of grupo.slice(1)){
+        /* UN CONTRATO Y SU COTIZACIÓN NO SON UN FOLIO REPETIDO: son el mismo
+           trato con la letra que toca, y comparten número a propósito —ver
+           `pasarAContratoCt`—. Se nota cuando la cotización es de las viejas,
+           que traen CT: ahí los dos folios quedan idénticos y esto los
+           marcaría como un error que no existe. */
+        if (grupo.some(x => x.id === d.cotizacionId || x.cotizacionId === d.id)){
+          delete d.folioRepetido;
+          continue;
+        }
         if (folioIntocable(d)){ d.folioRepetido = folio; continue; }
         /* SIN SERVIDOR es otra cosa, y es la misma razón que en
            `folioParaFirmar`: un CRM suelto —«Sólo este equipo»— es el único
@@ -12306,7 +12350,7 @@ async function resolverFoliosRepetidos(){
            misma serie seguida. Con servidor, el número lo da el contador o no
            se toca nada. */
         const nuevo = nubeActiva()
-          ? await apartarFolio(serie.tipo, serie.prefijo, serie.anio(d))
+          ? await apartarFolio(serie.tipo, serie.prefijoDe(d), serie.anio(d))
           : serie.libre(d);
         if (!nuevo){ d.folioRepetido = folio; continue; }
         registrarAuto(d.clienteId, `${serie.uno} ${d.folio} se renumeró como ${nuevo}`,
@@ -12673,7 +12717,7 @@ function engancharRenumTodos(cont, serie, visibles, repetidos){
     const hechos = [], fallidos = [];
     for (const d of aCambiar){
       const viejo = d.folio;
-      const nuevo = await apartarFolio(serie.tipo, serie.prefijo, serie.anio(d));
+      const nuevo = await apartarFolio(serie.tipo, serie.prefijoDe(d), serie.anio(d));
       if (!nuevo){ fallidos.push(viejo); continue; }
       d.folio = nuevo;
       d.folioDelContador = true;
@@ -12797,8 +12841,9 @@ function corregirFolio(doc, serie, alTerminar){
     const m = /^([A-Z]+)-(\d{4})-(\d+)$/.exec(nuevo);
     if (!m) return malo(`No tiene la forma de un folio. Se escribe así:
       <b>${esc(serie.prefijo)}-${new Date().getFullYear()}-027</b>.`);
-    if (m[1] !== serie.prefijo)
-      return malo(`Los ${esc(serie.unos)} llevan <b>${esc(serie.prefijo)}</b> adelante,
+    const validos = serie.prefijos || [serie.prefijo];
+    if (!validos.includes(m[1]))
+      return malo(`Los ${esc(serie.unos)} llevan <b>${esc(validos.join(" o "))}</b> adelante,
         no <b>${esc(m[1])}</b>. Un folio de otra serie aquí sería un documento imposible
         de encontrar.`);
 
@@ -16405,17 +16450,25 @@ const anioContrato = k => String(k.fecha || hoyISO()).slice(0, 4) ||
   String(new Date().getFullYear());
 
 /** Mismo criterio que el del convenio, con su propia serie: CT-2026-001. */
-function folioContrato(anio, excluirId){
+/**
+ * El siguiente número libre de la serie de hospedaje, contando aquí.
+ *
+ * Mira LAS DOS LETRAS —CO y CT— porque el número es uno solo para toda la
+ * serie: ver `prefijoCt`. Si mirara nada más la suya, una cotización nueva
+ * tomaría un número que ya trae un contrato.
+ *
+ * Es el respaldo de cuando no hay servidor; con nube manda el contador.
+ */
+function folioContrato(anio, excluirId, prefijo){
   const a = String(anio || new Date().getFullYear()).slice(0, 4);
-  const re = new RegExp("^CT-" + a + "-(\\d+)$", "i");
-  const usados = new Set(state.contratos
-    .filter(k => k.id !== excluirId)
-    .map(k => String(k.folio || "").trim().toUpperCase()));
-  let n = Math.max(0, ...state.contratos
-    .filter(k => k.id !== excluirId)
+  const pre = prefijo || "CT";
+  const re = new RegExp("^(?:CO|CT)-" + a + "-(\\d+)$", "i");
+  const otros = state.contratos.filter(k => k.id !== excluirId);
+  const usados = new Set(otros.map(k => String(k.folio || "").trim().toUpperCase()));
+  let n = Math.max(0, ...otros
     .map(k => Number((re.exec(String(k.folio || "").trim()) || [])[1]) || 0)) + 1;
   let f;
-  do { f = `CT-${a}-${String(n++).padStart(3, "0")}`; } while (usados.has(f));
+  do { f = `${pre}-${a}-${String(n++).padStart(3, "0")}`; } while (usados.has(f));
   return f;
 }
 
@@ -17448,6 +17501,8 @@ function verContrato(id, alCerrar, pedirFirma){
         <button class="btn" id="bPrintCt">Imprimir</button>
         <button class="btn" id="bPdfCt">Descargar PDF</button>
         ${sePuedeEditar(k, "contratos") ? `<button class="btn" id="bEditCt">Editar</button>` : ""}
+        ${k.tipo === "cotizacion" && k.folio && !yaTieneContratoCt(k)
+          ? `<button class="btn" id="bCtAContrato">Pasar a contrato</button>` : ""}
         ${esAdmin() && k.folio ? `<button class="btn sm" id="bCtFolio"
           title="Cuando el papel firmado trae otro número">Corregir el folio</button>` : ""}
         <div class="spacer"></div>
@@ -17498,6 +17553,9 @@ function verContrato(id, alCerrar, pedirFirma){
   if (bf) bf.onclick = () => corregirFolio(k, SERIES_FOLIO.contratos, () => {
     ov.remove(); verContrato(k.id, alCerrar);
   });
+
+  const bac = ov.querySelector("#bCtAContrato");
+  if (bac) bac.onclick = () => { ov.remove(); pasarAContratoCt(k, alCerrar); };
 
   const em = ov.querySelector("#bCtEmitir");
   if (em) em.onclick = async () => {
@@ -17573,8 +17631,8 @@ async function firmarContrato(k, quien, d){
 async function emitirContrato(k, firma){
   const c = cliente(k.clienteId);
   const doc = infoTipoCt(k.tipo).name;
-  const folio = await folioParaFirmar(k, "contratos", "CT", anioContrato(k),
-                                      () => folioContrato(anioContrato(k), k.id));
+  const folio = await folioParaFirmar(k, "contratos", prefijoCt(k), anioContrato(k),
+                                      () => folioContrato(anioContrato(k), k.id, prefijoCt(k)));
   if (!folio){ alert(AVISO_SIN_CONTADOR); return false; }
   k.folio = folio;
   if (firma) k.firmaHotel = firma;
@@ -17616,6 +17674,62 @@ function aceptaElClienteCt(k, firma, comoFirmo){
   registrarAuto(k.clienteId, `${doc} ${k.folio} aceptada por el cliente`,
     comoFirmo, ejecutivoDeCt(k));
   k.updatedAt = new Date().toISOString();
+}
+
+/** ¿Esta cotización ya se pasó a contrato? */
+const yaTieneContratoCt = k => state.contratos.some(x => x.cotizacionId === k.id);
+
+/**
+ * DE COTIZACIÓN A CONTRATO, CON EL MISMO NÚMERO.
+ *
+ * Marco: «que de la cotización CO-2026-001 pase a contrato CT-2026-001».
+ *
+ * Se puede conservar el número porque el contador de hospedaje es UNO para
+ * las dos letras —ver `prefijoCt`—: no se está pidiendo otro folio, se está
+ * diciendo el mismo con la letra que toca. Y no se gasta un número por
+ * convertir, que es lo que pasaría con dos contadores separados.
+ *
+ * La cotización SE QUEDA, como en banquetes (`pasarAContratoBq`): es el
+ * documento que el cliente recibió y aceptó, y borrarlo dejaría al contrato
+ * sin de dónde salió. El contrato nuevo nace en borrador y sin nada de la
+ * firma de la cotización —la clave del enlace sobre todo: copiada, los dos
+ * documentos compartirían la misma y quien tuviera una abriría la otra—.
+ *
+ * Y como los dos quedan en la lista con el mismo número, el reporte de
+ * ingresos deja de contar la cotización en cuanto tiene contrato: si no, el
+ * mismo dinero se contaría dos veces.
+ */
+function pasarAContratoCt(cot, alCerrar){
+  const num = /^[A-Z]+-(\d{4}-\d+)$/i.exec(String(cot.folio || "").trim());
+  if (!num){
+    alert("Esta cotización todavía no tiene folio: primero hay que emitirla.");
+    return;
+  }
+  if (!confirm(`La cotización ${cot.folio} va a pasar a contrato CT-${num[1]}.\n\n` +
+      "Se crea un documento nuevo con el mismo número y la cotización se queda como " +
+      "está, que es lo que el cliente ya recibió.\n\nEl contrato se firma en papel: " +
+      "se imprime, se firma a mano y se sube el escaneado.\n\n¿Continuar?")) return;
+
+  const k = saneaContrato(Object.assign({}, cot, {
+    id:"", tipo:"contrato", cotizacionId: cot.id,
+    folio: `CT-${num[1]}`,
+    estado:"borrador", firmaHotel:null, firmaCliente:null, firmaManual:null,
+    enviado:null, avisado:false,
+    /* La clave del enlace no se hereda: `saneaContrato` se la quita a un
+       contrato —se firma en papel—, pero se pone en claro de todos modos. */
+    tokenFirma:"", datosHotel:null,
+    fecha: hoyISO(), createdAt:"", updatedAt:""
+  }));
+  /* El número salió del contador cuando se emitió la cotización, así que
+     éste también está apartado: que no se lo renumere nadie por detrás. */
+  k.folioDelContador = true;
+  state.contratos.push(k);
+  registrarAuto(cot.clienteId, `La cotización ${cot.folio} pasó a contrato ${k.folio}`,
+    "Se creó el contrato con el mismo número. La cotización se queda como está.",
+    miNombre() || ejecutivoDeCt(cot));
+  guardar();
+  vista = "contratos"; render();
+  editarContrato(k.id, null, alCerrar);
 }
 
 /** El contrato de hospedaje volvió firmado en papel. */
@@ -18439,11 +18553,11 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
       const serie = tipo === "convenio"    ? ["convenios", "CV"]
                   : tipo === "cotizacionbq" ? ["eventos_ev", "EV"]
                   : tipo === "contratobq"   ? ["eventos_cb", "CB"]
-                                            : ["contratos", "CT"];
+                                            : ["contratos", prefijoCt({ tipo })];
       const local = () => tipo === "convenio"    ? folioLibre(anio)
                         : tipo === "cotizacionbq" ? folioEvento("cotizacion", anio)
                         : tipo === "contratobq"   ? folioEvento("contrato", anio)
-                                                  : folioContrato(anio);
+                                                  : folioContrato(anio, "", prefijoCt({ tipo }));
       /* ESTA PANTALLA CREA UN REGISTRO APARTE, y eso casi nunca es lo que
          quiere quien tiene en la mano un documento que regresó firmado.
 
@@ -20807,6 +20921,10 @@ function ingresos(){
 
   for (const k of puedeVer("contratos") ? state.contratos : []){
     if (!contratoEsMio(k)) continue;
+    /* Una cotización que ya pasó a contrato NO se cuenta: su dinero lo
+       cuenta el contrato, y los dos traen el mismo número. Es la misma regla
+       que en banquetes. Sin esto, el ingreso se contaría dos veces. */
+    if (k.tipo === "cotizacion" && yaTieneContratoCt(k)) continue;
     const f = k.fecha;
     if (!f || f < desde || f > hasta) continue;
     filas.push({

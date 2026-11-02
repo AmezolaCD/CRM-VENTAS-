@@ -83,6 +83,11 @@ const montar = () => p.evaluate(() => {
   state.clientes = [
     saneaCliente({ id:'c1', nombre:'EMPRESA DE EJEMPLO SA DE CV', ejecutivo:'Ana' }),
     saneaCliente({ id:'c2', nombre:'OTRA EMPRESA DE EJEMPLO',     ejecutivo:'Ana' })];
+  /* Estas cotizaciones traen folios con CT porque son de antes de que la
+     serie se partiera en dos letras —CO para cotizar, CT para contratar, ver
+     `prefijoCt`—. No se les cambia: su folio está impreso en un PDF que el
+     cliente tiene. El número NUEVO que reparta el contador sí llega con CO,
+     que es la letra que le toca a una cotización. */
   const ct = (id, folio, cli, creado) => saneaContrato({
     id, folio, clienteId:cli, tipo:'cotizacion', estado:'firmado_hotel',
     fecha:'2026-09-24', createdAt:creado,
@@ -138,13 +143,13 @@ await bloque('3 · el botón le pide un número nuevo al contador del hotel', as
     folios: state.contratos.map(k => k.id + ':' + k.folio),
     bitacora: state.actividades.map(a => a.asunto) }));
   afirma('el de siempre conserva su folio', r.folios.includes('k1:CT-2026-002'));
-  afirma('el repetido se lleva uno nuevo del contador', r.folios.includes('k2:CT-2026-020'));
+  afirma('el repetido se lleva uno nuevo del contador', r.folios.includes('k2:CO-2026-020'));
   afirma('ya no queda ninguno marcado',
     !(await p.evaluate(() => state.contratos.some(k => k.folioRepetido))));
   afirma('queda escrito en la bitácora del cliente',
-    r.bitacora.some(a => /CT-2026-002 se renumeró como CT-2026-020/.test(a)));
+    r.bitacora.some(a => /CT-2026-002 se renumeró como CO-2026-020/.test(a)));
   afirma('se le pidió al contador por la serie de contratos',
-    repartidos.some(x => x.tipo === 'contratos' && x.folio === 'CT-2026-020'));
+    repartidos.some(x => x.tipo === 'contratos' && x.folio === 'CO-2026-020'));
 });
 
 await bloque('4 · un borrador repetido se arregla solo, sin molestar a nadie', async () => {

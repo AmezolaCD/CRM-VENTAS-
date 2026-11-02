@@ -272,6 +272,26 @@ el contador antes de ponerlo** —y se espera la respuesta, o volvería a repart
 en la bitácora del cliente con los dos números y el porqué. El número que se suelta no se
 recicla: queda como hueco y el libro de folios lo enseña.
 
+### CO para cotizar, CT para contratar · un solo número
+
+Las cotizaciones de hospedaje se numeran **CO-aaaa-00X** y los contratos **CT-aaaa-00X**. Dos
+letras, pero **un solo número**: el contador del hotel sigue siendo uno por año para toda la
+serie y lo único que cambia es la letra según lo que sea el documento.
+
+Eso es lo que permite lo otro: desde la ficha de una cotización, **Pasar a contrato** crea el
+contrato **con el mismo número** —de `CO-2026-001` a `CT-2026-001`— sin pedirle otro al contador.
+Con dos contadores separados no se podría: el `CT-2026-001` ya sería de otro trato.
+
+La cotización **se queda**, como en banquetes: es el documento que el cliente recibió. El
+contrato nace en borrador, sin nada de la firma ni del enlace de la cotización, y se firma en
+papel. Y en cuanto existe, **la cotización deja de contar en el reporte de ingresos**: su dinero
+lo cuenta el contrato, y los dos traen el mismo número.
+
+Las cotizaciones que ya andan por ahí con **CT no se tocan**: su folio está impreso en un PDF que
+el cliente tiene. Ésas también se pueden pasar a contrato y conservan su número; cuando eso pasa
+los dos folios quedan idénticos, y el detector de folios repetidos sabe que un contrato y su
+cotización no son un error.
+
 ### Buscar en las listas de documentos
 
 Las cuatro listas —convenios, contratos y cotizaciones, cotizaciones de evento y contratos de

@@ -179,7 +179,10 @@ await bloque('1 · al renumerar, el número lo da el contador del hotel', async 
 
   afirma('el más viejo conserva su folio', a.folio === `CT-${ANIO}-027`);
   afirma('al otro SE LE PIDIÓ NÚMERO AL CONTADOR', servidor.apartados === 1);
-  afirma('y se lo quedó', b.folio === `CT-${ANIO}-028`);
+  /* CO y no CT: los documentos del choque son COTIZACIONES, y desde que la
+     serie lleva dos letras una cotización se numera con CO. El número sigue
+     siendo uno solo para toda la serie. Ver `prefijoCt`. */
+  afirma('y se lo quedó', b.folio === `CO-${ANIO}-028`);
   afirma('queda apuntado que ese número vino del contador', b.delContador === true);
   afirma('y ya no está marcado como repetido', !b.repetido);
 });
