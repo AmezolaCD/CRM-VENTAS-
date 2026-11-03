@@ -1052,7 +1052,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.02-5";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.03-1";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -3916,6 +3916,15 @@ function saneaConv(c){
     o.folioDelContador = !!o.folioDelContador;
     if (!o.folioDelContador) delete o.folioDelContador;
   }
+  /* El convenio salió del hotel POR FUERA: se descargó o se imprimió para
+     mandárselo al cliente a mano. Ver `marcarDescargado`. Nace al usarse,
+     para no hacer que todos los convenios se vean editados y se vuelvan a
+     subir enteros en la primera sincronización. */
+  if (o.descargado !== undefined){
+    o.descargado = (o.descargado && o.descargado.fecha)
+      ? { fecha: o.descargado.fecha, quien: o.descargado.quien || "" } : null;
+    if (!o.descargado) delete o.descargado;
+  }
   /* Varios a la vez, sin repetir y sin inventados: si mañana se quita uno del
      catálogo, los convenios viejos dejan de enseñarlo en vez de sacar basura. */
   o.desayunos = (Array.isArray(o.desayunos) ? o.desayunos : [])
@@ -5415,6 +5424,9 @@ function reabrirParaCorregir(doc, tipo, quien){
   doc.estado = "borrador";
   doc.firmaHotel = null;
   doc.enviado = null;
+  /* Y la marca de «salió por fuera», por la misma razón que el enviado: de
+     ESTA versión el cliente no tiene nada. Ver `marcarDescargado`. */
+  delete doc.descargado;
   /* Queda dicho que este documento ya salió una vez. Vuelve a ser borrador en
      todo menos en una cosa: su folio ya se apartó en el contador del hotel y
      puede andar impreso, así que nadie se lo puede renumerar por detrás. Ver
@@ -5437,7 +5449,9 @@ function reabrirParaCorregir(doc, tipo, quien){
 function avisaQueSeReabre(doc){
   if (!doc || doc.estado === "borrador") return true;
   const cuando = doc.enviado && doc.enviado.fecha
-    ? `\n\nYa se le mandó al cliente el ${fechaHora(doc.enviado.fecha)}.` : "";
+    ? `\n\nYa se le mandó al cliente el ${fechaHora(doc.enviado.fecha)}.`
+    : doc.descargado && doc.descargado.fecha
+      ? `\n\nYa se descargó para firma el ${fechaHora(doc.descargado.fecha)}.` : "";
   return confirm(
     `Este documento ya salió de borrador.${cuando}\n\n` +
     "Si lo corriges volverá a quedar como BORRADOR: hay que firmarlo otra vez y volver a " +
@@ -8242,7 +8256,11 @@ function renderConvenios(){
       <thead><tr><th>Folio</th><th>Cliente</th>${conEje ? "<th>Ejecutivo</th>" : ""}<th>Fecha</th><th>Vigencia</th>
         <th>Habitaciones</th><th>Estado</th><th>Enviado</th><th>Firmas</th><th></th></tr></thead>
       <tbody>${vs.map(v => {
-        const ec = ESTADOS_CONV[v.estado];
+        /* Lo que de verdad está pasando con el documento manda sobre el
+           estado de firma: salió a que lo firmen, y no por el CRM. */
+        const ec = descargadoParaFirma(v)
+          ? { name:"Descargado para firma", bg:"var(--warn-soft)", fg:"var(--warn)" }
+          : ESTADOS_CONV[v.estado];
         return `<tr class="row-link" data-id="${v.id}">
           <td><b>${esc(v.folio || "—")}</b>${v.externo
             ? ` <span class="pill" title="Se subió escaneado; no se armó aquí">externo</span>` : ""}${
@@ -9183,7 +9201,56 @@ function pasarACartera(pr){
    ========================================================================== */
 
 /** Sello de "ya se mandó", para la carta de un huésped o el enlace de un convenio. */
+/* ===========================================================================
+   CUANDO EL CONVENIO SALE POR FUERA DEL CRM
+
+   Marco: «si no lo enviaré por WhatsApp y lo quiero descargar y enviar, que a
+   la hora de descargarlo en la columna de estado aparezca como descargado
+   para firma, y en la de enviado como NA».
+
+   Hasta hoy el CRM sólo sabía de un camino: mandarlo por correo o por
+   WhatsApp desde aquí, que es lo que escribe `enviado`. El que se descarga y
+   se manda a mano se quedaba para siempre en «Sin enviar», y ésa es
+   justamente la columna que se mira para saber qué falta. La columna mentía.
+   =========================================================================== */
+
+/** ¿Este convenio está esperando la firma del cliente, allá afuera? */
+const esperandoFirma = v =>
+  !!v.firmaHotel && !v.firmaEmpresa && !v.firmaManual && v.estado !== "cancelado";
+
+/** ¿Y salió por fuera —descargado o impreso— sin pasar por el envío de aquí? */
+const descargadoParaFirma = v => !!v.descargado && !v.enviado && esperandoFirma(v);
+
+/**
+ * Apunta que el convenio se descargó o se imprimió para mandarlo.
+ *
+ * Se marca SÓLO cuando eso significa lo que dice:
+ *
+ *   · el hotel ya firmó — un borrador que se baja para revisarlo no salió a
+ *     ninguna parte, y marcarlo sería mentir en el otro sentido;
+ *   · el cliente todavía no firma — bajar una carta ya cerrada es archivarla;
+ *   · y no se había mandado ya desde aquí: un envío de verdad es un hecho más
+ *     fuerte que una descarga, y no se pisa.
+ */
+function marcarDescargado(v, como){
+  if (!v || v.descargado || v.enviado || !esperandoFirma(v)) return false;
+  v.descargado = { fecha: new Date().toISOString(), quien: correoSesion() };
+  v.updatedAt = new Date().toISOString();
+  registrarAuto(v.clienteId, `Convenio ${v.folio || ""} descargado para firma`,
+    `Se ${como === "imprimir" ? "imprimió" : "descargó"} para mandárselo al cliente por fuera ` +
+    "del CRM. La columna de enviado dice NA: el envío no pasó por aquí.",
+    ejecutivoDe(v));
+  guardar(); render();
+  return true;
+}
+
 function selloEnvio(g){
+  /* NA y no «Sin enviar»: sí salió, nada más que no por aquí. Esta rama sólo
+     la tocan los convenios —`descargado` no existe en los demás documentos—,
+     aunque esta función la compartan huéspedes, contratos y eventos. */
+  if (!g.enviado && g.descargado)
+    return `<span class="pill" title="Se descargó o se imprimió para mandarlo por fuera ` +
+      `el ${esc(fechaHora(g.descargado.fecha))}. El envío no pasó por el CRM.">NA</span>`;
   if (!g.enviado)
     return `<span class="pill" title="Todavía no se manda desde aquí">Sin enviar</span>`;
   const e = g.enviado;
@@ -12291,7 +12358,7 @@ const SERIES_FOLIO = {
    que repartió el servidor es único por construcción, así que en un choque el
    adivinado es siempre el otro. Ver `folioParaFirmar`. */
 const folioIntocable = d => d.estado !== "borrador" || d.enviado || d.firmaHotel ||
-                            d.yaSalio || d.folioDelContador;
+                            d.yaSalio || d.folioDelContador || d.descargado;
 
 /**
  * Dos ejecutivos capturando a la vez, cada uno en su equipo, pueden tomar el
@@ -18074,6 +18141,10 @@ function verConvenio(id, alCerrar, pedirFirma){
     window.addEventListener("afterprint", quitar);
     window.print();
     setTimeout(quitar, 1500);   // respaldo si el navegador no dispara afterprint
+    /* Se marca al apretarlo y no al terminar: no hay manera de saber si de
+       verdad imprimió, y mucha gente usa Imprimir → «Guardar como PDF», que
+       es exactamente el mismo caso que descargarlo. */
+    marcarDescargado(v, "imprimir");
   };
   const bp = ov.querySelector("#bPdfC");
   bp.onclick = async () => {
@@ -18082,6 +18153,9 @@ function verConvenio(id, alCerrar, pedirFirma){
     try{
       const bytes = await pdfDeConvenio(v, c);
       descargarBlob(new Blob([bytes], { type:"application/pdf" }), nombrePdfConvenio(v, c));
+      /* Se marca DESPUÉS de que el archivo salió: si el PDF truena, no se
+         descargó nada y el convenio no ha ido a ninguna parte. */
+      marcarDescargado(v, "descargar");
     }catch(err){
       alert("No se pudo generar el PDF aquí: " + err.message + "\n\nUsa Imprimir y elige \"Guardar como PDF\".");
     }finally{ bp.disabled = false; bp.textContent = antes; }

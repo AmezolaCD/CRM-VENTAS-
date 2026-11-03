@@ -63,6 +63,7 @@ node pruebas/navegador/la-version-a-la-vista.mjs    # qué versión traigo, y ac
 node pruebas/navegador/varias-tarifas-en-el-convenio.mjs # una tarifa por desayuno
 node pruebas/navegador/buscar-documentos.mjs       # buscar por folio en las listas
 node pruebas/navegador/de-cotizacion-a-contrato.mjs # CO y CT, con un solo número
+node pruebas/navegador/descargado-para-firma.mjs   # el convenio que sale por fuera
 ```
 
 `firma-del-cliente.mjs` comprueba que al cliente no se le pide nada más que firmar y que, si el
@@ -79,6 +80,13 @@ que ya trae otro documento ni uno de otra serie, que el número corregido quede 
 contador, y que una ejecutiva no pueda hacerlo. Sus grupos de control son lo que no puede
 romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
 borradores que de verdad chocan se siguen arreglando solos.
+
+`descargado-para-firma.mjs` cuida el convenio que sale del hotel **por fuera**: se descarga o se
+imprime y se manda a mano. Lo nuevo —el estado y el NA— se mide, pero el peso de la suite está en
+los grupos de control, porque aquí la marca puede volverse una mentira al revés: bajar un
+**borrador** para revisarlo no es haberlo mandado, bajar una carta **ya firmada** es archivarla,
+y un convenio que **sí se mandó por WhatsApp** no dice NA. El primer bloque es el de siempre: sin
+descargar nada, la lista sale exactamente igual que hoy.
 
 `beneficios-del-convenio.mjs` cuida además los **textos atrasados**. Un convenio guarda su copia
 de los textos el día que nace, así que uno viejo no imprime los beneficios —ese texto no existía

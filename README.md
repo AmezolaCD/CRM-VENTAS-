@@ -272,6 +272,24 @@ el contador antes de ponerlo** —y se espera la respuesta, o volvería a repart
 en la bitácora del cliente con los dos números y el porqué. El número que se suelta no se
 recicla: queda como hueco y el libro de folios lo enseña.
 
+### Descargado para firma · cuando el convenio sale por fuera
+
+El CRM sólo sabía de un camino para que un convenio llegara al cliente: mandarlo por correo o por
+WhatsApp desde aquí. El que se **descarga y se manda a mano** se quedaba para siempre en «Sin
+enviar» — y ésa es justo la columna que se mira para saber qué falta, así que mentía.
+
+Ahora, al **descargar el PDF o imprimir** un convenio que el hotel ya firmó y que todavía espera
+la firma del cliente, la columna de **Estado** dice **«Descargado para firma»** y la de
+**Enviado** dice **«NA»**: sí salió, nada más que no por aquí. Queda escrito en la bitácora del
+cliente.
+
+Se marca sólo cuando eso significa lo que dice. Bajar un **borrador** para revisarlo no es
+haberlo mandado; bajar una carta **ya firmada** es archivarla; y si el convenio **ya se mandó**
+desde el CRM, ese envío manda y la columna lo sigue diciendo. Al reabrirlo para corregirlo la
+marca se va, por la misma razón que se va el envío: de esa versión el cliente no tiene nada. Y
+mientras esté puesta, el folio ya no se renumera solo — va impreso en un PDF que anda con el
+cliente.
+
 ### Un convenio guarda sus textos, y a veces hay que ponerlos al día
 
 Un convenio guarda **su copia** de los textos de la carta el día que nace. Es a propósito: una
