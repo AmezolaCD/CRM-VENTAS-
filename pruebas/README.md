@@ -38,6 +38,7 @@ node pruebas/navegador/borrar-se-propaga.mjs         # un borrado llega a todos
 node pruebas/navegador/copiar-es-enviar.mjs          # copiar el enlace es mandarlo
 node pruebas/navegador/folios-repetidos.mjs          # dos documentos con el mismo folio
 node pruebas/navegador/copiar-el-sql.mjs             # el .sql llega entero
+node pruebas/navegador/el-anio-del-convenio.mjs      # el folio toma el año de la vigencia
 node pruebas/navegador/certificados.mjs             # el folio no se repite y quién emite
 node pruebas/navegador/arranque.mjs                 # que la aplicación abra
 node pruebas/navegador/no-se-pierde-lo-escrito.mjs  # guardar guarda de verdad
@@ -80,6 +81,17 @@ que ya trae otro documento ni uno de otra serie, que el número corregido quede 
 contador, y que una ejecutiva no pueda hacerlo. Sus grupos de control son lo que no puede
 romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
 borradores que de verdad chocan se siguen arreglando solos.
+
+`el-anio-del-convenio.mjs` nace de una pregunta de Marco: «CV-2026-101 aparece como 2026 por qué
+si es del 2027?». El año del folio salía de la **vigencia desde** y el de la carta de la
+**vigencia hasta**, así que un convenio capturado en noviembre para la temporada siguiente decía
+2027 en su texto y 2026 en su número. La prueba exige que manden las dos cosas lo mismo, en los
+tres caminos por los que un convenio toma número —la firma, el firmado en papel y el escaneado de
+fuera—, que el año nuevo arranque en 001 aunque el anterior tenga cien, y que **el convenio de
+enero a diciembre siga dando exactamente el folio que daba**, que es el grupo de control que no se
+puede romper. Cuida también lo que no se arregla con una regla: que un folio ya repartido no se
+mueva solo, que la carta diga por qué cuando el año dejó de cuadrar, y que corregirlo sea de la
+administración y deje rastro.
 
 `descargado-para-firma.mjs` cuida el convenio que sale del hotel **por fuera**: se descarga o se
 imprime y se manda a mano. Lo nuevo —el estado y el NA— se mide, pero el peso de la suite está en

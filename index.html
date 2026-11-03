@@ -1052,7 +1052,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.03-1";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.03-2";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -7534,7 +7534,9 @@ function abrirWhatsApp(c){
 /** Sustituye los marcadores de los textos de la carta. */
 function vars(txt, conv, cli){
   const vig = textoVigencia(conv);
-  const anio = (conv.vigenciaHasta || conv.fecha || hoyISO()).slice(0,4);
+  /* El MISMO renglón que decide el año del folio: ver `anioConvenio`. Antes
+     cada uno lo calculaba por su cuenta y por eso podían discrepar. */
+  const anio = anioConvenio(conv);
   return String(txt || "")
     .replace(/\{\{HOTEL\}\}/g,    state.ajustes.hotel.nombre)
     .replace(/\{\{EMPRESA\}\}/g,  (cli && cli.empresa) || "")
@@ -12101,9 +12103,32 @@ function folioAuto(anio){
   return `CV-${a}-${String(n).padStart(3, "0")}`;
 }
 
-/** El año que manda en el folio es el de la vigencia, no el de hoy. */
+/**
+ * El año de un convenio es el de su vigencia, no el de hoy. Y de la vigencia,
+ * el extremo que MANDA ES EL "HASTA".
+ *
+ * Esto miraba el "desde" y ahí estaba el problema: un convenio nace con
+ * `vigenciaDesde` en hoy y `vigenciaHasta` el 31 de diciembre de este año (ver
+ * `editarConvenio`). El que se captura en noviembre para la temporada que
+ * viene se captura como siempre —se le mueve el "hasta" al año siguiente y el
+ * "desde" se queda en la fecha de captura—, así que la carta decía 2027, la
+ * lista decía "hasta 31-dic-2027" y el folio, que salía del "desde", decía
+ * 2026. Un solo documento con dos años.
+ *
+ * El "hasta" es además el ÚNICO de los dos que se ve en pantalla: es la
+ * columna Vigencia de la lista y es el {{ANIO}} de la carta. Que el folio
+ * salga de otro campo era pedirle a alguien que adivinara.
+ *
+ * Uno de enero a diciembre de 2026 sigue siendo 2026. Uno que corre de
+ * noviembre de 2026 a diciembre de 2027 es de 2027, que es lo que dice su
+ * propio texto.
+ *
+ * OJO: esto decide el año del PRÓXIMO folio. Los ya repartidos no se mueven
+ * solos —`folioIntocable`—; para ésos está «Corregir el folio».
+ */
 const anioConvenio = v =>
-  String(v.vigenciaDesde || v.fecha || hoyISO()).slice(0, 4) || String(new Date().getFullYear());
+  String(v.vigenciaHasta || v.vigenciaDesde || v.fecha || hoyISO()).slice(0, 4)
+  || String(new Date().getFullYear());
 
 /** El primer folio libre de un año, saltándose los que ya existan. */
 function folioLibre(anio, excluirId){
@@ -18053,6 +18078,57 @@ function engancharTextosAlDia(ov, v, alTerminar){
   };
 }
 
+/** El año que dice un folio, o "" si no trae uno con forma. */
+const anioDelFolio = f => (/^[A-Z]+-(\d{4})-/i.exec(String(f || "").trim()) || [])[1] || "";
+
+/**
+ * EL FOLIO DICE UN AÑO Y LA VIGENCIA OTRO.
+ *
+ * El folio nace cuando firma el hotel y toma el año de la vigencia de ese
+ * momento —ver `anioConvenio`—, pero el convenio se puede seguir editando
+ * hasta que firme el cliente. Así que todavía cabe: el hotel firma con la
+ * vigencia de este año, alguien la mueve al año que viene, y el folio se
+ * queda donde estaba.
+ *
+ * Y se queda a propósito: su número ya está apartado en el contador del hotel
+ * y puede andar impreso en un PDF que tiene el cliente. Moverlo por detrás
+ * sería peor —ver `folioIntocable`—.
+ *
+ * Lo que faltaba era que el CRM lo dijera. Es literalmente la pregunta que
+ * llegó: «aparece como 2026 por qué si es del 2027?».
+ */
+function avisoAnioDelFolio(v){
+  const delFolio = anioDelFolio(v.folio);
+  const deLaVigencia = anioConvenio(v);
+  if (!delFolio || delFolio === deLaVigencia) return "";
+  return `<div class="modal-body no-imprimir"><div class="note warn" style="margin:0">
+    <b>El folio dice ${esc(delFolio)} y la vigencia es de ${esc(deLaVigencia)}.</b>
+    El número se le puso cuando firmó el hotel, con la vigencia que tenía entonces;
+    la vigencia se movió después y el folio no se mueve solo —ya está apartado en el
+    contador del hotel y puede andar impreso en el PDF que tiene el cliente—.
+    <br><br>${esAdmin()
+      ? `Si el que manda es el año de la vigencia, córrigelo: el folio que se suelta
+         queda como hueco, no se reutiliza, y queda anotado en la bitácora del cliente.`
+      : `Si hay que corregirlo, pídeselo a la administración: es la única que puede
+         cambiarle el folio a un documento.`}
+    ${esAdmin() ? `<p style="margin:12px 0 0"><button class="btn" id="bCvFolioAviso">Corregir
+      el folio</button></p>` : ""}
+  </div></div>`;
+}
+
+/**
+ * El botón de corregir el folio. Sale uno u otro —el del aviso cuando el año
+ * no cuadra, el del pie el resto del tiempo—, nunca los dos, y los dos llaman
+ * a `corregirFolio`, que es quien trae los candados.
+ */
+function engancharCorregirFolioConv(ov, v, alCerrar){
+  const vuelve = () => { ov.remove(); verConvenio(v.id, alCerrar); };
+  for (const sel of ["#bCvFolio", "#bCvFolioAviso"]){
+    const b = ov.querySelector(sel);
+    if (b) b.onclick = () => corregirFolio(v, SERIES_FOLIO.convenios, vuelve);
+  }
+}
+
 function verConvenio(id, alCerrar, pedirFirma){
   const v = state.convenios.find(x => x.id === id);
   if (!v) return;
@@ -18064,6 +18140,10 @@ function verConvenio(id, alCerrar, pedirFirma){
   const agua = h.marcaAgua === "ninguna" ? ""
              : (h.marcaAgua === "logo" && h.logo) ? `<img src="${esc(h.logo)}" alt="">`
              : monogramaQ(MORADO_QUARTZ);
+  /* Se calcula una vez: decide si sale el aviso Y si hace falta el botón del
+     pie. Cuando el aviso está arriba trae el suyo, y dos botones iguales en
+     la misma ventana nada más estorban —ese pie ya va lleno—. */
+  const avisoAnio = avisoAnioDelFolio(v);
 
   const ov = modal(`
     <div class="modal doc">
@@ -18074,6 +18154,7 @@ function verConvenio(id, alCerrar, pedirFirma){
         <button class="btn" data-close>✕</button>
       </div>
       ${avisoTextosAtrasados(v, !v.firmaEmpresa && !v.firmaManual)}
+      ${avisoAnio}
       <div class="doc-body">
         ${agua ? `<div class="doc-agua">${agua}</div>` : ""}
         <div class="doc-contenido">${cuerpoConvenio(v, c)}</div>
@@ -18084,6 +18165,8 @@ function verConvenio(id, alCerrar, pedirFirma){
         <button class="btn" id="bPdfC">Descargar PDF</button>
         ${sePuedeEditar(v, "convenios") ? `<button class="btn" id="bEdit">Editar</button>` : ""}
         ${v.folioRepetido ? `<button class="btn danger" id="bRenum">Darle un folio nuevo</button>` : ""}
+        ${esAdmin() && v.folio && !avisoAnio ? `<button class="btn sm" id="bCvFolio"
+          title="Cuando el papel firmado trae otro número">Corregir el folio</button>` : ""}
         <div class="spacer"></div>
         ${!v.firmaHotel ? `<button class="btn ok" id="bF1">Firmar como ejecutivo</button>` : ""}
         ${v.firmaHotel && v.estado !== "firmado_cliente" ? `<button class="btn primary" id="bEnviar">Enviar al cliente</button>
@@ -18133,6 +18216,7 @@ function verConvenio(id, alCerrar, pedirFirma){
   };
 
   engancharTextosAlDia(ov, v, () => verConvenio(v.id, alCerrar, pedirFirma));
+  engancharCorregirFolioConv(ov, v, alCerrar);
 
   ov.querySelector("#bPrint").onclick = () => {
     fijarPagina(false);
@@ -18719,7 +18803,14 @@ function subirDocumentoExterno(tipoInicial, clientePre, alTerminar){
                          telefono:c.telefono, email:c.email } : null;
       const nombre = TIPOS_EXTERNO.find(t => t.id === tipo).name;
 
-      const anio = String(fecha).slice(0, 4);
+      /* El año sale de la FECHA del papel para todas las series menos una: un
+         convenio lo toma de su vigencia —del "hasta"—, igual que cuando nace
+         aquí dentro. Si no fuera así, un convenio de 2027 escaneado en 2026
+         repetiría el mismo error que se acaba de arreglar. Ver
+         `anioConvenio`; el objeto es el mismo que se guarda más abajo. */
+      const anio = tipo === "convenio"
+        ? anioConvenio({ fecha, vigenciaDesde: fecha, vigenciaHasta: vig })
+        : String(fecha).slice(0, 4);
 
       /* El número, antes de crear nada: si no se consigue, no se registra. Es
          la misma regla que al firmar, y por la misma razón. */

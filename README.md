@@ -272,6 +272,33 @@ el contador antes de ponerlo** —y se espera la respuesta, o volvería a repart
 en la bitácora del cliente con los dos números y el porqué. El número que se suelta no se
 recicla: queda como hueco y el libro de folios lo enseña.
 
+### El año del folio de un convenio es el de su vigencia
+
+Marco abrió un convenio y preguntó: *«CV-2026-101 aparece como 2026 por qué si es del 2027?»*. La
+contradicción estaba dentro del mismo documento, porque el año se sacaba **dos veces y de dos
+campos distintos**: el folio, de la **vigencia desde**; la carta —su `{{ANIO}}`— y la columna
+*Vigencia* de la lista, de la **vigencia hasta**.
+
+Un convenio nace con el *desde* en hoy y el *hasta* el 31 de diciembre de este año. El que se
+captura en noviembre para la temporada que viene se captura como siempre: se le mueve el *hasta*
+al año que entra y el *desde* se queda en la fecha de captura. Resultado: la carta decía 2027, la
+lista decía «hasta 31-dic-2027» y el folio decía 2026.
+
+Ahora **manda el *hasta***, que es además el único de los dos que se ve en pantalla, y el folio y
+el texto de la carta salen del mismo renglón de código: ya no pueden discrepar. Uno de enero a
+diciembre de 2026 sigue siendo 2026; uno que corre de noviembre de 2026 a diciembre de 2027 es de
+2027, que es lo que dice su propio texto. Vale para los tres caminos por los que un convenio toma
+número: la firma del ejecutivo, el que regresó firmado en papel, y el escaneado que se registra de
+fuera.
+
+Esto decide el año del **próximo** folio. Los ya repartidos **no se mueven solos**, y a propósito:
+el número está apartado en el contador del hotel y puede andar impreso en un PDF que tiene el
+cliente. Y queda un hueco que ninguna regla cierra, porque un convenio se puede editar hasta que
+firme el cliente: el hotel firma con la vigencia de este año y alguien la mueve al que entra. Para
+ése, la carta ahora **lo dice** —«el folio dice 2026 y la vigencia es de 2027»— y le ofrece a la
+administración **Corregir el folio**, el mismo de los contratos y con los mismos candados. A quien
+no es administración le dice a quién pedirlo.
+
 ### Descargado para firma · cuando el convenio sale por fuera
 
 El CRM sólo sabía de un camino para que un convenio llegara al cliente: mandarlo por correo o por
