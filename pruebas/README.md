@@ -39,6 +39,7 @@ node pruebas/navegador/copiar-es-enviar.mjs          # copiar el enlace es manda
 node pruebas/navegador/folios-repetidos.mjs          # dos documentos con el mismo folio
 node pruebas/navegador/copiar-el-sql.mjs             # el .sql llega entero
 node pruebas/navegador/el-anio-del-convenio.mjs      # el folio toma el año de la vigencia
+node pruebas/navegador/filtrar-por-ejecutivo.mjs     # ver sólo lo de una persona
 node pruebas/navegador/certificados.mjs             # el folio no se repite y quién emite
 node pruebas/navegador/arranque.mjs                 # que la aplicación abra
 node pruebas/navegador/no-se-pierde-lo-escrito.mjs  # guardar guarda de verdad
@@ -81,6 +82,15 @@ que ya trae otro documento ni uno de otra serie, que el número corregido quede 
 contador, y que una ejecutiva no pueda hacerlo. Sus grupos de control son lo que no puede
 romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
 borradores que de verdad chocan se siguen arreglando solos.
+
+`filtrar-por-ejecutivo.mjs` cuida el filtro por persona en las listas de convenios y contratos.
+Mide que filtre por **lo mismo que imprime la columna Ejecutivo** —incluido el documento que
+levantó una persona para el cliente de otra—, que la cuenta y el vacío digan que hay filtro puesto
+y cómo quitarlo, y que los avisos de folio repetido y de documento sin cliente **no se escondan**
+detrás de él. El grupo de control que no se puede romper es el último: a un ejecutivo el select no
+se le enseña y su lista le sale **completa**, aunque el filtro traiga un nombre de otra pantalla.
+Un filtro que muerde donde su control no se ve vacía la lista sin manera de vaciarlo, que es
+exactamente lo que ya pasó una vez con la caja de búsqueda.
 
 `el-anio-del-convenio.mjs` nace de una pregunta de Marco: «CV-2026-101 aparece como 2026 por qué
 si es del 2027?». El año del folio salía de la **vigencia desde** y el de la carta de la

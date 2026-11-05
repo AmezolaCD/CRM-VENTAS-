@@ -22,7 +22,7 @@ const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
 const RAIZ   = path.dirname(APP);
 const PUERTO = 8804;
 const CHROME = process.env.CHROME_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  '/opt/pw-browsers/chromium';
 
 /* El contador del hotel. `vivo` en false es un servidor sin folios.sql. */
 let vivo = true, siguiente = 7;

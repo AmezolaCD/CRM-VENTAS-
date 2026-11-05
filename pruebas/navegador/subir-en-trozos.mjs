@@ -42,7 +42,7 @@ import fs from 'node:fs';
 const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
 const PUERTO = 8866;
 const CHROME = process.env.CHROME_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  '/opt/pw-browsers/chromium';
 
 /* --------------------------------------------------------------------------
    El servidor de mentiras, con el genio de Supabase: si el lote trae más de

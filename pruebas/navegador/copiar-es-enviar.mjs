@@ -19,7 +19,7 @@ import fs from 'node:fs';
 const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
 const PUERTO = 8800;
 const CHROME = process.env.CHROME_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  '/opt/pw-browsers/chromium';
 
 const srv = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');

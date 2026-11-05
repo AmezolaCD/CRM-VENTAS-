@@ -46,7 +46,7 @@ import path from 'node:path';
 const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
 const PUERTO = 8881;
 const CHROME = process.env.CHROME_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  '/opt/pw-browsers/chromium';
 
 const srv = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type':'text/html; charset=utf-8' });

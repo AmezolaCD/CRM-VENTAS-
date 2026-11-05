@@ -35,7 +35,7 @@ import fs from 'node:fs';
 const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
 const PUERTO = 8869;
 const CHROME = process.env.CHROME_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  '/opt/pw-browsers/chromium';
 
 /* El servidor de mentiras lleva una huella que se puede cambiar a mano: es
    justo lo que hace una publicación nueva. */

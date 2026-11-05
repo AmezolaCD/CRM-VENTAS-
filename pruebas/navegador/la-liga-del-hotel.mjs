@@ -28,7 +28,7 @@ import fs from 'node:fs';
 const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
 const PUERTO = 8828;
 const CHROME = process.env.CHROME_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  '/opt/pw-browsers/chromium';
 
 /* Una dirección y una llave INVENTADAS, con la forma de las de verdad: la
    llave anon es un JWT y la aplicación le lee el `ref` adentro. */

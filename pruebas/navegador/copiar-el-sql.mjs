@@ -23,7 +23,7 @@ const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
 const RAIZ   = '/home/user/CRM-VENTAS-';
 const PUERTO = 8803;
 const CHROME = process.env.CHROME_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  '/opt/pw-browsers/chromium';
 
 /* Qué contesta el servidor: 'falta' → no está montado; 'ok' → sí. */
 let estado = 'falta';

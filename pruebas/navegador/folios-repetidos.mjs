@@ -19,7 +19,7 @@ import fs from 'node:fs';
 const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
 const PUERTO = 8802;
 const CHROME = process.env.CHROME_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  '/opt/pw-browsers/chromium';
 
 /* El contador del hotel, que es quien reparte los números nuevos. */
 let siguiente = 20;

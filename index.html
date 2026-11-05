@@ -1052,7 +1052,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.03-2";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.05-1";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -7878,6 +7878,26 @@ const loQueBuscan = () => String(filtros.q || "").trim().toLowerCase();
 const coincide = (q, ...partes) =>
   !q || partes.filter(Boolean).join(" ").toLowerCase().includes(q);
 
+/** ¿Está puesto el filtro por persona, y muerde aquí? Ver `delEjecutivo`. */
+const filtrandoEjecutivo = () => !!(puedeVerTodo() && filtros.ejecutivo);
+
+/**
+ * Lo que va después de la cuenta: por qué la lista sale así de corta.
+ * «3 en total», «3 que coinciden con «CV»», «3 de Alicia Rocha», o las dos.
+ */
+function recorte(q){
+  const partes = [];
+  if (q) partes.push(`que coinciden con «${esc(q)}»`);
+  if (filtrandoEjecutivo()) partes.push(`de ${esc(filtros.ejecutivo)}`);
+  return partes.length ? " " + partes.join(" ") : " en total";
+}
+
+/** Y en el vacío, que el filtro por persona se puede quitar. */
+const notaFiltroEje = () => filtrandoEjecutivo()
+  ? `<br>Se está viendo sólo lo de <b>${esc(filtros.ejecutivo)}</b>; el filtro de arriba
+     lo quita.`
+  : "";
+
 /**
  * ¿Este documento perdió a su cliente?
  *
@@ -7953,7 +7973,13 @@ function render(){
     ["contratos","convenios","eventos","contratosbq"].includes(vista)
       ? "Buscar folio, cliente, título…"
       : "Buscar empresa, contacto, teléfono…";
-  const porEjecutivo = vista === "tablero" || vista === "clientes";
+  /* Y el filtro por persona: en el tablero y en la cartera como siempre, y
+     además en las dos listas de documentos —pero sólo para quien ve el
+     trabajo de todo el equipo, que es exactamente a quien ya se le pone la
+     columna Ejecutivo—. A un ejecutivo su lista ya trae sólo lo suyo: el
+     filtro sería un control que no hace nada. Ver `delEjecutivo`. */
+  const porEjecutivo = ["tablero","clientes"].includes(vista) ||
+                       (["convenios","contratos"].includes(vista) && puedeVerTodo());
   document.getElementById("q").style.display      = buscando ? "" : "none";
   document.getElementById("fEje").style.display   = porEjecutivo ? "" : "none";
   document.getElementById("bNuevo").style.display =
@@ -8228,21 +8254,24 @@ const nombresConvenio = v => v.habitaciones
 function renderConvenios(){
   const cont = document.getElementById("tblConvenios");
   const q = loQueBuscan();
-  const vs = state.convenios.filter(convenioEsMio)
+  const mios = state.convenios.filter(convenioEsMio);
+  const vs = mios
+    .filter(v => delEjecutivo(ejecutivoDe(v)))
     .filter(v => coincide(q, v.folio, nombreCli(v.clienteId), ejecutivoDe(v),
                           nombresConvenio(v)))
     .sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   // A un ejecutivo la columna le diría siempre lo mismo: sólo se pone a quien ve a varios.
   const conEje = puedeVerTodo();
-  const repetidos = vs.filter(v => v.folioRepetido);
-  /* Sobre TODA la lista, no sobre la filtrada: un documento suelto no se
-     puede esconder detrás de una búsqueda. */
-  const sueltos = state.convenios.filter(convenioEsMio).filter(sinCliente);
+  /* Los dos avisos salen de TODA la lista de uno, no de la filtrada: ni un
+     documento suelto ni un folio repetido se pueden esconder detrás de una
+     búsqueda ni detrás del filtro por persona. */
+  const repetidos = mios.filter(v => v.folioRepetido);
+  const sueltos = mios.filter(sinCliente);
   const cab = avisoSinCliente(sueltos) +
     avisoFoliosRepetidos(SERIES_FOLIO.convenios, repetidos) + `
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
       <b style="font-size:15px">Convenios</b><span class="hint">${
-        vs.length}${q ? " que coinciden con «" + esc(q) + "»" : " en total"}</span>
+        vs.length}${recorte(q)}</span>
       <span style="flex:1"></span>
       <button class="btn" id="bSubirExtConv">Subir uno firmado</button>
       <button class="btn primary" id="bNuevoConv">+ Nuevo convenio</button></div>`;
@@ -8250,7 +8279,10 @@ function renderConvenios(){
   if (!vs.length){
     cont.innerHTML = cab + (q
       ? `<div class="vacio">Ningún convenio coincide con <b>${esc(q)}</b>.<br>
-          Se busca por folio, cliente, ejecutivo o tipo de habitación.</div>`
+          Se busca por folio, cliente, ejecutivo o tipo de habitación.${notaFiltroEje()}</div>`
+      : filtrandoEjecutivo()
+      ? `<div class="vacio">Ningún convenio es de <b>${esc(filtros.ejecutivo)}</b>.<br>
+          El filtro de arriba lo quita.</div>`
       : `<div class="vacio">Todavía no hay convenios.<br>
           Se crean desde aquí o desde la ficha de un cliente.</div>`);
   } else {
@@ -8300,7 +8332,10 @@ function renderConvenios(){
    * Se renumeran TODOS menos el más viejo de cada folio: el primero se queda
    * con el número, que es el que ya anda circulando desde hace más tiempo.
    */
-  engancharRenumTodos(cont, SERIES_FOLIO.convenios, vs, repetidos);
+  /* `mios`, no la lista filtrada: de cada folio repetido se respeta al más
+     viejo, y si el más viejo está escondido detrás de la búsqueda o del
+     filtro por persona se renumeraría al que no era. */
+  engancharRenumTodos(cont, SERIES_FOLIO.convenios, mios, repetidos);
   engancharLigarSueltos(cont, sueltos, "Convenio");
 
   cont.querySelector("#bNuevoConv").onclick = () => editarConvenio(null);
@@ -16228,6 +16263,21 @@ function renderMktDash(){
 const ejecutivoDe = v => String(v.ejecutivo || "").trim() ||
   String((cliente(v.clienteId) || {}).ejecutivo || "").trim();
 
+/**
+ * El filtro de arriba —el select «Todos»—, aplicado a un documento.
+ *
+ * Se compara contra LO MISMO QUE IMPRIME LA COLUMNA Ejecutivo, para que la
+ * lista y la columna no puedan decir cosas distintas.
+ *
+ * El `puedeVerTodo()` no es de más: `filtros.ejecutivo` sobrevive al cambio de
+ * pestaña, y el select sólo se enseña donde esa pregunta tiene sentido. Un
+ * filtro que muerde donde su control no se ve deja la lista vacía sin manera
+ * de vaciarlo, que es el mismo tropiezo que ya tiene su aviso escrito para la
+ * caja de búsqueda —ver `buscando`, en `render`—.
+ */
+const delEjecutivo = quien =>
+  !puedeVerTodo() || !filtros.ejecutivo || quien === filtros.ejecutivo;
+
 const convenioEsMio = v => puedeVerTodo() ||
   (!!miNombre().trim() && ejecutivoDe(v).toLowerCase() === miNombre().trim().toLowerCase()) ||
   esMio(cliente(v.clienteId) || {});
@@ -17089,21 +17139,24 @@ function renderContratos(){
      `loQueBuscan`. Faltaba, y se notó el día que regresó un contrato firmado
      con su número impreso y no había dónde teclearlo. */
   const q = loQueBuscan();
-  const ks = state.contratos.filter(contratoEsMio)
+  const mios = state.contratos.filter(contratoEsMio);
+  const ks = mios
+    .filter(k => delEjecutivo(ejecutivoDeCt(k)))
     .filter(k => coincide(q, k.folio, nombreCli(k.clienteId), k.titulo,
                           infoTipoCt(k.tipo).name))
     .sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const conEje = puedeVerTodo();
-  const repetidos = ks.filter(k => k.folioRepetido);
-  /* Sobre TODA la lista, no sobre la filtrada: un documento suelto no se puede
-     esconder detrás de una búsqueda. */
-  const sueltos = state.contratos.filter(contratoEsMio).filter(sinCliente);
+  /* Los dos avisos salen de TODA la lista de uno, no de la filtrada: ni un
+     documento suelto ni un folio repetido se pueden esconder detrás de una
+     búsqueda ni detrás del filtro por persona. */
+  const repetidos = mios.filter(k => k.folioRepetido);
+  const sueltos = mios.filter(sinCliente);
 
   const cab = avisoSinCliente(sueltos) +
     avisoFoliosRepetidos(SERIES_FOLIO.contratos, repetidos) +
     `<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
       <b style="font-size:15px">Contratos y cotizaciones</b>
-      <span class="hint">${ks.length}${q ? " que coinciden con «" + esc(q) + "»" : " en total"}</span>
+      <span class="hint">${ks.length}${recorte(q)}</span>
       <span style="flex:1"></span>
       <button class="btn" id="bSubirExtCt">Subir uno firmado</button>
       <button class="btn primary" id="bNuevoCt">+ Nuevo contrato</button></div>
@@ -17116,7 +17169,10 @@ function renderContratos(){
       ? `<div class="vacio">Ningún contrato coincide con <b>${esc(q)}</b>.<br>
           Se busca por folio, cliente o título. Si el folio que traes no sale, puede estar
           a nombre de otra persona: revísalo en <i>El libro de folios</i>, en
-          Ajustes → Nube y equipo.</div>`
+          Ajustes → Nube y equipo.${notaFiltroEje()}</div>`
+      : filtrandoEjecutivo()
+      ? `<div class="vacio">Ningún contrato ni cotización es de
+          <b>${esc(filtros.ejecutivo)}</b>.<br>El filtro de arriba lo quita.</div>`
       : `<div class="vacio">Todavía no hay contratos.<br>
           Se crean desde aquí o desde la ficha de un cliente.</div>`);
   } else {
@@ -17156,7 +17212,8 @@ function renderContratos(){
       editarContrato(tr.dataset.id);
     }));
   }
-  engancharRenumTodos(cont, SERIES_FOLIO.contratos, ks, repetidos);
+  // `mios`, no la filtrada: ver la misma nota en `renderConvenios`.
+  engancharRenumTodos(cont, SERIES_FOLIO.contratos, mios, repetidos);
   engancharLigarSueltos(cont, sueltos, "Documento");
   cont.querySelector("#bNuevoCt").onclick = () => editarContrato(null);
   cont.querySelector("#bSubirExtCt").onclick = () => subirDocumentoExterno("cotizacion");

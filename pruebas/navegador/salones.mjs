@@ -27,7 +27,7 @@ import fs from 'node:fs';
 const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
 const PUERTO = 8811;
 const CHROME = process.env.CHROME_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  '/opt/pw-browsers/chromium';
 
 /* Servidor de mentiras: la aplicación y un crm_datos en memoria, para poder
    comprobar que el catálogo viaja a los demás equipos. */

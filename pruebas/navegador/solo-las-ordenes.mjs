@@ -36,7 +36,7 @@ const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
 const SQL    = process.env.ROLES_SQL || '/home/user/CRM-VENTAS-/roles.sql';
 const PUERTO = 8839;
 const CHROME = process.env.CHROME_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  '/opt/pw-browsers/chromium';
 
 const srv = http.createServer((q, r) => {
   r.writeHead(200, { 'Content-Type':'text/html; charset=utf-8' });

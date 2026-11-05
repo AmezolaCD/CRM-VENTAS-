@@ -50,7 +50,7 @@ import fs from 'node:fs';
 const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
 const PUERTO = 8871;
 const CHROME = process.env.CHROME_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  '/opt/pw-browsers/chromium';
 
 /* Una imagen de firma de mentiras, para poder afirmar que NO se imprime. */
 const IMG = 'data:image/png;base64,SOLOPARALAPRUEBA';

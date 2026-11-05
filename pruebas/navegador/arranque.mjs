@@ -27,7 +27,7 @@ import fs from 'node:fs';
 const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
 const PUERTO = 8809;
 const CHROME = process.env.CHROME_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  '/opt/pw-browsers/chromium';
 const STORE = 'crm-hotel-v3';
 
 /* El archivo se sirve tal cual; /roto sirve el mismo con una bomba metida al

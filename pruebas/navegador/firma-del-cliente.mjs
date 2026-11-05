@@ -34,7 +34,7 @@ const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
 const PUERTO = 8793;
 const FOTOS  = process.argv.includes('--fotos');
 const CHROME = process.env.CHROME_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  '/opt/pw-browsers/chromium';
 
 const CONVENIO = {
   id:'v1', folio:'CV-2026-040', tokenFirma:'laclave', clienteId:'c1',

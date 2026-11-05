@@ -372,6 +372,34 @@ contratos se le puso la búsqueda por folio, la caja quedó escondida en esa pan
 documentos desaparecían por un cuadro de texto que nadie podía vaciar. Hay una prueba dedicada a
 eso.
 
+### Filtrar convenios y contratos por ejecutivo
+
+Marco: *«haz que los convenios y contratos el administrador y la gerente de ventas lo puedan
+filtrar por ejecutivo»*.
+
+El filtro es el **mismo select «Todos» de arriba** que ya se usa en el tablero y en la cartera —no
+hay un control nuevo que aprender—, y ahora también se enseña en **Convenios** y en **Contratos y
+cotizaciones**. Filtra por lo mismo que imprime la columna *Ejecutivo*: lo que diga el propio
+documento y, si no dice nada, el dueño del cliente. Así un convenio que levantó una persona para
+el cliente de otra sale con quien lo levantó, que es lo que la columna ya decía.
+
+Se le enseña a quien ve el trabajo de todo el equipo —administración, dirección y las tres
+gerencias—, que es exactamente a quien ya se le pone esa columna. A un ejecutivo no: su lista ya
+trae sólo lo suyo y el filtro sería un control que no hace nada.
+
+Dos cuidados que no son de adorno:
+
+- **Si el filtro muerde, su control se tiene que ver.** Lo escogido sobrevive al cambio de
+  pestaña, así que un filtro activo en una pantalla sin select dejaría la lista vacía sin manera
+  de vaciarlo. Es la misma lección que la caja de búsqueda, y tiene su prueba.
+- **Los avisos no se esconden detrás del filtro.** El de folio repetido y el de documento sin
+  cliente salen de toda la lista de uno, no de la filtrada: un papel con problema no se puede
+  esconder detrás de una persona. Y el botón de renumerar mira también la lista completa, porque
+  de cada folio repetido respeta al más viejo y el más viejo podía estar filtrado.
+
+La cuenta de arriba y los mensajes de lista vacía dicen que hay un filtro puesto y cómo quitarlo:
+«Todavía no hay convenios» sería mentira con un filtro encima.
+
 ### Varias tarifas en un mismo convenio
 
 Hay empresas cuyos huéspedes escogen: unos con desayuno y otros sin él. Y no son dos opciones,

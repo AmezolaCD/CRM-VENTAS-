@@ -48,7 +48,7 @@ import fs from 'node:fs';
 const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
 const PUERTO = 8873;
 const CHROME = process.env.CHROME_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  '/opt/pw-browsers/chromium';
 const ANIO   = new Date().getFullYear();
 
 /* El servidor de mentiras. Guarda lo que le suben, para poder preguntarle

@@ -30,7 +30,7 @@ const APP    = process.env.APP_HTML || '/home/user/CRM-VENTAS-/index.html';
 const SQL    = '/home/user/CRM-VENTAS-/firmas.sql';
 const PUERTO = 8794;
 const CHROME = process.env.CHROME_PATH ||
-  '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  '/opt/pw-browsers/chromium';
 
 /* Qué contesta el servidor cuando se le pregunta por el buzón:
    'falta'  → 404, como un proyecto donde firmas.sql nunca se corrió
