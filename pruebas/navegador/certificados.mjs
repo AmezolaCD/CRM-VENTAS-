@@ -181,7 +181,12 @@ await bloque('3 · no se emite sin nombre ni sin vencimiento', async () => {
   afirma('y reclama hasta cuándo vale', /hasta cu[aá]ndo/i.test(r.sinFecha));
 });
 
-await bloque('4 · sólo lo ve quien lo puede emitir', async () => {
+/* Esta regla cambió el 5 de noviembre, y a petición de Marco: «la pestaña de
+   certificados a la gerente de ventas y a los ejecutivos no les aparece, a mí
+   como administrador sí». Un certificado es herramienta de venta, así que
+   ahora VIENE CON EL PAPEL para ventas y dirección. Ver
+   `ROLES_CON_CERTIFICADOS` y la suite `certificados-para-ventas.mjs`. */
+await bloque('4 · en ventas viene con el papel; fuera de ventas, no', async () => {
   const ve = () => p.evaluate(() => ({
     pestaña: puedeVer('certificados'),
     boton: document.querySelector('nav button[data-view="certificados"]').style.display,
@@ -189,16 +194,25 @@ await bloque('4 · sólo lo ve quien lo puede emitir', async () => {
   }));
   await entrarComo('carmen@ejemplo.example', 'ejecutivo', true);
   const carmen = await ve();
-  afirma('Carmen, con la palomita, sí', carmen.pestaña && carmen.puede && carmen.boton !== 'none');
+  afirma('Carmen, ejecutiva de ventas, sí', carmen.pestaña && carmen.puede && carmen.boton !== 'none');
 
   await entrarComo('eduardo@ejemplo.example', 'ejecutivo', false);
   const eduardo = await ve();
-  afirma('Eduardo, sin la palomita, NO la alcanza', !eduardo.pestaña && !eduardo.puede);
-  afirma('y ni el botón de la pestaña se le enseña', eduardo.boton === 'none');
+  afirma('Y EDUARDO TAMBIÉN, SIN PALOMITA: es de ventas igual que ella',
+    eduardo.pestaña && eduardo.puede);
+  afirma('con su botón a la vista', eduardo.boton !== 'none');
 
   await entrarComo('admin@ejemplo.example', 'admin', false);
   const admin = await ve();
   afirma('la administración siempre puede, con palomita o sin ella', admin.puede);
+
+  /* El grupo de control: fuera de ventas la pestaña no está en la lista del
+     papel, así que no la alcanza —y nunca la alcanzó, con palomita o sin
+     ella—. */
+  await entrarComo('celia@ejemplo.example', 'banquetes', true);
+  const celia = await ve();
+  afirma('BANQUETES NO LA ALCANZA NI CON PALOMITA', !celia.pestaña);
+  afirma('y ni el botón se le enseña', celia.boton === 'none');
 });
 
 await bloque('5 · la palomita no nace en todas las fichas', async () => {
@@ -529,11 +543,19 @@ await bloque('14 · sin sesión todavía, nadie se vuelve administrador', async 
      que es la pantalla de los datos del hotel y de los permisos de todos. */
   afirma('ni la de Ajustes', !r.sinSesion.vistas.includes('ajustes'));
 
-  afirma('con la sesión puesta sigue sin certificados, que es lo correcto',
-    r.conSesion.cert === false);
-  afirma('Y NO CAMBIA ENTRE UN MOMENTO Y OTRO: se acabó el parpadeo',
-    r.sinSesion.cert === r.conSesion.cert &&
-    r.sinSesion.vistas.includes('certificados') === r.conSesion.vistas.includes('certificados'));
+  /* Carmen es ejecutiva de VENTAS, y desde el 5 de noviembre eso ya trae los
+     certificados puestos —ver `ROLES_CON_CERTIFICADOS`—. Así que con la sesión
+     puesta sí los tiene. */
+  afirma('con la sesión puesta sí los tiene, porque es de ventas',
+    r.conSesion.cert === true);
+  /* Y aquí está la regla que de verdad importa, la que no puede romperse
+     nunca: antes de saber quién entró se puede enseñar DE MENOS —eso se
+     acomoda solo al identificarse— pero jamás DE MÁS. El parpadeo que
+     reportó Carmen era el de más: pestañas de administradora que se le
+     quitaban delante de los ojos. */
+  afirma('NUNCA ENSEÑA DE MÁS ANTES DE SABER QUIÉN ES',
+    !(r.sinSesion.cert && !r.conSesion.cert) &&
+    r.sinSesion.vistas.every(v => r.conSesion.vistas.includes(v)));
 
   afirma('UNA COPIA SUELTA DE VERDAD SIGUE PUDIENDO TODO',
     r.suelta.rol === 'admin' && r.suelta.cert === true);

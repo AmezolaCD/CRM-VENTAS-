@@ -40,6 +40,7 @@ node pruebas/navegador/folios-repetidos.mjs          # dos documentos con el mis
 node pruebas/navegador/copiar-el-sql.mjs             # el .sql llega entero
 node pruebas/navegador/el-anio-del-convenio.mjs      # el folio toma el año de la vigencia
 node pruebas/navegador/filtrar-por-ejecutivo.mjs     # ver sólo lo de una persona
+node pruebas/navegador/certificados-para-ventas.mjs  # quién los puede emitir
 node pruebas/navegador/certificados.mjs             # el folio no se repite y quién emite
 node pruebas/navegador/arranque.mjs                 # que la aplicación abra
 node pruebas/navegador/no-se-pierde-lo-escrito.mjs  # guardar guarda de verdad
@@ -82,6 +83,15 @@ que ya trae otro documento ni uno de otra serie, que el número corregido quede 
 contador, y que una ejecutiva no pueda hacerlo. Sus grupos de control son lo que no puede
 romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
 borradores que de verdad chocan se siguen arreglando solos.
+
+`certificados-para-ventas.mjs` cuida las dos mitades de lo que reportó Marco el mismo día. La
+primera: que la Gerencia de ventas, los ejecutivos y la dirección **vean la pestaña** sin que
+nadie les prenda nada, y que en Ajustes su casilla salga prendida y apagada —y que guardar **no
+les escriba la llave**, que haría verse editada una ficha que no cambió—. La segunda levanta un
+servidor de mentiras al que se le puede pedir que **rebote** la lista de usuarios, como hace
+PostgREST con `roles.sql` puesto: se exige que «Guardar usuarios» espere, que **no diga que subió**
+cuando no subió, y que sí lo diga cuando sí. Su grupo de control es banquetes: sigue sin
+certificados, con palomita o sin ella, porque la pestaña no está en la lista de su papel.
 
 `filtrar-por-ejecutivo.mjs` cuida el filtro por persona en las listas de convenios y contratos.
 Mide que filtre por **lo mismo que imprime la columna Ejecutivo** —incluido el documento que

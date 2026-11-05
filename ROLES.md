@@ -1,17 +1,28 @@
 # Quién ve qué
 
-## Una palomita que no es un papel: los certificados
+## Los certificados vienen con el papel, en ventas
 
-Emitir un certificado de cortesía **no depende del papel sino de la persona**. Un certificado
-regala una noche, un masaje o un consumo: cuesta dinero, y el hotel escoge a quién se lo deja a
-mano. Por eso hay una columna **«Cert.»** en *Ajustes → Usuarios y permisos*, y no un papel nuevo.
+Un certificado de cortesía regala una noche, un masaje o un consumo. Durante un tiempo se trató
+como una excepción que el hotel concedía de a una: una columna **«Cert.»** en *Ajustes →
+Usuarios y permisos*, por persona, con la administración siempre adentro.
 
-- Quien la tiene prendida puede emitir. **La administración siempre puede**, con palomita o sin ella.
-- **A quien no la tiene no se le enseña la pestaña**: para esa cuenta es como si no existiera.
-- Se cambia desde Ajustes, sin tocar código.
+No funcionó, y Marco lo encontró de la peor manera: *«la pestaña de certificados a la gerente de
+ventas y a los ejecutivos no les aparece, a mí como administrador sí»*. Un certificado es
+**herramienta de venta** —se regala una noche para cerrar un trato—, así que pedirle permiso a
+alguien para usarlo es estorbar la venta.
+
+Ahora **viene con el papel** para los cuatro que ya tienen la pestaña entre las suyas:
+administración, dirección, Gerencia de ventas y Ejecutivo de ventas. En *Ajustes* su casilla sale
+**prendida y apagada**: no hay nada que prenderles.
+
+Y los demás papeles —banquetes, marketing, prospección, órdenes de trabajo— llevan un **—** en esa
+columna, porque la verdad es que la palomita nunca les sirvió: la pestaña **no está en su lista de
+pestañas**, así que prendida o apagada no la veían. Ofrecerles un permiso que no hacía nada es lo
+que mandó a Marco a buscar el problema donde no estaba. Si algún día banquetes tiene que emitir,
+lo que hay que mover es su lista de pestañas, no una casilla.
 
 **Es candado de aplicación, no de servidor**, igual que el resto de esta pantalla: quien supiera
-entrar por fuera podría escribir un certificado aunque no tenga la palomita. Para cerrarlo de
+entrar por fuera podría escribir un certificado aunque su papel no lo lleve. Para cerrarlo de
 verdad falta una regla en `roles.sql`.
 
 ## Los papeles

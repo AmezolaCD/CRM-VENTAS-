@@ -1052,7 +1052,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.05-1";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.05-2";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -1814,6 +1814,23 @@ const ROLES = [
      mandaría ni una orden. Está explicado en ROLES.md. */
   { id:"odts", name:"Órdenes de trabajo", ayuda:"Sólo las órdenes de trabajo que los departamentos le piden a marketing: recibirlas, moverlas y cerrarlas. No ve la cartera, ni las campañas, ni los prospectos, ni los Ajustes." }
 ];
+/**
+ * LOS PAPELES QUE TRAEN LOS CERTIFICADOS PUESTOS.
+ *
+ * Marco: «la pestaña de certificados a la gerente de ventas y a los ejecutivos
+ * no les aparece, a mí como administrador sí; ajústalo».
+ *
+ * Un certificado de cortesía es una herramienta de venta —se regala una noche
+ * o un masaje para cerrar un trato—, así que quien vende tiene que poder
+ * emitirlo sin que alguien le prenda un permiso primero. Va también la
+ * dirección, que ya alcanza todas las pestañas que alcanzan ellos: dejarla
+ * fuera sería estrenar la misma incoherencia que se está arreglando.
+ *
+ * Para banquetes y marketing sigue mandando la palomita de Ajustes: ahí sí es
+ * una excepción que el hotel concede de a una.
+ */
+const ROLES_CON_CERTIFICADOS = ["admin", "direccion", "gerente", "ejecutivo"];
+
 /* Un papel que no se reconoce cae en el más prudente, no en el primero de la
    lista: más vale que alguien se queje de que no ve nada. */
 const infoRol = id => ROLES.find(r => r.id === id) || ROLES.find(r => r.id === "ejecutivo");
@@ -2099,17 +2116,39 @@ function saneaUsuario(u){
 /**
  * ¿Esta persona puede emitir certificados de cortesía?
  *
- * La administración siempre. Los demás, sólo si alguien les prendió la
- * palomita en Ajustes → Usuarios. Quien no puede ni ve la pestaña.
+ * Los papeles de ventas y la dirección, siempre —ver `ROLES_CON_CERTIFICADOS`,
+ * que explica por qué—. Los demás, sólo si alguien les prendió la palomita en
+ * Ajustes → Usuarios. Quien no puede ni ve la pestaña.
  */
 const puedeCertificados = () => {
   // `nubeConfigurada` y no `nubeActiva`: suelto de verdad, no «todavía sin
   // sesión». Ver el comentario de `nubeConfigurada`.
   if (!nubeConfigurada()) return true;     // suelto, en una sola máquina, manda quien la usa
-  if (esAdmin()) return true;
+  /* El papel se lee de la FICHA, no de `rolActual()`: mientras la sesión se
+     restaura —y en cada renovación del token— no se sabe quién entró, y
+     `rolActual()` cae a «ejecutivo», que ahora sí lleva certificados. Con eso
+     la pestaña se le asomaría a cualquiera durante un instante y se le
+     quitaría delante de los ojos: es exactamente el parpadeo que reportó
+     Carmen. Sin saber quién es, no se regala nada. */
   const u = usuarioActual();
-  return !!(u && u.certificados);
+  if (!u) return false;
+  return ROLES_CON_CERTIFICADOS.includes(u.rol) || !!u.certificados;
 };
+
+/** ¿A este papel le vienen puestos, sin palomita que prender? */
+const rolTraeCertificados = rol => ROLES_CON_CERTIFICADOS.includes(rol);
+
+/**
+ * ¿La pestaña de certificados le toca siquiera a este papel?
+ *
+ * No a todos: banquetes, marketing, prospección y órdenes de trabajo no la
+ * traen en su lista de pestañas, y la palomita de Ajustes no se la daba —ni
+ * se la daba antes de este cambio—. A ésos la casilla les ofrecía un permiso
+ * que no servía de nada, y eso es justo lo que mandó a Marco a buscar una
+ * palomita que no era el problema. Ahora la columna lo dice.
+ */
+const rolVeCertificados = rol =>
+  (VISTAS_ROL[rol] || VISTAS_ROL.ejecutivo).includes("certificados");
 
 /**
  * La firma del ejecutivo se traza una vez y se vuelve a usar.
@@ -6634,11 +6673,37 @@ async function revisarPermisos(){
   };
 }
 
-/** Sube la lista de usuarios aunque no haya cambiado. Sólo puede el administrador. */
+/** Los usuarios que el servidor todavía no tiene como están aquí. */
+const usuariosSinSubir = () => state.usuarios.filter(u =>
+  sincronizado.get("usuarios:" + u.id) !== JSON.stringify(u));
+
+/**
+ * Sube la lista de usuarios aunque no haya cambiado, y NO VUELVE HASTA SABER
+ * EN QUÉ ACABÓ. Sólo puede el administrador.
+ *
+ * Lo segundo hace falta porque `sincronizar` se sale en seco si ya hay otra
+ * vuelta corriendo —`sincronizando`—, y una siempre anda cerca: cada
+ * `guardar()` deja una programada a los 400 ms. Con un solo `await` esto
+ * podía volver sin haber mandado nada y quien llamara daría por subida una
+ * lista que no salió del equipo. Es media explicación de «se quitaron solas»:
+ * la pantalla decía que sí, el servidor seguía con la lista vieja y el
+ * siguiente equipo que se pusiera al día la traía de vuelta.
+ *
+ * `sincronizado` es la prueba: ahí sólo entra lo que el servidor aceptó.
+ */
 async function empujarUsuarios(){
   for (const u of state.usuarios) sincronizado.delete("usuarios:" + u.id);
-  await sincronizar();
+  for (let i = 0; i < 20; i++){
+    await sincronizar();
+    if (!usuariosSinSubir().length) break;
+    if (nube.estado === "error" || nube.estado === "rechazado") break;
+    await new Promise(r => setTimeout(r, 250));
+  }
   if (nube.estado === "error") throw new Error(nube.error || "sin detalle");
+  const faltan = usuariosSinSubir();
+  if (faltan.length)
+    throw new Error(`el servidor no se quedó con ${faltan.length} de los ` +
+      `${state.usuarios.length} renglones de la lista`);
 }
 
 /** Vuelve a traerlo todo desde cero, sin el corte de "sólo lo nuevo". */
@@ -10212,8 +10277,10 @@ function renderAjustes(){
         y en un cliente importado dice “C. Sotelo”, ese cliente queda sin dueño y aparece
         más abajo, en <i>Nombres que no son de nadie</i>.</div>
       <div class="note"><b>La columna «Cert.»</b> es quién puede emitir certificados de
-        cortesía. A quien no la tenga no se le enseña siquiera la pestaña. La administración
-        siempre puede.</div>
+        cortesía. <b>Ventas y dirección los traen puestos</b> —administración, Gerencia de
+        ventas y ejecutivos de ventas—: su casilla sale prendida y no se puede apagar, porque
+        un certificado es herramienta de venta. Los demás papeles llevan un
+        <b>—</b>: la pestaña no está entre las suyas y prenderles algo aquí no se la daría.</div>
       <div class="note warn"><b>Esto acomoda lo que cada quien ve en pantalla.</b>
         Los datos siguen viajando completos a cada equipo, así que alguien con conocimientos
         podría leerlos de todas formas. Para que el servidor mismo se los niegue falta un paso
@@ -10513,8 +10580,14 @@ function renderAjustes(){
       <td><select class="field" data-uk="rol" style="width:100%">${ROLES.map(r =>
             `<option value="${r.id}"${r.id === u.rol ? " selected" : ""}>${esc(r.name)}</option>`).join("")}</select>
         <div class="hint">${esc(infoRol(u.rol).ayuda)}</div></td>
-      <td style="text-align:center"><input type="checkbox" data-uk="certificados"
-            title="Puede emitir certificados de cortesía"${u.certificados ? " checked" : ""}></td>
+      <td style="text-align:center">${rolTraeCertificados(u.rol)
+        ? `<input type="checkbox" data-uk="certificados" checked disabled
+             title="Este papel los trae puestos: no hace falta prenderle nada">`
+        : !rolVeCertificados(u.rol)
+        ? `<span class="hint" title="Este papel no lleva certificados: la pestaña no está
+             entre las suyas, y prenderle algo aquí no se la daría">—</span>`
+        : `<input type="checkbox" data-uk="certificados"
+             title="Puede emitir certificados de cortesía"${u.certificados ? " checked" : ""}>`}</td>
       <td><button class="btn sm danger" data-delu="${u.id}">Quitar</button></td></tr>`).join("") +
     `<datalist id="listaEje">${nombresCartera.map(n => `<option value="${esc(n)}">`).join("")}</datalist>`;
 
@@ -10659,10 +10732,14 @@ function renderAjustes(){
       u.correo = tr.querySelector('[data-uk="correo"]').value.trim().toLowerCase();
       u.nombre = tr.querySelector('[data-uk="nombre"]').value.trim();
       u.rol    = tr.querySelector('[data-uk="rol"]').value;
-      /* Emitir certificados es de la persona, no del papel: un certificado es
-         una cortesía que cuesta dinero y el hotel escoge a quién se lo deja a
-         mano. La administración siempre puede, con palomita o sin ella. */
-      u.certificados = tr.querySelector('[data-uk="certificados"]').checked;
+      /* La palomita es para los papeles que NO los traen puestos —banquetes y
+         marketing—: ahí un certificado cuesta dinero y el hotel lo concede de
+         a uno. A los de ventas y a la dirección les viene con el papel, su
+         casilla sale prendida y apagada, y aquí NO se les escribe nada: poner
+         la llave en una ficha que no la traía la haría verse editada y se
+         volvería a subir entera, por nada. Ver `ROLES_CON_CERTIFICADOS`. */
+      const chk = tr.querySelector('[data-uk="certificados"]');
+      if (chk && !chk.disabled) u.certificados = chk.checked;
     });
     state.usuarios = state.usuarios.filter(u => u.correo || u.nombre).map(saneaUsuario);
 
@@ -10739,11 +10816,60 @@ function renderAjustes(){
     recogerAjustes(); h.logo = ""; guardar(); renderAjustes();
   };
 
-  p.querySelector("#bGuardarUsr").onclick = () => {
+  /**
+   * GUARDAR USUARIOS ESPERA A QUE DE VERDAD SUBA.
+   *
+   * Esto decía «Guardado ✓» en cuanto escribía en este equipo y dejaba la
+   * subida programada para 400 ms después, sin mirar en qué acababa. Si el
+   * servidor rebotaba el renglón —`roles.sql` sólo deja escribir la lista de
+   * usuarios al administrador— o la vuelta fallaba, la pantalla ya había
+   * dicho que sí, y al rato otra computadora bajaba la lista VIEJA y pisaba
+   * lo de aquí: las palomitas «se quitaban solas».
+   *
+   * Ahora se empuja la lista y se espera. Si no sube, se dice, y se dice qué
+   * hacer. `empujarUsuarios` es la misma de la pantalla de permisos.
+   */
+  p.querySelector("#bGuardarUsr").onclick = async e => {
+    const b = e.currentTarget;
     recogerAjustes();
-    guardar(); renderAjustes();
-    const ok = document.getElementById("usrOk");
-    if (ok){ ok.textContent = "Guardado ✓"; setTimeout(() => { if (ok) ok.textContent = ""; }, 2500); }
+    guardar();
+    /* El cartelito se busca en el documento y no se guarda en una variable:
+       `renderAjustes` vuelve a pintar el panel entero y el de antes se queda
+       colgando fuera de la pantalla. */
+    const di = t => { const o = document.getElementById("usrOk"); if (o) o.textContent = t; };
+
+    if (!nubeActiva()){
+      renderAjustes();
+      di("Guardado en este equipo ✓");
+      return;
+    }
+
+    b.disabled = true; b.textContent = "Guardando y subiendo…";
+    let fallo = "";
+    try{ await empujarUsuarios(); }
+    catch(ex){ fallo = ex.message; }
+    /* El detalle bueno es el del servidor, cuando lo hay: dice renglón por
+       renglón por qué lo rebotó. Lo otro es el resumen. */
+    const rebotados = (nube.rechazados || [])
+      .filter(r => String(r.id || "").startsWith("usuarios:"));
+    renderAjustes();
+
+    if (rebotados.length){
+      alert("Se guardó en este equipo, pero el servidor NO ACEPTÓ " +
+        `${rebotados.length} renglón(es) de la lista de usuarios:\n\n` +
+        rebotados.map(r => "· " + r.motivo).join("\n") +
+        "\n\nMientras no suba, los demás equipos siguen viendo la lista de antes, " +
+        "y la de aquí se vuelve a pisar en cuanto este equipo se ponga al día. " +
+        "La lista de usuarios sólo la puede escribir la administración.");
+    } else if (fallo){
+      alert("Se guardó en este equipo, pero NO SUBIÓ a la nube:\n\n" + fallo +
+        "\n\nMientras no suba, los demás equipos siguen viendo la lista de antes, " +
+        "y la de aquí se vuelve a pisar en cuanto este equipo se ponga al día. " +
+        "Vuelve a intentarlo.");
+    } else {
+      di("Guardado y subido ✓");
+      setTimeout(() => di(""), 2500);
+    }
   };
 
   p.querySelector("#bAddUsr").onclick = () => {

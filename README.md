@@ -372,6 +372,41 @@ contratos se le puso la búsqueda por folio, la caja quedó escondida en esa pan
 documentos desaparecían por un cuadro de texto que nadie podía vaciar. Hay una prueba dedicada a
 eso.
 
+### Los certificados vienen con el papel, en ventas
+
+Marco: *«la pestaña de certificados a la gerente de ventas y a los ejecutivos no les aparece, a mí
+como administrador sí»*. Emitir dependía de una palomita por persona en *Ajustes → Usuarios y
+permisos*, y sólo la administración la traía puesta.
+
+Un certificado de cortesía es **herramienta de venta** —se regala una noche o un masaje para
+cerrar un trato—, así que ahora **viene con el papel**: administración, dirección, Gerencia de
+ventas y Ejecutivo de ventas. Su casilla en Ajustes sale prendida y no se puede apagar.
+
+De paso quedó a la vista algo que la pantalla escondía: a banquetes y a marketing **la palomita
+nunca les sirvió de nada**, porque la pestaña de certificados no está en su lista de pestañas y
+prenderla no se la daba. Ahora esa columna les muestra un **—** y lo dice. Es lo que mandó a Marco
+a buscar el problema donde no estaba.
+
+### Guardar usuarios espera a que de verdad suba
+
+Del mismo día: *«ya los había puesto, no sé por qué se quitaron solos»*.
+
+El botón **Guardar usuarios** escribía en el equipo, decía «Guardado ✓» y dejaba la subida
+programada para 400 ms después **sin mirar en qué acababa**. Si el servidor rebotaba la lista
+—`roles.sql` sólo se la deja escribir a la administración— o la vuelta fallaba, la pantalla ya
+había dicho que sí; y después cualquier equipo que se pusiera al día bajaba la lista **vieja** y
+pisaba la de aquí. Las palomitas «se quitaban solas».
+
+Ahora el botón **empuja la lista y espera**, y sólo dice «Guardado y subido ✓» cuando el servidor
+se quedó con ella. Si no, lo dice —con el motivo que dio el servidor, renglón por renglón— y
+avisa de lo que eso significa: los demás siguen viendo la lista de antes.
+
+Debajo había un segundo agujero, y es el que lo hacía silencioso: `empujarUsuarios` hacía un solo
+`await sincronizar()`, y `sincronizar` **se sale en seco si ya hay otra vuelta corriendo**. Como
+cada `guardar()` deja una programada, era fácil que la subida no se intentara siquiera y la
+función volviera como si todo hubiera ido bien. Ahora insiste hasta que le toca turno y comprueba
+el resultado contra lo que el servidor aceptó de verdad.
+
 ### Filtrar convenios y contratos por ejecutivo
 
 Marco: *«haz que los convenios y contratos el administrador y la gerente de ventas lo puedan
