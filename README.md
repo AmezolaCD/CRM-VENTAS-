@@ -407,6 +407,33 @@ cada `guardar()` deja una programada, era fácil que la subida no se intentara s
 función volviera como si todo hubiera ido bien. Ahora insiste hasta que le toca turno y comprueba
 el resultado contra lo que el servidor aceptó de verdad.
 
+### «Falta subir N» dice de qué, y qué hacer
+
+Marco dio de alta a un ejecutivo nuevo y mandó la captura de su pantalla: el chip decía **«Falta
+subir 4»** y la ventana listaba cuatro veces lo mismo —«Un cliente · a nombre de Carmen Sotelo»,
+«Un cliente · a nombre de Eduardo Islas»— sin decir de qué empresa era ninguna.
+
+Eran cuatro fichas de cliente que esa computadora traía **de otras personas**, y el servidor las
+rechaza con razón: con `roles.sql` corrido, nadie escribe un registro que allá está a nombre de
+alguien más. El aviso tenía razón en el fondo y era inútil en la práctica: **sin el nombre no se
+puede ir a buscar la ficha**, ni saber si ya está en la nube o si sólo existe en ese navegador — y
+ésa es la diferencia entre un ruido y un dato que se pierde al cerrar sesión.
+
+La causa era chica: el título se armaba con `folio || nombreCompleto || nombre || titulo`, y una
+ficha de cliente no tiene ninguno de los cuatro — tiene `empresa` y `contacto`.
+
+Ahora cada renglón **nombra la ficha**. Y cuando el registro es de otra persona el aviso lo dice
+sin rodeos —desde esa cuenta **no va a entrar nunca**, por más vueltas que dé la
+sincronización— y dice cómo sacarlo: *Exportar → Respaldo completo (JSON)*, que se lleva todo lo
+que tiene el equipo, también lo que no se ve en pantalla. La nota de abajo dejó de tranquilizar
+de más: lo rechazado sigue guardado en ese equipo **y puede que sólo ahí**, así que cerrar sesión
+o limpiar el navegador se lo lleva.
+
+Lo que **no** cambió es la sincronización: lo rechazado se sigue contando y se sigue
+reintentando, por si alguien lo reasigna. Apartar los registros ajenos para que dejen de insistir
+es defendible, pero toca la pieza más delicada del CRM para quitar un ruido que, nombrado, ya no
+es ciego.
+
 ### Filtrar convenios y contratos por ejecutivo
 
 Marco: *«haz que los convenios y contratos el administrador y la gerente de ventas lo puedan

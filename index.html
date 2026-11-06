@@ -1052,7 +1052,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.05-2";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.06-1";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -6911,22 +6911,48 @@ function pintarNube(){
  * Eduardo Lara" le dice algo a quien lo lee; "convenios:v9" no.
  */
 function menuRechazados(){
-  const comoSeLlama = r => {
+  /** El registro al que se refiere un rechazo, si es que todavía está aquí. */
+  const buscar = r => {
     const [tipo, id] = String(r.id).split(":");
     const lista = { clientes:state.clientes, convenios:state.convenios, contratos:state.contratos,
                     eventos:state.eventos, actividades:state.actividades, huespedes:state.huespedes,
                     prospectos:state.prospectos, campanas:state.campanas, odts:state.odts }[tipo];
-    const x = lista && lista.find(y => y.id === id);
+    return { tipo, x: (lista && lista.find(y => y.id === id)) || null };
+  };
+
+  const comoSeLlama = r => {
+    const { tipo, x } = buscar(r);
     if (!x) return { titulo: tipoLegible(tipo), sub: "" };
-    const titulo = x.folio || nombreCompleto(x) || x.nombre || x.titulo || tipoLegible(tipo);
+    /* `empresa` y `contacto` no estaban, y una FICHA DE CLIENTE no tiene
+       ninguno de los otros —ni folio, ni nombre, ni título—, así que las
+       cuatro que se le atoraron a un ejecutivo salían como «Un cliente», las
+       cuatro iguales. Sin nombre nadie puede ir a buscarlas, ni saber si esa
+       ficha ya está en la nube o si sólo existe en ese navegador, que es la
+       diferencia entre un ruido y un dato que se pierde al cerrar sesión. */
+    const titulo = x.folio || nombreCompleto(x) || x.nombre || x.empresa ||
+                   x.titulo || x.contacto || tipoLegible(tipo);
     const duenio = duenioDe({ tipo, datos:x }) || "";
     return { titulo, sub: duenio ? "a nombre de " + duenio : "" };
   };
-  const porQue = m =>
+  /* ¿Es de otra persona? Entonces desde esta cuenta no va a entrar por más
+     vueltas que dé, y hay que decirlo: lo que sirve es sacarlo de aquí. */
+  const esAjeno = r => {
+    const { tipo, x } = buscar(r);
+    const duenio = x ? (duenioDe({ tipo, datos:x }) || "") : "";
+    const yo = miNombre().trim().toLowerCase();
+    return !!duenio && (!yo || duenio.trim().toLowerCase() !== yo);
+  };
+  const porQue = (m, ajeno) =>
     /row-level security|42501|permission denied/i.test(m)
       ? "El servidor no te deja escribir este registro. Casi siempre es porque allá está a " +
         "nombre de otra persona: quien lo tenga a su nombre sí puede guardarlo, o un " +
-        "administrador puede reasignarlo."
+        "administrador puede reasignarlo." +
+        (ajeno
+          ? " Desde esta cuenta NO va a entrar, por más veces que se reintente. Si hace " +
+            "falta que suba, baja una copia con Exportar → Respaldo completo (JSON) " +
+            "—se lleva todo lo de este equipo, también lo que no se ve en pantalla— y " +
+            "mándasela a la administración."
+          : "")
       : /check constraint|23514/i.test(m) ? "El registro no cumple una regla del servidor."
       : /duplicate key|23505/i.test(m)    ? "Ya existe otro registro con esa clave."
       : m;
@@ -6943,10 +6969,11 @@ function menuRechazados(){
           const q = comoSeLlama(r);
           return `<div class="note warn" style="margin-top:10px">
             <b>${esc(q.titulo)}</b>${q.sub ? ` <span class="hint">· ${esc(q.sub)}</span>` : ""}
-            <div class="hint" style="margin-top:6px">${esc(porQue(r.motivo))}</div></div>`;
+            <div class="hint" style="margin-top:6px">${esc(porQue(r.motivo, esAjeno(r)))}</div></div>`;
         }).join("")}
-        <p class="hint" style="margin-top:14px">Nada se ha perdido: lo rechazado sigue
-          guardado en este equipo.</p>
+        <p class="hint" style="margin-top:14px">Nada se ha perdido: lo rechazado sigue guardado
+          en este equipo —y puede que <b>sólo</b> aquí—. Cerrar sesión en esta computadora, o
+          limpiar el navegador, se lo lleva.</p>
       </div>
       <div class="modal-foot"><div class="spacer"></div>
         <button class="btn" data-close>Cerrar</button>

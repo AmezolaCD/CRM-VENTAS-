@@ -41,6 +41,7 @@ node pruebas/navegador/copiar-el-sql.mjs             # el .sql llega entero
 node pruebas/navegador/el-anio-del-convenio.mjs      # el folio toma el año de la vigencia
 node pruebas/navegador/filtrar-por-ejecutivo.mjs     # ver sólo lo de una persona
 node pruebas/navegador/certificados-para-ventas.mjs  # quién los puede emitir
+node pruebas/navegador/falta-subir.mjs              # el aviso de lo que no subió
 node pruebas/navegador/certificados.mjs             # el folio no se repite y quién emite
 node pruebas/navegador/arranque.mjs                 # que la aplicación abra
 node pruebas/navegador/no-se-pierde-lo-escrito.mjs  # guardar guarda de verdad
@@ -83,6 +84,16 @@ que ya trae otro documento ni uno de otra serie, que el número corregido quede 
 contador, y que una ejecutiva no pueda hacerlo. Sus grupos de control son lo que no puede
 romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
 borradores que de verdad chocan se siguen arreglando solos.
+
+`falta-subir.mjs` cuida la ventana del chip, la que sale al picarle a «Falta subir N». Nace de
+una captura de Marco en la que cuatro renglones decían «Un cliente» y nada más: eran fichas de
+otras personas que esa computadora no puede subir, y sin el nombre de la empresa no había manera
+de ir a buscarlas. Se exige que cada renglón **nombre la ficha**, que cuando es de otra persona
+diga que desde esa cuenta no va a entrar y cómo sacarla, y que avise de que lo rechazado puede
+estar sólo en ese equipo. Los grupos de control son los que la sostienen: un convenio sigue
+saliendo con su folio, un registro que ya no está en el equipo sigue cayendo en el genérico sin
+romper la ventana, un rechazo **propio** no manda a nadie a exportar nada, y los otros motivos
+—clave repetida, regla del servidor— no se contagian del texto nuevo.
 
 `certificados-para-ventas.mjs` cuida las dos mitades de lo que reportó Marco el mismo día. La
 primera: que la Gerencia de ventas, los ejecutivos y la dirección **vean la pestaña** sin que
