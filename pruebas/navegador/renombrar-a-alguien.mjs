@@ -16,15 +16,25 @@
    nombre huérfano ni aparecía en la lista, así que no había manera de
    devolvérselo a nadie desde el CRM.
 
+   EL CORREO ES QUIEN DECIDE. Marco: «que esté ligada la información al correo
+   mejor». El correo ya identifica a la persona —`crm_yo()` de `roles.sql`
+   busca su ficha por ahí—, así que es lo que sabe distinguir las dos cosas que
+   desde la tabla se ven idénticas: mismo correo y otro nombre es la MISMA
+   PERSONA con el nombre corregido; otro correo es el renglón cambiando de
+   dueño.
+
    Lo que se cuida aquí:
 
-   · que al cambiar el nombre se ofrezca llevarse los papeles, con la cuenta;
-   · que al aceptar se muevan LOS NUEVE CAMPOS, convenios incluidos;
-   · que al decir que no, no se mueva nada y el nombre viejo salga en la lista
-     de huérfanos CON SUS DOCUMENTOS CONTADOS;
+   · que con el MISMO CORREO los papeles se pasen SOLOS, sin preguntar nada
+     —nadie quiere contestar un cuadro de diálogo por haber puesto un acento—;
+   · que se muevan LOS NUEVE CAMPOS, convenios incluidos;
+   · que el guardado lo DIGA, en vez de mover papeles a escondidas;
+   · que si TAMBIÉN cambió el correo sí se pregunte, y que al decir que no, no
+     se mueva nada y el nombre viejo salga en la lista de huérfanos CON SUS
+     DOCUMENTOS CONTADOS;
    · que `ejecutivoBq` se renombre donde ya estaba y no se invente donde no;
-   · y los grupos de control: cambiar sólo el correo o el papel no pregunta
-     nada, y un documento ya firmado sigue imprimiendo el nombre con el que se
+   · y los grupos de control: cambiar sólo el correo o el papel no mueve nada,
+     y un documento ya firmado sigue imprimiendo el nombre con el que se
      firmó.
 
    Cómo correrla:  node pruebas/navegador/renombrar-a-alguien.mjs
@@ -132,18 +142,16 @@ await bloque('1 · antes de renombrar, todo tiene dueño', async () => {
 });
 
 /* --- 2 ---------------------------------------------------------------------
-   EL CASO DE MARCO. Hoy nace en rojo por partida doble: ni pregunta, ni mueve
-   los convenios aunque se lo pidan. */
-await bloque('2 · al renombrar ofrece llevarse los papeles, y se los lleva', async () => {
+   EL CASO DE MARCO, y lo que pidió después: que con el mismo correo ni
+   pregunte. Hoy nace en rojo por partida doble: no mueve nada y, si moviera,
+   dejaría los convenios atrás. */
+await bloque('2 · con el mismo correo, los papeles se pasan solos', async () => {
   await montar();
-  respuesta = true; dichos.length = 0;
+  respuesta = false;          // si llegara a preguntar, se contesta que NO
+  dichos.length = 0;
   await renombrar('u2', NUEVO);
 
-  afirma('PREGUNTA, y dice los dos nombres',
-    dichos.some(t => t.includes(VIEJO) && t.includes(NUEVO)));
-  afirma('con la cuenta de documentos', dichos.some(t => /6 documento/.test(t)));
-  afirma('y advierte qué pasa si se dice que no',
-    dichos.some(t => /no los va a ver nadie/i.test(t)));
+  afirma('NO PREGUNTA NADA: el correo no cambió', dichos.length === 0);
 
   const q = await p.evaluate(x => cuantoTiene(x), NUEVO);
   afirma('AHORA SUS CLIENTES SON SUYOS', q.clientes === 2);
@@ -170,18 +178,39 @@ await bloque('2 · al renombrar ofrece llevarse los papeles, y se los lleva', as
   afirma('el certificado también', r.cert === NUEVO);
   afirma('y el ejecutivo de banquetes del cliente', r.bq === NUEVO);
   afirma('lo de la otra persona NO se tocó', r.otra === OTRA);
+
+  /* Moverlos en silencio sería peor que preguntar: el guardado lo dice. */
+  const cartel = await p.evaluate(() =>
+    (document.getElementById('usrOk') || {}).textContent || '');
+  afirma('Y EL GUARDADO LO DICE', cartel.includes(VIEJO) && cartel.includes(NUEVO));
+  /* Nueve REGISTROS: dos clientes, una actividad y seis documentos. Es el
+     mismo número que diría el cuadro de diálogo, y el que cuadra con lo que se
+     ve en pantalla. */
+  afirma('con cuántos registros pasaron', /9 registro/.test(cartel));
+  respuesta = true;
 });
 
 /* --- 3 ---------------------------------------------------------------------
-   Si se dice que no, no se mueve nada. Reutilizar el renglón de quien se fue
-   para dar de alta a quien llega es algo que se hace. */
-await bloque('3 · si se dice que no, no se mueve nada y se ve el huérfano', async () => {
+   OTRO CORREO es otra cosa: el renglón cambió de dueño, que es lo que se hace
+   cuando alguien se va y se reutiliza su lugar. Ahí sí se pregunta, y al decir
+   que no NO SE MUEVE NADA: mover en automático le regalaría a la persona nueva
+   la cartera entera de la anterior. */
+await bloque('3 · si también cambió el correo, pregunta; y al decir que no, nada', async () => {
   await montar();
   respuesta = false; dichos.length = 0;
-  await renombrar('u2', NUEVO);
+  await p.evaluate(async nombre => {
+    document.querySelector('#tUsr tr[data-u="u2"] [data-uk="correo"]').value =
+      'otra.persona@ejemplo.example';
+    document.querySelector('#tUsr tr[data-u="u2"] [data-uk="nombre"]').value = nombre;
+    document.getElementById('bGuardarUsr').click();
+    await new Promise(r => setTimeout(r, 400));
+  }, NUEVO);
   respuesta = true;
 
-  afirma('preguntó', dichos.length > 0);
+  afirma('PREGUNTÓ, porque el correo cambió', dichos.length > 0);
+  afirma('y dice que si cambió el correo normalmente es otra persona',
+    dichos.some(t => /otra persona ocupando el lugar/i.test(t)));
+  afirma('con la cuenta de documentos', dichos.some(t => /6 documento/.test(t)));
   afirma('NO SE MOVIÓ NADA',
     await p.evaluate(() => state.convenios.find(v => v.id === 'v1').ejecutivo) === VIEJO);
 
@@ -229,7 +258,7 @@ await bloque('5 · a nadie se le inventa el ejecutivo de banquetes', async () =>
 
 /* --- 6 ---------------------------------------------------------------------
    GRUPOS DE CONTROL: lo que no es un cambio de nombre no pregunta nada. */
-await bloque('6 · cambiar el correo o el papel no pregunta nada', async () => {
+await bloque('6 · cambiar sólo el correo o el papel no mueve nada', async () => {
   await montar();
   dichos.length = 0;
   await p.evaluate(async () => {
@@ -240,6 +269,8 @@ await bloque('6 · cambiar el correo o el papel no pregunta nada', async () => {
     await new Promise(r => setTimeout(r, 400));
   });
   afirma('NO PREGUNTÓ NADA', dichos.length === 0);
+  afirma('y no movió nada: el nombre no cambió',
+    (await cuenta(VIEJO)).documentos === 6);
   afirma('y sus papeles siguen suyos',
     await p.evaluate(() => state.convenios.find(v => v.id === 'v1').ejecutivo) === VIEJO);
 });

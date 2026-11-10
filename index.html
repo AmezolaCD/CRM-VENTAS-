@@ -1052,7 +1052,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.10-1";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.10-2";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -10944,13 +10944,24 @@ function renderAjustes(){
    * ser otra persona, y con `roles.sql` corrido el servidor ni siquiera se
    * las entrega, porque la columna `duenio` sale de esa misma cadena.
    *
-   * Así que al guardar se compara el nombre de antes con el de ahora y, si el
-   * viejo trae papeles, se ofrece llevárselos.
+   * EL CORREO ES QUIEN DECIDE. Marco: «que esté ligada la información al
+   * correo mejor». Y tiene razón en el fondo: el correo ya identifica a la
+   * persona —`crm_yo()` de `roles.sql` busca su ficha por ahí—, así que es lo
+   * que sabe distinguir las dos cosas que desde la tabla se ven idénticas:
    *
-   * SE PREGUNTA, y si se dice que no, NO SE MUEVE NADA. No es cortesía:
-   * reutilizar el renglón de quien se fue para dar de alta a quien llega es
-   * algo que se hace, y moverlos en automático le entregaría a la persona
-   * nueva la cartera entera de la anterior.
+   *   · MISMO CORREO y otro nombre → es la MISMA PERSONA con el nombre
+   *     corregido. Sus papeles se le pasan SOLOS, sin preguntar nada. Es lo
+   *     que pidió y es lo correcto: nadie quiere contestar un cuadro de
+   *     diálogo por haber puesto un acento.
+   *
+   *   · OTRO CORREO → el renglón cambió de dueño; es lo que se hace cuando
+   *     alguien se va y se reutiliza su lugar para quien llega. Ahí SÍ se
+   *     pregunta, porque mover en automático le regalaría a la persona nueva
+   *     la cartera entera de la anterior. Y si se dice que no, no se mueve
+   *     nada.
+   *
+   * Devuelve lo que movió solo, para que el botón de guardar lo diga en vez
+   * de hacerlo a escondidas: mover papeles en silencio es peor que preguntar.
    *
    * Va en los dos botones de guardar de esta pantalla y en ninguno de los de
    * agregar o quitar renglones: ésos llaman a `recogerAjustes` nada más para
@@ -10958,8 +10969,11 @@ function renderAjustes(){
    * a media captura.
    */
   function recogerAjustesYRenombres(){
-    const antes = state.usuarios.map(u => ({ id:u.id, nombre:String(u.nombre || "") }));
+    const antes = state.usuarios.map(u => ({ id:u.id,
+                                             nombre: String(u.nombre || ""),
+                                             correo: String(u.correo || "") }));
     recogerAjustes();
+    const movidos = [];
     for (const v of antes){
       const u = state.usuarios.find(x => x.id === v.id);
       /* Un renglón nuevo no tiene nombre de antes, y uno al que se le borró el
@@ -10972,17 +10986,39 @@ function renderAjustes(){
       const total = q.clientes + q.actividades + q.documentos;
       if (!total) continue;
 
+      /* El correo de antes contra el de ahora. Vacío cuenta como «no sé quién
+         era»: sin correo no hay con qué afirmar que es la misma persona, así
+         que se pregunta. */
+      const comoSeEscribe = x => String(x || "").trim().toLowerCase();
+      const mismaPersona = !!v.correo.trim() &&
+        comoSeEscribe(v.correo) === comoSeEscribe(u.correo);
+
+      if (mismaPersona){
+        reasignarEjecutivo(v.nombre, u.nombre);
+        movidos.push({ de:v.nombre, a:u.nombre, total });
+        continue;
+      }
+
       if (confirm(
-          `Le cambiaste el nombre de “${v.nombre}” a “${u.nombre}”.\n\n` +
+          `El renglón de “${v.nombre}” ahora dice “${u.nombre}”, y le cambiaste ` +
+          `también el correo.\n\n` +
           `A nombre de “${v.nombre}” hay ${q.clientes} cliente(s), ` +
           `${q.actividades} actividad(es) y ${q.documentos} documento(s).\n\n` +
-          `¿Pasárselos al nombre nuevo?\n\n` +
-          `SI DICES QUE NO, esos papeles se quedan con el nombre de antes: ` +
-          `no los va a ver nadie —ni el servidor se los va a entregar— hasta que ` +
-          `alguien los reasigne en «Nombres que no son de nadie», aquí abajo.`))
+          `¿Pasárselos a “${u.nombre}”?\n\n` +
+          `Si cambió el correo, normalmente es otra persona ocupando el lugar de ` +
+          `la anterior: en ese caso contesta que NO. Lo que no se mueva se queda ` +
+          `con el nombre de antes y no lo va a ver nadie —ni el servidor se lo va ` +
+          `a entregar— hasta que alguien lo reasigne en «Nombres que no son de ` +
+          `nadie», aquí abajo.`))
         reasignarEjecutivo(v.nombre, u.nombre);
     }
+    return movidos;
   }
+
+  /** Lo que se movió solo, dicho en una línea para el cartelito de guardado. */
+  const seMovieron = movidos => !movidos.length ? "" :
+    " · " + movidos.map(m =>
+      `${m.total} registro(s) de “${m.de}” pasaron a “${m.a}”`).join("; ");
 
   /**
    * GUARDAR USUARIOS ESPERA A QUE DE VERDAD SUBA.
@@ -10999,7 +11035,7 @@ function renderAjustes(){
    */
   p.querySelector("#bGuardarUsr").onclick = async e => {
     const b = e.currentTarget;
-    recogerAjustesYRenombres();
+    const movidos = recogerAjustesYRenombres();
     guardar();
     /* El cartelito se busca en el documento y no se guarda en una variable:
        `renderAjustes` vuelve a pintar el panel entero y el de antes se queda
@@ -11008,7 +11044,7 @@ function renderAjustes(){
 
     if (!nubeActiva()){
       renderAjustes();
-      di("Guardado en este equipo ✓");
+      di("Guardado en este equipo ✓" + seMovieron(movidos));
       return;
     }
 
@@ -11035,8 +11071,10 @@ function renderAjustes(){
         "y la de aquí se vuelve a pisar en cuanto este equipo se ponga al día. " +
         "Vuelve a intentarlo.");
     } else {
-      di("Guardado y subido ✓");
-      setTimeout(() => di(""), 2500);
+      di("Guardado y subido ✓" + seMovieron(movidos));
+      /* Lo que se movió solo se deja a la vista más tiempo: es una frase larga
+         y es lo único que avisa de que unos papeles cambiaron de nombre. */
+      setTimeout(() => di(""), movidos.length ? 9000 : 2500);
     }
   };
 
@@ -11860,7 +11898,7 @@ function renderAjustes(){
   })();
 
   p.querySelector("#bGuardarAj").onclick = () => {
-    recogerAjustesYRenombres();
+    const movidos = recogerAjustesYRenombres();
     /* Un servicio sin nombre en la lista desplegable es un renglón en blanco
        que nadie entiende. Agregar uno y arrepentirse es normal: se descarta
        aquí, al guardar, y no antes. */
@@ -11868,7 +11906,10 @@ function renderAjustes(){
     state.salones = (state.salones || []).filter(x => x.nombre);
     guardar(); renderAjustes();
     const ok = document.getElementById("ajOk");
-    if (ok){ ok.textContent = "Guardado ✓"; setTimeout(() => { if (ok) ok.textContent = ""; }, 2500); }
+    if (ok){
+      ok.textContent = "Guardado ✓" + seMovieron(movidos);
+      setTimeout(() => { if (ok) ok.textContent = ""; }, movidos.length ? 9000 : 2500);
+    }
   };
 }
 

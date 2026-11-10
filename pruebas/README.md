@@ -89,12 +89,14 @@ borradores que de verdad chocan se siguen arreglando solos.
 `renombrar-a-alguien.mjs` nace de un reporte de Marco: le puso los acentos al nombre de un
 ejecutivo en Ajustes y el hombre dejó de ver sus convenios y sus actividades. Monta a una persona
 con clientes, convenios, contratos, eventos, prospectos, campañas y un certificado, le cambia el
-nombre y exige que el CRM **ofrezca llevarse los papeles** y que al aceptar se muevan **los nueve
-campos**, no los dos de antes. Si se dice que no, nada se mueve y el nombre viejo sale en
-*«Nombres que no son de nadie»* **con sus documentos contados** — que era justo el número
-invisible. Sus grupos de control: `ejecutivoBq` se renombra donde ya estaba y **no se inventa**
-donde no; cambiar sólo el correo o el papel no pregunta nada; un nombre sin papeles tampoco; y un
-convenio ya firmado **sigue imprimiendo el nombre con el que se firmó**.
+nombre y exige que, **con el mismo correo, los papeles se pasen solos** —sin preguntar nada— y que
+se muevan **los nueve campos**, no los dos de antes; y que el guardado lo diga, en vez de mover
+papeles a escondidas. Si **también** cambió el correo sí se pregunta, y al decir que no nada se
+mueve y el nombre viejo sale en *«Nombres que no son de nadie»* **con sus documentos contados** —
+que era justo el número invisible. Sus grupos de control: `ejecutivoBq` se renombra donde ya estaba
+y **no se inventa** donde no; cambiar sólo el correo o el papel no mueve nada; un nombre sin
+papeles no pregunta; y un convenio ya firmado **sigue imprimiendo el nombre con el que se
+firmó**.
 
 `falta-subir.mjs` cuida la ventana del chip, la que sale al picarle a «Falta subir N». Nace de
 una captura de Marco en la que cuatro renglones decían «Un cliente» y nada más: eran fichas de

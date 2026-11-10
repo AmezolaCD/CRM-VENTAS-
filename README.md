@@ -420,11 +420,17 @@ entregarle esas filas**. No es que no las vea — no le llegan.
 
 Dos arreglos:
 
-**Al renombrar, el CRM pregunta si se lleva los papeles**, con la cuenta exacta: tantos clientes,
-tantas actividades, tantos documentos. Se pregunta y, si se dice que no, **no se mueve nada** — no
-es cortesía: reutilizar el renglón de quien se fue para dar de alta a quien llega es algo que se
-hace, y mover en automático le entregaría a la persona nueva la cartera entera de la anterior. El
-aviso dice la otra cara: lo que no se mueva queda sin dueño y no lo va a ver nadie.
+**El correo es quien decide.** Marco lo pidió así: *«que esté ligada la información al correo
+mejor»*. Y el correo ya identifica a la persona —`crm_yo()` de `roles.sql` busca su ficha por
+ahí—, así que es lo que sabe distinguir las dos cosas que desde la tabla se ven idénticas:
+
+- **Mismo correo y otro nombre** → es la misma persona con el nombre corregido. Sus papeles **se le
+  pasan solos**, sin preguntar nada: nadie quiere contestar un cuadro de diálogo por haber puesto
+  un acento. El guardado lo dice —«9 registro(s) de “Fulano” pasaron a “Fulano Corregido”»—, porque
+  mover papeles a escondidas sería peor que preguntar.
+- **Otro correo** → el renglón cambió de dueño, que es lo que se hace cuando alguien se va y se
+  reutiliza su lugar. Ahí **sí se pregunta**, con la cuenta exacta, y al decir que no **no se mueve
+  nada**: mover en automático le entregaría a la persona nueva la cartera entera de la anterior.
 
 **Y la herramienta de reparación dejó de ser ciega.** *«Nombres que no son de nadie»* miraba **dos
 campos de nueve** —el ejecutivo del cliente y el responsable de la actividad—, así que un convenio,
