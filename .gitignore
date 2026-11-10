@@ -1,0 +1,8 @@
+# Las pruebas de navegador necesitan `playwright`, y en ESM eso quiere decir un
+# `node_modules` aquí dentro: se enlaza al del contenedor antes de correrlas.
+#
+# Nunca va al repositorio: apunta a una ruta que sólo existe en la máquina que
+# lo creó. Y vivía sin ignorar, así que había que acordarse de borrarlo antes de
+# cada commit —el día que se borró a media corrida tumbó veinte suites de un
+# jalón—. Mejor ignorarlo y dejarlo en paz.
+node_modules
