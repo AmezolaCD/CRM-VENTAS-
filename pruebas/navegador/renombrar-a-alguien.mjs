@@ -319,6 +319,41 @@ await bloque('8 · renombrar a quien no trae papeles no pregunta', async () => {
     await p.evaluate(() => (state.usuarios.find(u => u.id === 'u9') || {}).nombre) === 'Sin Nada Aún');
 });
 
+/* --- 9 ---------------------------------------------------------------------
+   DONDE SE BUSCA. La nota de la tabla de personas manda a «Nombres que no son
+   de nadie», y esa caja vivía dos secciones más abajo —después del contador de
+   folios y de los jefes de departamento—. Marco la buscó pegada a la tabla, no
+   la encontró, y se quedó sin la única herramienta que le devuelve los papeles
+   a un ejecutivo. */
+await bloque('9 · los nombres huérfanos están pegados a la tabla de personas', async () => {
+  await montar();
+  /* Un nombre huérfano de verdad, para que la caja tenga qué pintar. */
+  await p.evaluate(() => {
+    state.clientes.push(saneaCliente({ id:'c9', empresa:'EMPRESA SUELTA SA DE CV',
+                                       ejecutivo:'Quien Ya No Está', estatus:'nuevo' }));
+    guardar(); renderAjustes();
+  });
+  const r = await p.evaluate(() => {
+    const caja = document.getElementById('huerfanos');
+    const tabla = document.getElementById('tUsr');
+    if (!caja || !tabla) return null;
+    /* ¿Cuántos encabezados de sección hay ENTRE la tabla y la caja? Cero es
+       lo correcto: la caja es parte de «Usuarios y permisos». */
+    const todos = [...document.querySelectorAll('#panelAjustes h3.sec, .view h3.sec')];
+    const pos = n => { let i = 0; for (const h of todos){
+        if (n.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_PRECEDING) i++; } return i; };
+    return { enMedio: pos(caja) - pos(tabla),
+             texto: caja.innerText,
+             antesDeFolios: !!(caja.compareDocumentPosition(
+               [...todos].find(h => /contador de folios/i.test(h.textContent)) || caja)
+               & Node.DOCUMENT_POSITION_FOLLOWING) };
+  });
+  afirma('la caja existe junto a la tabla', !!r);
+  afirma('NO HAY NINGUNA SECCIÓN DE POR MEDIO', r && r.enMedio === 0);
+  afirma('y va antes del contador de folios', r && r.antesDeFolios === true);
+  afirma('y pinta el nombre suelto', r && /Quien Ya No Está/.test(r.texto));
+});
+
 await br.close(); srv.close();
 console.log(fallas ? `\n${fallas} FALLA(S)\n` : '\nTodo en verde.\n');
 process.exit(fallas ? 1 : 0);

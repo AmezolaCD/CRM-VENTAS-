@@ -1052,7 +1052,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.10-2";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.10-3";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -6539,10 +6539,41 @@ async function sincronizar(){
       for (const id of parte.subidos)
         if (!vivos.has(id)){
           sincronizado.delete(id);
-          /* La lápida llegó: ya no hay nada que recordar. Si hubiera rebotado
-             se queda apuntada y se reintenta en la vuelta siguiente, sin
-             estorbarle al resto. */
+          /* La lápida llegó: ya no hay nada que recordar. */
           tumbas.delete(id);
+        }
+
+      /* UNA LÁPIDA QUE EL SERVIDOR RECHAZA SE SUELTA, NO SE INSISTE.
+         ---------------------------------------------------------------------
+         Es la otra mitad, y es un defecto que escondía documentos para
+         siempre. Cuando a alguien le cambian el nombre en Ajustes, el servidor
+         deja de entregarle sus filas —`roles.sql` reparte por nombre—; su
+         equipo las ve DESAPARECER, `anotarLoQueSeFue` les pone lápida, y esa
+         lápida se guarda en su navegador.
+
+         El servidor la rechaza, con razón: esas filas ya no son suyas para
+         borrarlas. Pero arriba, al bajar, hay un renglón que dice «si tengo
+         lápida de esta fila, ignórala cuando llegue». Resultado: una vez
+         arreglado el nombre, el servidor sí le manda sus convenios y SU PROPIA
+         MÁQUINA LOS TIRA AL LLEGAR. Para siempre, porque la lápida nunca se
+         confirma y nunca se suelta. Le pasó a un ejecutivo del hotel y no
+         había manera de verlo desde ninguna pantalla.
+
+         Si el servidor NO ME DEJA borrarla, mi borrado no va a ocurrir nunca:
+         insistir sólo me esconde el renglón a mí. Se suelta la lápida y que el
+         renglón vuelva — el dato lo tiene el servidor, y de una pantalla que
+         no lo enseña se recupera; de un documento invisible, no.
+
+         Sólo con un RECHAZO del servidor. Si lo que falló fue la red o la
+         sesión, el borrado sigue siendo legítimo y se reintenta: por eso se
+         mira el motivo y no el simple hecho de no haber entrado. */
+      const sueltaLapida = r =>
+        /row-level security|42501|permission denied/i.test(String(r.motivo || ""));
+      for (const r of parte.rechazados)
+        if (!vivos.has(r.id) && tumbas.has(r.id) && sueltaLapida(r)){
+          tumbas.delete(r.id);
+          sincronizado.delete(r.id);
+          console.warn("Lápida soltada, el servidor no la acepta:", r.id, r.motivo);
         }
       guardarTumbas();
       nube.rechazados = parte.rechazados;
@@ -10386,7 +10417,7 @@ function renderAjustes(){
         esté aquí no le puede tocar nada. Lo que amarra a una persona con sus clientes es
         el campo <i>Ejecutivo</i> de cada cliente, no el correo: si aquí dice “Carmen Sotelo”
         y en un cliente importado dice “C. Sotelo”, ese cliente queda sin dueño y aparece
-        más abajo, en <i>Nombres que no son de nadie</i>.</div>
+        aquí abajo, en <i>Nombres que no son de nadie</i>, al final de esta misma sección.</div>
       <div class="note"><b>La columna «Cert.»</b> es quién puede emitir certificados de
         cortesía. <b>Ventas y dirección los traen puestos</b> —administración, Gerencia de
         ventas y ejecutivos de ventas—: su casilla sale prendida y no se puede apagar, porque
@@ -10409,6 +10440,16 @@ function renderAjustes(){
         pantalla; está aquí para no tener que bajar hasta abajo. Dar de alta a alguien
         <b>no crea su cuenta</b>: eso se hace en Supabase, en <i>Authentication → Users</i>,
         con el mismo correo.</p>
+
+      <!-- Los nombres huérfanos van AQUÍ, pegados a la tabla de personas de la
+           que hablan y dentro de su misma sección plegable. Vivían hasta abajo,
+           dos secciones más allá —después del contador de folios y de los jefes
+           de departamento—, mientras la nota de la tabla decía «aparece más
+           abajo». Marco los buscó donde deben estar, no los encontró, y se
+           quedó sin la única herramienta que le devolvía los papeles a un
+           ejecutivo. Una nota que señala y no se encuentra es peor que no
+           tenerla. -->
+      <div id="huerfanos" style="margin-top:22px"></div>
 
       <h3 class="sec">El contador de folios</h3>
       <div class="note"><b>Los folios los reparte el servidor, no cada computadora.</b>
@@ -10443,8 +10484,6 @@ function renderAjustes(){
       <p class="hint" style="margin:6px 0 0">Se guarda con el botón del final de la pantalla.
         Los cambios llegan a la liga <b>después de sincronizar</b>: el formulario baja esta
         lista del servidor, no de esta computadora.</p>
-
-      <div id="huerfanos" style="margin-top:22px"></div>
 
       <h3 class="sec">Datos legales de los contratos</h3>
       <div class="note warn"><b>Estos datos no vienen puestos a propósito.</b> El archivo de

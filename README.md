@@ -441,11 +441,45 @@ ese conocimiento— y las tres funciones la recorren. La tabla de huérfanos gan
 **Documentos**, y las cuentas son de **registros, no de campos**: un prospecto con la misma persona
 en «asignado a» y en «capturado por» es un prospecto, no dos.
 
+Y la herramienta vive donde se busca: *«Nombres que no son de nadie»* colgaba dos secciones más
+abajo —después del contador de folios y de los jefes de departamento— mientras la nota de la tabla
+de personas decía «aparece más abajo». Marco la buscó pegada a la tabla, no la encontró, y se quedó
+sin lo único que le devolvía los papeles a un ejecutivo. Ahora está al final de *Usuarios y
+permisos*, dentro de esa misma sección plegable, y hay una prueba que lo sostiene: **una nota que
+señala y no se encuentra es peor que no tenerla**.
+
 Dos cuidados que no son de adorno: `ejecutivoBq` **nace al usarse**, así que sólo se renombra donde
 ya estaba —nunca se le inventa la llave a una ficha que no la traía, o todas se verían editadas y
 se volverían a subir enteras—; y **un documento firmado sigue diciendo quién lo firmó**, porque el
 bloque de firmas imprime el nombre que se congeló ese día. Lo que se corrige es de quién es el
 papel, no quién lo firmó.
+
+### Una lápida que el servidor rechaza se suelta, no se insiste
+
+Éste es el que de verdad escondía documentos, y salió persiguiendo lo de arriba: corregido el
+nombre del ejecutivo, **sus convenios seguían sin aparecerle**.
+
+Un borrado viaja como **lápida** —la fila se queda en el servidor marcada—. Cuando a alguien le
+cambian el nombre, el servidor deja de entregarle sus filas; su equipo las ve **desaparecer** y les
+pone lápida, que se guarda en su navegador. El servidor la rechaza, con razón: esas filas ya no son
+suyas para borrarlas. Pero al bajar hay un renglón que dice *«si tengo lápida de esta fila,
+ignórala cuando llegue»*.
+
+Resultado: una vez arreglado el nombre, el servidor sí le mandaba sus convenios y **su propia
+máquina los tiraba al llegar**. Para siempre, porque la lápida nunca se confirmaba y nunca se
+soltaba — y desde ninguna pantalla se veía por qué.
+
+Ahora, **si el servidor rechaza una lápida por permisos, se suelta**: si no me deja borrar algo, mi
+borrado no va a ocurrir nunca e insistir sólo me esconde el renglón a mí. El dato lo tiene el
+servidor, y de una pantalla que no lo enseña se recupera; de un documento invisible, no.
+
+Sólo con un **rechazo** del servidor. Si lo que falló fue la red o la sesión el borrado sigue
+siendo legítimo y se reintenta, porque soltarla ahí resucitaría lo que alguien borró a propósito.
+Esa distinción —y el borrado de toda la vida, que no se puede romper— son los grupos de control de
+su prueba.
+
+Mientras tanto, a un equipo que ya quedó con lápidas atoradas se le arregla **cerrando sesión y
+volviendo a entrar**: eso las limpia y vuelve a bajar todo de cero.
 
 ### «Falta subir N» dice de qué, y qué hacer
 

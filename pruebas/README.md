@@ -43,6 +43,7 @@ node pruebas/navegador/filtrar-por-ejecutivo.mjs     # ver sólo lo de una perso
 node pruebas/navegador/certificados-para-ventas.mjs  # quién los puede emitir
 node pruebas/navegador/falta-subir.mjs              # el aviso de lo que no subió
 node pruebas/navegador/renombrar-a-alguien.mjs      # el nombre se lleva sus papeles
+node pruebas/navegador/la-lapida-que-no-entra.mjs   # un borrado que el servidor no acepta
 node pruebas/navegador/certificados.mjs             # el folio no se repite y quién emite
 node pruebas/navegador/arranque.mjs                 # que la aplicación abra
 node pruebas/navegador/no-se-pierde-lo-escrito.mjs  # guardar guarda de verdad
@@ -85,6 +86,14 @@ que ya trae otro documento ni uno de otra serie, que el número corregido quede 
 contador, y que una ejecutiva no pueda hacerlo. Sus grupos de control son lo que no puede
 romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
 borradores que de verdad chocan se siguen arreglando solos.
+
+`la-lapida-que-no-entra.mjs` es la segunda mitad de lo anterior, y el que de verdad escondía
+documentos. Levanta un servidor de mentiras al que se le pide **cómo contestar** —aceptar, rechazar
+por permisos, o caerse— y comprueba que una lápida **rechazada por permisos se suelte** y que el
+renglón **vuelva** en la siguiente bajada. Sus dos grupos de control son los que sostienen el
+arreglo: si lo que falló fue la **red**, la lápida se conserva y se reintenta —ahí el borrado sigue
+siendo legítimo y soltarla resucitaría lo que alguien borró a propósito—; y una lápida **aceptada**
+se olvida y el renglón **no resucita**, que es el borrado de toda la vida y no se puede romper.
 
 `renombrar-a-alguien.mjs` nace de un reporte de Marco: le puso los acentos al nombre de un
 ejecutivo en Ajustes y el hombre dejó de ver sus convenios y sus actividades. Monta a una persona
