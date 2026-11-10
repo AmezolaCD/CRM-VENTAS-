@@ -42,6 +42,7 @@ node pruebas/navegador/el-anio-del-convenio.mjs      # el folio toma el año de 
 node pruebas/navegador/filtrar-por-ejecutivo.mjs     # ver sólo lo de una persona
 node pruebas/navegador/certificados-para-ventas.mjs  # quién los puede emitir
 node pruebas/navegador/falta-subir.mjs              # el aviso de lo que no subió
+node pruebas/navegador/renombrar-a-alguien.mjs      # el nombre se lleva sus papeles
 node pruebas/navegador/certificados.mjs             # el folio no se repite y quién emite
 node pruebas/navegador/arranque.mjs                 # que la aplicación abra
 node pruebas/navegador/no-se-pierde-lo-escrito.mjs  # guardar guarda de verdad
@@ -84,6 +85,16 @@ que ya trae otro documento ni uno de otra serie, que el número corregido quede 
 contador, y que una ejecutiva no pueda hacerlo. Sus grupos de control son lo que no puede
 romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
 borradores que de verdad chocan se siguen arreglando solos.
+
+`renombrar-a-alguien.mjs` nace de un reporte de Marco: le puso los acentos al nombre de un
+ejecutivo en Ajustes y el hombre dejó de ver sus convenios y sus actividades. Monta a una persona
+con clientes, convenios, contratos, eventos, prospectos, campañas y un certificado, le cambia el
+nombre y exige que el CRM **ofrezca llevarse los papeles** y que al aceptar se muevan **los nueve
+campos**, no los dos de antes. Si se dice que no, nada se mueve y el nombre viejo sale en
+*«Nombres que no son de nadie»* **con sus documentos contados** — que era justo el número
+invisible. Sus grupos de control: `ejecutivoBq` se renombra donde ya estaba y **no se inventa**
+donde no; cambiar sólo el correo o el papel no pregunta nada; un nombre sin papeles tampoco; y un
+convenio ya firmado **sigue imprimiendo el nombre con el que se firmó**.
 
 `falta-subir.mjs` cuida la ventana del chip, la que sale al picarle a «Falta subir N». Nace de
 una captura de Marco en la que cuatro renglones decían «Un cliente» y nada más: eran fichas de

@@ -407,6 +407,40 @@ cada `guardar()` deja una programada, era fácil que la subida no se intentara s
 función volviera como si todo hubiera ido bien. Ahora insiste hasta que le toca turno y comprueba
 el resultado contra lo que el servidor aceptó de verdad.
 
+### Renombrar a alguien no le deja los papeles atrás
+
+Marco le puso los acentos al nombre de un ejecutivo en *Ajustes → Usuarios y permisos* y el hombre
+**dejó de ver sus convenios y sus actividades**.
+
+Lo que amarra a una persona con sus papeles es **la cadena de su nombre**, no su correo: sus
+clientes, convenios y actividades llevan escrito «Adrian Gonzalez» y su ficha pasó a decir «Adrián
+González». Para el CRM son dos personas, y con `roles.sql` corrido es peor que una pantalla
+filtrada: la columna `duenio` del servidor sale de esa misma cadena, así que **el servidor deja de
+entregarle esas filas**. No es que no las vea — no le llegan.
+
+Dos arreglos:
+
+**Al renombrar, el CRM pregunta si se lleva los papeles**, con la cuenta exacta: tantos clientes,
+tantas actividades, tantos documentos. Se pregunta y, si se dice que no, **no se mueve nada** — no
+es cortesía: reutilizar el renglón de quien se fue para dar de alta a quien llega es algo que se
+hace, y mover en automático le entregaría a la persona nueva la cartera entera de la anterior. El
+aviso dice la otra cara: lo que no se mueva queda sin dueño y no lo va a ver nadie.
+
+**Y la herramienta de reparación dejó de ser ciega.** *«Nombres que no son de nadie»* miraba **dos
+campos de nueve** —el ejecutivo del cliente y el responsable de la actividad—, así que un convenio,
+un contrato, un evento, un prospecto, una campaña o un certificado con un nombre huérfano **ni
+aparecía en la lista**: no había manera de devolvérselo a nadie desde el CRM. Ahora los nueve
+campos viven en una sola tabla —`CAMPOS_DE_PERSONA`, al lado de `duenioDe`, que es donde ya vivía
+ese conocimiento— y las tres funciones la recorren. La tabla de huérfanos gana una columna
+**Documentos**, y las cuentas son de **registros, no de campos**: un prospecto con la misma persona
+en «asignado a» y en «capturado por» es un prospecto, no dos.
+
+Dos cuidados que no son de adorno: `ejecutivoBq` **nace al usarse**, así que sólo se renombra donde
+ya estaba —nunca se le inventa la llave a una ficha que no la traía, o todas se verían editadas y
+se volverían a subir enteras—; y **un documento firmado sigue diciendo quién lo firmó**, porque el
+bloque de firmas imprime el nombre que se congeló ese día. Lo que se corrige es de quién es el
+papel, no quién lo firmó.
+
 ### «Falta subir N» dice de qué, y qué hacer
 
 Marco dio de alta a un ejecutivo nuevo y mandó la captura de su pantalla: el chip decía **«Falta

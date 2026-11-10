@@ -1052,7 +1052,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.06-1";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.10-1";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2267,28 +2267,97 @@ const alcanceBanquetes = (c, suyo) =>
 const nombresEquipo = () => [...new Set(state.usuarios.map(u => String(u.nombre || "").trim())
   .filter(Boolean))].sort((a,b) => a.localeCompare(b,"es"));
 
+/* ==========================================================================
+   DÓNDE QUEDA ESCRITO EL NOMBRE DE UNA PERSONA
+
+   En nueve campos, no en dos. Y eso importa porque lo que amarra a alguien
+   con sus papeles ES LA CADENA DE SU NOMBRE, no su correo: `convenioEsMio`
+   compara `ejecutivoDe(v)` contra `miNombre()`, y con `roles.sql` corrido la
+   columna `duenio` del servidor sale de esa misma cadena.
+
+   Marco le puso los acentos al nombre de un ejecutivo en Ajustes y el hombre
+   dejó de ver sus convenios y sus actividades: para el CRM pasó a ser otra
+   persona. Al ir a repararlo salió el segundo agujero, peor: las tres
+   funciones que existen para esto —la lista de nombres huérfanos, lo que
+   arrastra cada uno y el botón de reasignar— MIRABAN DOS CAMPOS DE NUEVE, así
+   que un convenio con un nombre huérfano ni siquiera aparecía en la lista y no
+   había manera de devolvérselo a nadie desde el CRM.
+
+   La tabla vive aquí una sola vez y las tres la recorren. Es el mismo
+   conocimiento que ya tiene `duenioDe` —el que alimenta la columna `duenio`
+   del servidor—, más el ejecutivo de banquetes, que ahí no hace falta.
+
+   `clientes` lleva DOS: el de ventas y el de banquetes. Y ojo con
+   `ejecutivoBq`, que nace al usarse: al renombrar sólo se toca donde ya
+   coincide, nunca se le crea la llave a una ficha que no la traía —si no,
+   todas se verían editadas y se volverían a subir enteras—.
+   ========================================================================== */
+const CAMPOS_DE_PERSONA = [
+  { col:"clientes",     campos:["ejecutivo", "ejecutivoBq"], cartera:true },
+  { col:"actividades",  campos:["responsable"],              bitacora:true },
+  { col:"convenios",    campos:["ejecutivo"] },
+  { col:"contratos",    campos:["ejecutivo"] },
+  { col:"eventos",      campos:["ejecutivo"] },
+  { col:"prospectos",   campos:["asignadoA", "capturadoPor"] },
+  { col:"campanas",     campos:["responsable"] },
+  { col:"certificados", campos:["emitidoPor"] }
+];
+
+/** Cada registro que guarda el nombre de alguien, con el campo donde lo trae. */
+function* dondeHayNombres(){
+  for (const d of CAMPOS_DE_PERSONA)
+    for (const x of (state[d.col] || []))
+      for (const campo of d.campos)
+        yield { d, x, campo };
+}
+
+/* `igualNombre` y no `mismoNombre`: ese nombre ya lo tiene el normalizador de
+   una sola pieza que usa el cotejo de campañas de Meta. */
+const igualNombre = (a, b) =>
+  String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+
 /**
- * Nombres escritos en la cartera o en la bitácora que no son de nadie del
- * equipo: quedan de una importación, de un ejemplo o de un dedazo. Importan
- * porque esos clientes no los ve ningún ejecutivo, así que hay que enseñarlos
- * aparte en vez de esconderlos.
+ * Nombres escritos en la cartera, en la bitácora o en un documento que no son
+ * de nadie del equipo: quedan de una importación, de un ejemplo, de un dedazo
+ * —o de haberle corregido el nombre a alguien en Ajustes—. Importan porque
+ * eso que llevan su nombre no lo ve ningún ejecutivo.
  */
 function nombresSinDuenio(){
   const equipo = new Set(nombresEquipo().map(n => n.toLowerCase()));
-  return [...new Set([
-      ...state.clientes.map(c => c.ejecutivo),
-      ...state.actividades.map(a => a.responsable)
-    ].map(x => String(x || "").trim()).filter(Boolean)
-     .filter(n => !equipo.has(n.toLowerCase())))]
-    .sort((a,b) => a.localeCompare(b,"es"));
+  const sueltos = new Set();
+  for (const { x, campo } of dondeHayNombres()){
+    const v = String(x[campo] || "").trim();
+    if (v && !equipo.has(v.toLowerCase())) sueltos.add(v);
+  }
+  return [...sueltos].sort((a,b) => a.localeCompare(b,"es"));
 }
 
-/** Cuánto arrastra un nombre suelto, para poder decírselo al administrador. */
+/**
+ * Cuánto arrastra un nombre, para poder decírselo a quien va a reasignarlo.
+ *
+ * Tres cuentas y no una: la cartera, la bitácora y los documentos son cosas
+ * distintas para quien decide, y el número de documentos es justo el que
+ * faltaba —era el invisible—.
+ */
 const cuantoTiene = nombre => {
-  const n = nombre.trim().toLowerCase();
-  const igual = x => String(x || "").trim().toLowerCase() === n;
-  return { clientes:    state.clientes.filter(c => igual(c.ejecutivo)).length,
-           actividades: state.actividades.filter(a => igual(a.responsable)).length };
+  const q = { clientes:0, actividades:0, documentos:0 };
+  /* Se cuentan REGISTROS, no campos. Una ficha de cliente puede traer el mismo
+     nombre en los dos campos —el de ventas y el de banquetes— y sigue siendo
+     un cliente; un prospecto puede traerlo en «asignado a» y en «capturado
+     por» y sigue siendo un prospecto. Contar campos decía «7 documentos»
+     donde había seis, y un número que no cuadra con lo que la persona ve en
+     pantalla es peor que no darlo. */
+  const vistos = new Set();
+  for (const { d, x, campo } of dondeHayNombres()){
+    if (!igualNombre(x[campo], nombre)) continue;
+    const clave = d.col + ":" + x.id;
+    if (vistos.has(clave)) continue;
+    vistos.add(clave);
+    if (d.cartera) q.clientes++;
+    else if (d.bitacora) q.actividades++;
+    else q.documentos++;
+  }
+  return q;
 };
 
 /** Las opciones de los filtros por ejecutivo, iguales en tablero y actividades. */
@@ -10176,16 +10245,31 @@ function editarHuesped(id){
 }
 
 /** Cambia de dueño todo lo que traiga un nombre: clientes y bitácora a la vez. */
+/**
+ * Cambiarle el nombre al dueño de todo lo que lo lleve escrito.
+ *
+ * Pasa por los NUEVE campos —ver `CAMPOS_DE_PERSONA`—, no por dos. Antes sólo
+ * movía clientes y actividades, así que reasignar dejaba los convenios, los
+ * contratos, los eventos, los prospectos y los certificados exactamente igual
+ * de huérfanos que estaban: la pantalla decía que los había pasado y la
+ * persona seguía sin verlos.
+ *
+ * Con `a` vacío se quedan sin dueño, que es lo que pide la opción «dejarlos
+ * sin asignar».
+ */
 function reasignarEjecutivo(de, a){
-  const n = String(de || "").trim().toLowerCase();
-  if (!n) return 0;
+  if (!String(de || "").trim()) return 0;
   let tocados = 0;
-  state.clientes.forEach(c => {
-    if (String(c.ejecutivo || "").trim().toLowerCase() === n){ c.ejecutivo = a; tocados++; }
-  });
-  state.actividades.forEach(x => {
-    if (String(x.responsable || "").trim().toLowerCase() === n){ x.responsable = a; tocados++; }
-  });
+  for (const { x, campo } of dondeHayNombres()){
+    if (!igualNombre(x[campo], de)) continue;
+    /* `ejecutivoBq` nace al usarse: si queda vacío se le quita la llave en vez
+       de dejarla en blanco, que es lo que hace su saneador. Y aquí nunca se
+       crea donde no estaba, porque sólo se entra si ya coincidía. */
+    if (!a && campo === "ejecutivoBq") delete x.ejecutivoBq;
+    else x[campo] = a;
+    x.updatedAt = new Date().toISOString();
+    tocados++;
+  }
   if (tocados) guardar();
   return tocados;
 }
@@ -10676,25 +10760,33 @@ function renderAjustes(){
     if (!caja) return;
     const sueltos = nombresSinDuenio();
     if (!sueltos.length){
-      caja.innerHTML = `<div class="note"><b>Todos los clientes tienen dueño.</b>
-        Cada nombre escrito en la cartera corresponde a alguien de la tabla de arriba.</div>`;
+      caja.innerHTML = `<div class="note"><b>Todo tiene dueño.</b>
+        Cada nombre escrito en la cartera, en la bitácora y en los documentos corresponde a
+        alguien de la tabla de arriba.</div>`;
       return;
     }
     const equipo = nombresEquipo();
     caja.innerHTML = `
       <h3 class="sec">Nombres que no son de nadie</h3>
-      <div class="note warn"><b>Estos clientes no los ve ningún ejecutivo.</b>
-        El nombre escrito en su ficha no coincide con nadie de la tabla de arriba.
-        Escoja a quién se los pasa y guarde.</div>
+      <div class="note warn"><b>Esto no lo ve ningún ejecutivo.</b>
+        El nombre escrito no coincide con nadie de la tabla de arriba, y mientras siga así
+        ni el CRM se lo enseña a nadie ni el servidor se lo entrega. Escoja a quién se lo
+        pasa y guarde.
+        <br><br>Pasa cuando una importación trae el nombre escrito de otra manera, y pasa
+        también al <b>corregirle el nombre a alguien aquí arriba</b>: sus papeles se quedan
+        con el nombre de antes.</div>
       <div style="overflow:auto"><table class="data">
         <thead><tr><th>Nombre escrito</th><th class="num">Clientes</th>
-          <th class="num">Actividades</th><th>Pasárselos a</th><th></th></tr></thead>
+          <th class="num">Actividades</th><th class="num"
+            title="Convenios, contratos, eventos, prospectos, campañas y certificados"
+            >Documentos</th><th>Pasárselos a</th><th></th></tr></thead>
         <tbody>${sueltos.map(n => {
           const q = cuantoTiene(n);
           return `<tr>
             <td><b>${esc(n)}</b></td>
             <td class="num">${q.clientes}</td>
             <td class="num">${q.actividades}</td>
+            <td class="num">${q.documentos}</td>
             <td><select class="field" data-dest="${esc(n)}" style="width:100%">
               <option value="">— Escoja —</option>
               ${equipo.map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join("")}
@@ -10709,8 +10801,8 @@ function renderAjustes(){
       if (!elegido){ alert("Escoja primero a quién se le pasan."); return; }
       const a = elegido === "::nadie::" ? "" : elegido;
       const q = cuantoTiene(de);
-      if (!confirm(`Pasar ${q.clientes} cliente(s) y ${q.actividades} actividad(es) de ` +
-                   `“${de}” a ${a ? `“${a}”` : "nadie"}?`)) return;
+      if (!confirm(`Pasar ${q.clientes} cliente(s), ${q.actividades} actividad(es) y ` +
+                   `${q.documentos} documento(s) de “${de}” a ${a ? `“${a}”` : "nadie"}?`)) return;
       reasignarEjecutivo(de, a);
       pintarHuerfanos();
       renderEjecutivos();
@@ -10844,6 +10936,55 @@ function renderAjustes(){
   };
 
   /**
+   * RENOMBRAR A ALGUIEN NO PUEDE DEJARLE LOS PAPELES ATRÁS.
+   *
+   * Lo que amarra a una persona con sus papeles es LA CADENA DE SU NOMBRE, no
+   * su correo. Marco le puso los acentos al nombre de un ejecutivo aquí y el
+   * hombre dejó de ver sus convenios y sus actividades: para el CRM pasó a
+   * ser otra persona, y con `roles.sql` corrido el servidor ni siquiera se
+   * las entrega, porque la columna `duenio` sale de esa misma cadena.
+   *
+   * Así que al guardar se compara el nombre de antes con el de ahora y, si el
+   * viejo trae papeles, se ofrece llevárselos.
+   *
+   * SE PREGUNTA, y si se dice que no, NO SE MUEVE NADA. No es cortesía:
+   * reutilizar el renglón de quien se fue para dar de alta a quien llega es
+   * algo que se hace, y moverlos en automático le entregaría a la persona
+   * nueva la cartera entera de la anterior.
+   *
+   * Va en los dos botones de guardar de esta pantalla y en ninguno de los de
+   * agregar o quitar renglones: ésos llaman a `recogerAjustes` nada más para
+   * no perder lo tecleado antes de repintar, y preguntar ahí sería preguntar
+   * a media captura.
+   */
+  function recogerAjustesYRenombres(){
+    const antes = state.usuarios.map(u => ({ id:u.id, nombre:String(u.nombre || "") }));
+    recogerAjustes();
+    for (const v of antes){
+      const u = state.usuarios.find(x => x.id === v.id);
+      /* Un renglón nuevo no tiene nombre de antes, y uno al que se le borró el
+         nombre no tiene a quién pasárselos. Y un cambio de MAYÚSCULAS no
+         rompe nada: todo lo que compara nombres lo hace en minúsculas. */
+      if (!u || !v.nombre.trim() || !String(u.nombre || "").trim()) continue;
+      if (igualNombre(u.nombre, v.nombre)) continue;
+
+      const q = cuantoTiene(v.nombre);
+      const total = q.clientes + q.actividades + q.documentos;
+      if (!total) continue;
+
+      if (confirm(
+          `Le cambiaste el nombre de “${v.nombre}” a “${u.nombre}”.\n\n` +
+          `A nombre de “${v.nombre}” hay ${q.clientes} cliente(s), ` +
+          `${q.actividades} actividad(es) y ${q.documentos} documento(s).\n\n` +
+          `¿Pasárselos al nombre nuevo?\n\n` +
+          `SI DICES QUE NO, esos papeles se quedan con el nombre de antes: ` +
+          `no los va a ver nadie —ni el servidor se los va a entregar— hasta que ` +
+          `alguien los reasigne en «Nombres que no son de nadie», aquí abajo.`))
+        reasignarEjecutivo(v.nombre, u.nombre);
+    }
+  }
+
+  /**
    * GUARDAR USUARIOS ESPERA A QUE DE VERDAD SUBA.
    *
    * Esto decía «Guardado ✓» en cuanto escribía en este equipo y dejaba la
@@ -10858,7 +10999,7 @@ function renderAjustes(){
    */
   p.querySelector("#bGuardarUsr").onclick = async e => {
     const b = e.currentTarget;
-    recogerAjustes();
+    recogerAjustesYRenombres();
     guardar();
     /* El cartelito se busca en el documento y no se guarda en una variable:
        `renderAjustes` vuelve a pintar el panel entero y el de antes se queda
@@ -11719,7 +11860,7 @@ function renderAjustes(){
   })();
 
   p.querySelector("#bGuardarAj").onclick = () => {
-    recogerAjustes();
+    recogerAjustesYRenombres();
     /* Un servicio sin nombre en la lista desplegable es un renglón en blanco
        que nadie entiende. Agregar uno y arrepentirse es normal: se descarta
        aquí, al guardar, y no antes. */
