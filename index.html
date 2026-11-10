@@ -1052,7 +1052,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.10-3";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.10-4";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -2074,9 +2074,26 @@ function nombresDelDepto(id){
 function otrosDepartamentos(){
   const d = miDepto();
   if (!d) return new Set();
-  return new Set(state.usuarios
-    .filter(u => !(DEPTOS_ROL[u.rol] || []).includes(d))
-    .map(u => String(u.nombre || "").trim().toLowerCase()).filter(Boolean));
+  /* UN NOMBRE PUEDE ESTAR EN MÁS DE UN RENGLÓN.
+     ----------------------------------------------------------------------
+     Esto filtraba renglón por renglón: bastaba UNO con ese nombre y un papel
+     de otra área para que el nombre entrara a la lista negra, aunque la misma
+     persona tuviera su renglón bueno en ésta. Y pasa de verdad —un renglón
+     duplicado, uno viejo de alguien que cambió de área, uno a medio llenar—.
+     El resultado era que a esa persona se le escondía su propia bitácora en su
+     propio departamento: Alicia veía las actividades de todo el equipo menos
+     las suyas.
+     Así que un nombre sale de aquí si CUALQUIER renglón suyo pertenece a este
+     departamento. La duda se resuelve a favor de ver: lo que se esconde de más
+     no lo ve nadie y nadie sabe por qué. */
+  const deAqui = new Set(), fuera = new Set();
+  for (const u of state.usuarios){
+    const n = String(u.nombre || "").trim().toLowerCase();
+    if (!n) continue;
+    ((DEPTOS_ROL[u.rol] || []).includes(d) ? deAqui : fuera).add(n);
+  }
+  for (const n of deAqui) fuera.delete(n);
+  return fuera;
 }
 
 /**
@@ -12330,7 +12347,16 @@ function rangoActivo(){
   }
 }
 
-function actividadesVisibles(){
+/**
+ * Las actividades que esta persona alcanza a ver, ya filtradas.
+ *
+ * Con `conFecha` en falso se salta NADA MÁS el periodo, y eso sirve para una
+ * sola cosa: poder decir cuántas quedaron fuera. «No veo las mías» casi
+ * siempre es que son de hace más de treinta días —el periodo que trae por
+ * omisión—, y una pantalla que no lo dice manda a buscar un defecto donde no
+ * lo hay.
+ */
+function actividadesVisibles(conFecha = true){
   const [desde, hasta] = rangoActivo();
   const q = filtros.q.trim().toLowerCase();
   const mios = new Set(state.clientes.filter(esMio).map(c => c.id));
@@ -12347,8 +12373,10 @@ function actividadesVisibles(){
     // a veces cubre a un compañero y esa llamada es suya de todos modos.
     if (!puedeVerTodo() && !mios.has(a.clienteId) &&
         String(a.responsable || "").trim().toLowerCase() !== yo) return false;
-    const dia = String(a.fecha || "").slice(0,10);
-    if (dia < desde || dia > hasta) return false;
+    if (conFecha){
+      const dia = String(a.fecha || "").slice(0,10);
+      if (dia < desde || dia > hasta) return false;
+    }
     if (filtroAct.ejecutivo && (a.responsable || "") !== filtroAct.ejecutivo) return false;
     if (filtroAct.tipo && a.tipo !== filtroAct.tipo) return false;
     if (!q) return true;
@@ -12414,12 +12442,20 @@ function renderActividades(){
   const rotulo = filtroAct.periodo === "todo" ? "en toda la bitácora"
     : `del ${fechaCorta(desde)} al ${fechaCorta(hasta)}`;
 
+  /* Cuántas se quedaron fuera por el periodo. Es la frase que faltaba: la
+     gerencia de ventas reportó «no veo mis actividades» y lo que pasaba era
+     que las suyas eran de hace más de treinta días. */
+  const fuera = filtroAct.periodo === "todo"
+    ? 0 : Math.max(0, actividadesVisibles(false).length - as.length);
+  const yFuera = !fuera ? "" :
+    ` Hay <b>${fuera}</b> más fuera de este periodo: ponlo en <i>Todo</i> para verlas.`;
+
   if (!as.length){
-    cont.innerHTML = filtrosHtml + `<div class="vacio">Sin actividades registradas ${esc(rotulo)}.<br>
-      Cambia el periodo o registra una nueva.</div>`;
+    cont.innerHTML = filtrosHtml + `<div class="vacio">Sin actividades registradas ${esc(rotulo)}.
+      ${fuera ? yFuera : "<br>Cambia el periodo o registra una nueva."}</div>`;
   } else {
     cont.innerHTML = filtrosHtml + resumen + `
-      <p class="hint" style="margin:0 0 8px">${as.length} actividad(es) ${esc(rotulo)}.
+      <p class="hint" style="margin:0 0 8px">${as.length} actividad(es) ${esc(rotulo)}.${yFuera}
         Haz clic en un renglón para abrirla.</p>
       <table class="data">
         <thead><tr><th>Fecha y hora</th><th>Ejecutivo</th><th>Tipo</th><th>Cliente</th>

@@ -44,6 +44,7 @@ node pruebas/navegador/certificados-para-ventas.mjs  # quién los puede emitir
 node pruebas/navegador/falta-subir.mjs              # el aviso de lo que no subió
 node pruebas/navegador/renombrar-a-alguien.mjs      # el nombre se lleva sus papeles
 node pruebas/navegador/la-lapida-que-no-entra.mjs   # un borrado que el servidor no acepta
+node pruebas/navegador/la-bitacora-de-cada-quien.mjs # ver las actividades propias
 node pruebas/navegador/certificados.mjs             # el folio no se repite y quién emite
 node pruebas/navegador/arranque.mjs                 # que la aplicación abra
 node pruebas/navegador/no-se-pierde-lo-escrito.mjs  # guardar guarda de verdad
@@ -86,6 +87,14 @@ que ya trae otro documento ni uno de otra serie, que el número corregido quede 
 contador, y que una ejecutiva no pueda hacerlo. Sus grupos de control son lo que no puede
 romperse: un documento ya emitido, enviado o reabierto sigue sin renumerarse solo, y dos
 borradores que de verdad chocan se siguen arreglando solos.
+
+`la-bitacora-de-cada-quien.mjs` nace de la gerencia de ventas: veía las actividades de todo el
+equipo menos las suyas. Cuida las dos mitades. Que **un renglón de sobra** con su nombre —un
+duplicado, uno viejo de quien cambió de área— **no le esconda su propia bitácora**, y que la regla
+que separa las bitácoras por departamento siga en pie: quien de verdad es de marketing sigue fuera,
+tenga uno o dos renglones. Y que la pantalla **diga cuántas quedaron fuera del periodo** —el de
+treinta días que trae por omisión— con qué hacer para verlas, y que **no diga nada** cuando no hay
+nada fuera.
 
 `la-lapida-que-no-entra.mjs` es la segunda mitad de lo anterior, y el que de verdad escondía
 documentos. Levanta un servidor de mentiras al que se le pide **cómo contestar** —aceptar, rechazar

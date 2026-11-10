@@ -454,6 +454,25 @@ se volverían a subir enteras—; y **un documento firmado sigue diciendo quién
 bloque de firmas imprime el nombre que se congeló ese día. Lo que se corrige es de quién es el
 papel, no quién lo firmó.
 
+### «No puedo ver mis propias actividades»
+
+Lo reportó la gerencia de ventas: veía las actividades de todo el equipo **menos las suyas**, y su
+papel es justo el que ve el trabajo de todos. Eran dos cosas a la vez.
+
+**El defecto.** Cada departamento lleva su propia bitácora, y para no mezclarlas el CRM arma una
+lista de «gente que no es de este departamento» **por nombre**. La armaba renglón por renglón:
+bastaba **un** renglón con ese nombre y un papel de otra área para que el nombre entrara a la
+lista, aunque la misma persona tuviera su renglón bueno en ésta. Y eso pasa de verdad — un
+duplicado, uno viejo de quien cambió de área, uno a medio llenar. Resultado: a esa persona se le
+escondía **su propia bitácora en su propio departamento**, y a nadie más le constaba. Ahora un
+nombre sale de esa lista si **cualquiera** de sus renglones pertenece al departamento: la duda se
+resuelve a favor de ver, porque lo que se esconde de más no lo ve nadie y nadie sabe por qué.
+
+**Y lo que la pantalla no decía.** El periodo trae *«Últimos 30 días»* por omisión, así que lo de
+hace cinco semanas no sale. La pantalla decía cuántas había dentro del periodo y se callaba cuántas
+quedaban fuera — que es exactamente el dato que contesta «¿y las mías?». Ahora lo dice: *«Hay 7 más
+fuera de este periodo: ponlo en Todo para verlas»*, y no lo dice cuando no hay nada fuera.
+
 ### Una lápida que el servidor rechaza se suelta, no se insiste
 
 Éste es el que de verdad escondía documentos, y salió persiguiendo lo de arriba: corregido el
