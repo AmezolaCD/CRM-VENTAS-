@@ -1061,7 +1061,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.10-7";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.10-8";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -5940,8 +5940,11 @@ async function salir(){
   guardarSesion();
   guardarNubeCfg();
 
-  // La cartera del que se va no se queda esperando al siguiente.
+  // La cartera del que se va no se queda esperando al siguiente. Ni sus
+  // renglones frenados: en una computadora compartida, el que entra después no
+  // tiene por qué heredar la espera de otro.
   sincronizado = new Map();
+  soltarElFreno();
   state = sanear({});
   alDiaSinTumbar(true);   // vaciar la pantalla NO es borrar: ver el candado
   /* Ni las cuentas que pidió prestadas al servidor: el ingreso por campaña y
@@ -6547,6 +6550,70 @@ const hayCapturaAbierta = () =>
  */
 const ponerseAlDia = () => nube.enlazado ? sincronizar() : primeraSincronizacion();
 
+/* EL FRENO DEL REINTENTO
+   ---------------------------------------------------------------------------
+   Un renglón que el servidor rechaza no se marca como sincronizado —con razón,
+   no subió—, así que vuelve a salir en la lista de cambios de la vuelta
+   siguiente. Y en la siguiente. Cada quince segundos, para siempre.
+
+   Medido en el servidor del hotel: 25 900 peticiones rechazadas en un día desde
+   UNA sola sesión, y después 4 697 en cuarenta minutos entre dos. El 90 % del
+   tráfico del proyecto era el CRM reenviando lo mismo que ya le habían dicho
+   que no. Desde octubre, y sin que se viera en ninguna pantalla.
+
+   Un renglón que el servidor rechaza por permisos lo va a rechazar igual dentro
+   de quince segundos. Lo que cambia las cosas es otra: que alguien lo edite,
+   que le arreglen el permiso, o que la persona lo pida. Así que se espera cada
+   vez más entre intentos —sin tirarlo NUNCA y sin dejar de contarlo—.
+
+   Vive en memoria a propósito: recargar lo suelta, que es lo que uno espera, y
+   no mete en el navegador un dato nuevo que se pueda pudrir. */
+const ESPERAS  = [60e3, 5*60e3, 15*60e3, 60*60e3];   // 1 min, 5, 15, y de ahí 1 h
+const frenados = new Map();        // id → { huella, tipo, veces, motivo, hasta }
+const huellaDe = f => JSON.stringify(f.datos);
+
+/** ¿A este renglón le toca esperar antes de volver a intentarlo? */
+function frenado(f){
+  const e = frenados.get(f.id);
+  if (!e) return false;
+  /* Lo editaron: eso es decir «vuélvelo a intentar». Se suelta en el acto —
+     hacerle esperar ahí sería justo el defecto que la gente sí notaría. */
+  if (e.huella !== huellaDe(f)){ frenados.delete(f.id); return false; }
+  return Date.now() < e.hasta;
+}
+
+/** Apunta el rechazo y espacia el siguiente intento. */
+function frenar(r, f){
+  const previo = frenados.get(r.id);
+  const huella = f ? huellaDe(f) : (previo && previo.huella) || "";
+  // Si el renglón cambió, la cuenta empieza de nuevo: es otro intento, no el mismo.
+  const veces  = (previo && previo.huella === huella) ? previo.veces + 1 : 1;
+  const espera = ESPERAS[Math.min(veces, ESPERAS.length) - 1];
+  frenados.set(r.id, { huella, veces, tipo: r.tipo, motivo: r.motivo,
+                       hasta: Date.now() + espera });
+}
+
+/** «Volver a intentar» tiene que intentar de verdad, ahora. */
+function soltarElFreno(){ frenados.clear(); }
+
+/**
+ * Lo que está sin subir: lo que rebotó y lo que está esperando su turno.
+ *
+ * Tiene que incluir lo frenado. Si no, el chip diría «Falta subir 0» con ciento
+ * siete renglones esperando, que es peor que el bucle que se vino a quitar.
+ */
+function loQueFaltaSubir(actuales){
+  const vivos = new Map(actuales.map(f => [f.id, f]));
+  const faltan = [];
+  for (const [id, e] of [...frenados]){
+    const f = vivos.get(id);
+    // Se fue de este equipo, o ya subió: el freno sobra.
+    if (!f || sincronizado.get(id) === JSON.stringify(f.datos)){ frenados.delete(id); continue; }
+    faltan.push({ id, tipo: f.tipo, motivo: e.motivo, hasta: e.hasta });
+  }
+  return faltan;
+}
+
 let sincronizando = false;
 async function sincronizar(){
   if (!nubeActiva() || sincronizando) return;
@@ -6560,6 +6627,7 @@ async function sincronizar(){
        servidor rebotaría. */
     const puedeTodo = esAdmin();
     const deMiIncumbencia = f => puedeTodo || !SOLO_ADMIN.includes(f.tipo);
+    let lapidasPendientes = [];
 
     // Primero lo de los demás, luego lo propio: así una edición local reciente
     // gana sobre una copia remota vieja del mismo registro.
@@ -6692,7 +6760,8 @@ async function sincronizar(){
        La protección ya existía, pero sólo al enlazar el equipo por primera
        vez; hacía falta en cada vuelta. */
     const cambios = actuales.filter(f =>
-      deMiIncumbencia(f) && sincronizado.get(f.id) !== JSON.stringify(f.datos));
+      deMiIncumbencia(f) && sincronizado.get(f.id) !== JSON.stringify(f.datos) &&
+      !frenado(f));
     const vivos = new Set(actuales.map(f => f.id));
     /* Las lápidas salen de lo APUNTADO, no de deducirlas de `sincronizado`:
        ése arranca vacío al recargar, y por eso un borrado se deshacía solo.
@@ -6702,7 +6771,6 @@ async function sincronizar(){
        —el renglón ya estaba muerto—; una de menos es el defecto. */
     const borrados = [...new Set([...tumbas, ...sincronizado.keys()])].filter(id =>
       !vivos.has(id) && deMiIncumbencia({ tipo: String(id).split(":")[0] }));
-    nube.rechazados = [];
     if (cambios.length || borrados.length){
       const parte = await subir(cambios, borrados);
 
@@ -6755,8 +6823,25 @@ async function sincronizar(){
           console.warn("Lápida soltada, el servidor no la acepta:", r.id, r.motivo);
         }
       guardarTumbas();
-      nube.rechazados = parte.rechazados;
+
+      /* El freno: lo que entró se olvida, lo que rebotó espera cada vez más.
+         Ver ESPERAS, arriba. */
+      const porIdAhora = new Map(actuales.map(f => [f.id, f]));
+      for (const id of parte.subidos)     frenados.delete(id);
+      for (const r  of parte.rechazados)
+        if (vivos.has(r.id)) frenar(r, porIdAhora.get(r.id));
+
+      /* Un BORRADO que el servidor rechaza y que NO se soltó arriba sigue
+         pendiente, y hay que seguir contándolo: su renglón ya no vive aquí, así
+         que `loQueFaltaSubir` no lo ve. El soltado no se cuenta a propósito —se
+         decidió no insistir, no queda nada por subir, y contarlo lo dejaría
+         clavado en «Falta subir» para siempre—. */
+      lapidasPendientes = parte.rechazados.filter(r => !vivos.has(r.id) && tumbas.has(r.id));
     }
+
+    /* Se calcula SIEMPRE, haya habido vuelta o no: si todo lo pendiente está
+       frenado no se sube nada, y aun así hay que seguir diciendo cuánto falta. */
+    nube.rechazados = [...loQueFaltaSubir(actuales), ...lapidasPendientes];
 
     nube.estado = nube.rechazados.length ? "rechazado" : "listo";
     nube.sincronizadoEn = new Date().toISOString();
@@ -7002,6 +7087,7 @@ const usuariosSinSubir = () => state.usuarios.filter(u =>
  */
 async function empujarUsuarios(){
   for (const u of state.usuarios) sincronizado.delete("usuarios:" + u.id);
+  soltarElFreno();   // se está pidiendo expresamente que suban: no se hace esperar
   for (let i = 0; i < 20; i++){
     await sincronizar();
     if (!usuariosSinSubir().length) break;
@@ -7244,8 +7330,21 @@ function pintarNube(){
  * que decía "Sin conexión". Nadie podía saber cuál era ni qué hacer.
  *
  * Se nombra por folio o por nombre, no por el id interno: "CV-2026-004, de
- * Eduardo Lara" le dice algo a quien lo lee; "convenios:v9" no.
+ * Laura Marín" le dice algo a quien lo lee; "convenios:v9" no.
  */
+/** «Se vuelve a intentar en un rato», dicho con el rato de verdad. */
+function cuandoSeReintenta(r){
+  if (!r.hasta) return "Se vuelve a intentar en la próxima vuelta.";
+  const faltan = r.hasta - Date.now();
+  if (faltan <= 0) return "Se vuelve a intentar en la próxima vuelta.";
+  const min = Math.ceil(faltan / 60000);
+  return "Se vuelve a intentar " +
+    (min <= 1 ? "en menos de un minuto" :
+     min < 60 ? `en ${min} minutos` :
+     `en ${Math.round(min / 60)} hora(s)`) +
+    ", o en cuanto se edite el registro. Con «Volver a intentar» se hace ya.";
+}
+
 function menuRechazados(){
   /** El registro al que se refiere un rechazo, si es que todavía está aquí. */
   const buscar = r => {
@@ -7305,7 +7404,8 @@ function menuRechazados(){
           const q = comoSeLlama(r);
           return `<div class="note warn" style="margin-top:10px">
             <b>${esc(q.titulo)}</b>${q.sub ? ` <span class="hint">· ${esc(q.sub)}</span>` : ""}
-            <div class="hint" style="margin-top:6px">${esc(porQue(r.motivo, esAjeno(r)))}</div></div>`;
+            <div class="hint" style="margin-top:6px">${esc(porQue(r.motivo, esAjeno(r)))}</div>
+            <div class="hint" style="margin-top:4px">${esc(cuandoSeReintenta(r))}</div></div>`;
         }).join("")}
         <p class="hint" style="margin-top:14px">Nada se ha perdido: lo rechazado sigue guardado
           en este equipo —y puede que <b>sólo</b> aquí—. Cerrar sesión en esta computadora, o
@@ -7317,6 +7417,10 @@ function menuRechazados(){
     </div>`);
   ov.querySelector("#bReintentar").onclick = async () => {
     ov.remove();
+    /* Sin esto el botón mentiría: los renglones frenados se quedarían esperando
+       su turno y la persona vería «Falta subir N» igualito después de pedir que
+       se intentara. Pedirlo a mano es exactamente la señal que suelta el freno. */
+    soltarElFreno();
     await sincronizar();
   };
 }
@@ -12080,6 +12184,7 @@ function renderAjustes(){
         // equipo se ve como cambio y vuelve a salir. Los borrados se calculan
         // contra ese mismo registro, así que vaciarlo no da de baja nada.
         sincronizado = new Map();
+        soltarElFreno();   // pedirlo a mano es la señal que suelta lo frenado
         await sincronizar();
         if (nube.estado === "error") throw new Error(nube.error || "sin detalle");
         alert(`Listo: se mandaron ${filas.length} registros.\n\n` +
@@ -12185,6 +12290,7 @@ function renderAjustes(){
       nube.url = ""; nube.anon = ""; nube.sesion = null; nube.ultimo = "";
       nube.estado = "local"; nube.enlazado = false;
       sincronizado = new Map();
+      soltarElFreno();
       guardarNubeCfg(); guardarSesion();
       pintarNube(); renderAjustes();
     };

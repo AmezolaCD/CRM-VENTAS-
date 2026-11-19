@@ -105,6 +105,12 @@ async function bloque(titulo, fn){
 const br = await chromium.launch({ executablePath: CHROME });
 const p  = await br.newPage({ viewport:{ width:1200, height:900 } });
 p.on('pageerror', e => { console.log('  FALLA error de JavaScript: ' + e.message); fallas++; });
+/* Lo que el CRM apunta al soltar una lápida. Es la evidencia directa de que el
+   servidor la rechazó: en «Falta subir» NO aparece, y es correcto que no
+   aparezca —al soltarla ya no queda nada pendiente, y contarla la dejaría
+   clavada ahí para siempre, porque su renglón ya no vive en este equipo—. */
+const apuntes = [];
+p.on('console', m => apuntes.push(m.text()));
 p.on('dialog', d => d.accept().catch(() => {}));
 await p.goto(`http://127.0.0.1:${PUERTO}/app`);
 await p.waitForFunction(() => typeof sincronizar === 'function', null, { timeout:15000 });
@@ -168,7 +174,9 @@ await bloque('2 · si el servidor la rechaza por permisos, se suelta', async () 
   await sincro();
 
   afirma('EL SERVIDOR LA RECHAZÓ',
-    await p.evaluate(() => nube.rechazados.some(r => r.id === 'convenios:v1')));
+    apuntes.some(t => /L[áa]pida soltada/i.test(t) && /convenios:v1/.test(t)));
+  afirma('y NO se queda clavada en «Falta subir»',
+    await p.evaluate(() => !nube.rechazados.some(r => r.id === 'convenios:v1')));
   afirma('Y LA LÁPIDA SE SOLTÓ', !(await lapidas()).includes('convenios:v1'));
 
   /* Y ahora que el servidor sí lo entrega, su máquina ya no lo tira. Volver a
