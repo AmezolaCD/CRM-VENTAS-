@@ -253,6 +253,13 @@
   .field.err{border-color:var(--bad); box-shadow:0 0 0 1px var(--bad)}
   .errbox{background:var(--bad-soft); color:var(--bad); border:1px solid var(--bad);
     border-radius:6px; padding:10px 13px; margin-bottom:14px; font-size:13px}
+  /* La banda de «el servidor no recibe»: va pegada bajo el encabezado, no se
+     puede cerrar y no se imprime. Si se pudiera cerrar, se cerraría el primer
+     día y nadie se enteraría de que lo capturado todavía no ha subido. */
+  #bandaServidor{background:var(--bad-soft); color:var(--bad);
+    border-bottom:1px solid var(--bad); padding:9px 16px; font-size:13px; line-height:1.45}
+  #bandaServidor b{font-weight:600}
+  @media print{ #bandaServidor{display:none} }
   .errbox b{display:block; margin-bottom:3px}
   .errbox ul{margin:0; padding-left:18px}
   .errbox li{margin-top:3px}
@@ -1009,6 +1016,8 @@ window.CORE_NUBE = { url:"", anon:"" };
   </div>
 </header>
 
+<div id="bandaServidor" hidden></div>
+
 <main>
   <section class="view" id="v-tablero" data-on>
     <div class="kpis" id="kpis"></div>
@@ -1052,7 +1061,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.10-5";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.10-6";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -5217,6 +5226,10 @@ function cargarNube(){
     nube.url = normalizaUrlNube(c.url);
     nube.anon = c.anon || "";
     nube.enlazado = !!c.enlazado;
+    /* Si este equipo trabajó con el servidor de datos caído, hay capturas que
+       todavía no han subido y se tiene que acordar aunque se recargue: de eso
+       depende que al volver el servidor se FUNDAN en vez de reemplazarse. */
+    nube.trabajoSinServidor = !!c.trabajoSinServidor;
   }catch(e){}
   // Equipo nuevo: adopta la nube del hotel sin preguntar nada.
   if (!nube.url && !nube.anon && NUBE_DEF.url && NUBE_DEF.anon){
@@ -5237,7 +5250,8 @@ function cargarNube(){
 
 function guardarNubeCfg(){
   try{ localStorage.setItem(NUBE_CFG,
-    JSON.stringify({ url:nube.url, anon:nube.anon, enlazado:!!nube.enlazado })); }catch(e){}
+    JSON.stringify({ url:nube.url, anon:nube.anon, enlazado:!!nube.enlazado,
+                     trabajoSinServidor:!!nube.trabajoSinServidor })); }catch(e){}
 }
 function guardarSesion(){
   try{
@@ -5396,6 +5410,35 @@ const AVISO_DEL_RELOJ =
 function mensajeDeFalla(msg){
   return fallaDeRelojDelServidor(msg) ? AVISO_DEL_RELOJ : String(msg || "");
 }
+
+/**
+ * Abrir el CRM aunque el servidor de datos no reciba.
+ *
+ * El servidor de CUENTAS dijo que sí: la contraseña es correcta y la sesión es
+ * legítima. El que no recibe es el de datos. Dejar a esa persona afuera, mirando
+ * un aviso, no protege nada —su contraseña ya se verificó— y le quita el día
+ * entero: el CRM guarda todo en su equipo y puede seguir trabajando sin red.
+ *
+ * Así que se entra, con la banda a la vista, y el sondeo queda andando: en cuanto
+ * el servidor acepte, lo capturado sube solo y lo del hotel baja, sin que nadie
+ * recargue nada.
+ *
+ * Se apunta en `nube.trabajoSinServidor`, que sobrevive a recargar, porque de eso
+ * depende que al volver el servidor lo de este equipo se funda y no se reemplace.
+ */
+function abrirSinServidor(motivo){
+  nube.estado = "sinServidor";
+  nube.error  = mensajeDeFalla(motivo);
+  nube.trabajoSinServidor = true;
+  guardarNubeCfg();
+  cerrarEntrada();
+  pintarNube();
+  arrancarSondeo();
+  render();
+}
+
+/** ¿Estamos trabajando con el servidor de datos caído? */
+const sinServidor = () => nube.estado === "sinServidor";
 
 /** La cajita roja de la pantalla de acceso, con los renglones respetados. */
 const cajaDeFalla = msg =>
@@ -5877,8 +5920,12 @@ async function salir(){
     if (faltan()){
       try{ await sincronizar(); }catch(e){}
       if (faltan() && !confirm(
-        `Quedan ${faltan()} cambio(s) de este equipo sin subir y no se pudo conectar ` +
-        "con la nube.\n\nSi cierras la sesión ahora se pierden.\n\n¿Cerrar de todos modos?"))
+        `Quedan ${faltan()} cambio(s) de este equipo sin subir ` +
+        (sinServidor() ? "porque el servidor de datos del hotel no está recibiendo."
+                       : "y no se pudo conectar con la nube.") +
+        "\n\nSi cierras la sesión ahora se pierden." +
+        "\n\nPara no perderlos: cancela, y en Exportar → Respaldo completo (JSON)." +
+        "\n\n¿Cerrar de todos modos?"))
         return;
     }
   }
@@ -5926,9 +5973,15 @@ function menuSesion(){
         <p class="hint" style="margin:2px 0 0">${esc(u ? infoRol(u.rol).name : "Este correo no está dado de alta")}</p>
         <p class="hint" style="margin:2px 0 14px">${esc(correoSesion())}</p>
         <div id="miFirma" style="text-align:left;margin-bottom:14px"></div>
-        <div class="note" style="text-align:left">Al cerrar la sesión, los datos de esta
-          computadora se borran y el siguiente que entre baja los suyos de la nube.
-          <b>Nada se pierde:</b> todo vive en el servidor.</div>
+        <div class="${sinServidor() ? "errbox" : "note"}" style="text-align:left">${
+          sinServidor()
+            ? `Al cerrar la sesión, los datos de esta computadora <b>se borran</b>. Y ahora
+               mismo <b>el servidor no está recibiendo</b>, así que lo que se capturó hoy
+               todavía NO está allá: cerrar la sesión lo pierde.
+               <b>Antes de cerrar: Exportar → Respaldo completo (JSON).</b>`
+            : `Al cerrar la sesión, los datos de esta computadora se borran y el siguiente
+               que entre baja los suyos de la nube.
+               <b>Nada se pierde:</b> todo vive en el servidor.`}</div>
         <p style="margin-bottom:8px"><button class="btn" id="bPerm"
           style="width:100%;padding:10px">¿Por qué no veo algo?</button></p>
         <p><button class="btn danger" id="bSalirYa" style="width:100%;padding:10px;font-size:15px">
@@ -6651,9 +6704,20 @@ async function sincronizar(){
 
     nube.estado = nube.rechazados.length ? "rechazado" : "listo";
     nube.sincronizadoEn = new Date().toISOString();
+    /* El servidor volvió: lo de este equipo ya está allá y la banda se va. */
+    if (nube.trabajoSinServidor){ nube.trabajoSinServidor = false; guardarNubeCfg(); }
   }catch(e){
-    nube.estado = "error";
-    nube.error = e.message;
+    /* Que el servidor de datos no reciba no es «sin conexión»: decirlo así manda
+       a la persona a revisar su módem mientras lo capturado se queda esperando.
+       Estado propio, con su banda, y la marca de que aquí hay trabajo sin subir. */
+    if (fallaDeRelojDelServidor(e.message)){
+      nube.estado = "sinServidor";
+      nube.error  = mensajeDeFalla(e.message);
+      if (!nube.trabajoSinServidor){ nube.trabajoSinServidor = true; guardarNubeCfg(); }
+    }else{
+      nube.estado = "error";
+      nube.error = e.message;
+    }
     console.warn("Sincronización:", e.message);
   }finally{
     sincronizando = false;
@@ -6763,6 +6827,25 @@ async function primeraSincronizacion(){
       throw new Error("Enlace cancelado: la nube quedó vacía.");
     }
     marcarSincronizado([]);          // todo se verá como cambio y subirá
+    nube.enlazado = true;
+    guardarNubeCfg();
+    await sincronizar();
+    return;
+  }
+
+  /* LO QUE SE CAPTURÓ CON EL SERVIDOR CAÍDO NO SE REEMPLAZA: SE FUNDE.
+     ------------------------------------------------------------------------
+     Quien entró con el servidor de datos sin recibir estuvo trabajando todo el
+     día contra su propio equipo. Eso que tiene aquí no es una cartera vieja que
+     se pueda tirar: son las capturas de hoy, de alguien que ya se identificó, y
+     que no han subido a ninguna parte. Ofrecerle «este equipo adoptará esos
+     datos y los suyos locales se reemplazarán» es ofrecerle borrar su día, y la
+     mitad de la gente le va a decir que sí sin leerlo.
+
+     Se funden, que es lo que `sincronizar` sabe hacer: baja lo del hotel, sube
+     lo de aquí, y nada se tira. */
+  if (hayLocal && nube.trabajoSinServidor){
+    marcarSincronizado([]);          // todo lo de este equipo se ve como cambio y sube
     nube.enlazado = true;
     guardarNubeCfg();
     await sincronizar();
@@ -7004,7 +7087,29 @@ const nombresDeRol = rol => state.usuarios.filter(u => u.rol === rol && u.nombre
 
 /* ----- Interfaz ----- */
 
+/**
+ * La banda de «el servidor no está recibiendo».
+ *
+ * Va arriba de todo y no se puede cerrar, a propósito: lo que se captura
+ * mientras tanto vive NADA MÁS en este equipo, y un aviso que se puede quitar se
+ * quita el primer día. Lo que más importa de este texto es lo último —no cerrar
+ * sesión—, porque cerrarla borra los datos de la computadora.
+ */
+function pintarBandaServidor(){
+  const b = document.getElementById("bandaServidor");
+  if (!b) return;
+  if (!sinServidor()){ b.hidden = true; b.innerHTML = ""; return; }
+  b.hidden = false;
+  b.innerHTML = `<b>El servidor de datos del hotel no está recibiendo.</b> No es su
+    contraseña ni su equipo. Puede seguir trabajando: lo que capture se guarda aquí y
+    sube solo en cuanto el servidor vuelva.
+    <b>Mientras tanto no cierre su sesión ni borre los datos del navegador</b>, porque
+    todavía no está en el servidor. Si necesita cerrar, primero
+    <b>Exportar → Respaldo completo (JSON)</b>. Avísele a sistemas.`;
+}
+
 function pintarNube(){
+  pintarBandaServidor();
   const el = document.getElementById("estadoNube");
   if (!el) return;
   el.style.display = "";
@@ -7035,6 +7140,11 @@ function pintarNube(){
                      "El servidor no aceptó " + nube.rechazados.length +
                      (nube.rechazados.length === 1 ? " registro" : " registros") +
                      ".\nLo demás sí subió. Clic para ver cuáles."],
+    /* El servidor de datos no recibe, pero la sesión es buena y se puede
+       trabajar. No es «Sin conexión»: eso manda a revisar el módem. */
+    sinServidor:    ["Sin servidor", "var(--bad)",
+                     "El servidor de datos del hotel no está recibiendo.\n" +
+                     "Lo que captures se guarda en este equipo y sube solo cuando vuelva."],
     error:          ["Sin conexión", "var(--bad)", nube.error || "No se pudo sincronizar"]
   };
   let [txt, color, ayuda] = mapa[nube.estado] || mapa.local;
@@ -7058,7 +7168,7 @@ function pintarNube(){
   /* Con sesión el chip enseña el nombre, no el estado. Para lo rechazado eso
      no alcanza: quedaría sólo el punto de color, y de eso justamente se trata
      —que se vea—. Así que el nombre se acompaña de la cuenta. */
-  const etiqueta = (nube.rechazados.length || avisaFirmas)
+  const etiqueta = (nube.rechazados.length || avisaFirmas || sinServidor())
     ? (quien ? quien + " · " + txt : txt) : (quien || txt);
   el.innerHTML = `<span class="punto-nube" style="background:${color}"></span>` +
     esc(etiqueta);
@@ -7503,6 +7613,13 @@ function pantallaEntrada(){
       cerrarEntrada();
       render();
     }catch(ex){
+      /* La contraseña fue aceptada y el que no recibe es el servidor de datos:
+         no se deja a nadie afuera por una falla que no es suya. Se entra con lo
+         que este equipo tiene. */
+      if (nube.sesion && fallaDeRelojDelServidor(ex.message)){
+        abrirSinServidor(ex.message);
+        return;
+      }
       err.innerHTML = cajaDeFalla(ex.message);
       b.disabled = false; b.textContent = "Entrar";
     }
@@ -7605,16 +7722,21 @@ async function arrancarNube(){
   // a preguntarlo en cada arranque es un estorbo diario que además no dice
   // nada. De la segunda vez en adelante se sincroniza y ya.
   ponerseAlDia()
-    .then(() => { nube.estado = "listo"; pintarNube(); arrancarSondeo(); })
+    .then(() => {
+      /* No se pisa lo que la sincronización ya dijo. `sincronizar` se traga sus
+         propios errores y termina normal, así que este `.then` llegaba siempre y
+         ponía «En línea» encima de «Falta subir N» y de «Sin servidor». La
+         persona arrancaba el día creyendo que todo estaba arriba. */
+      if (!["rechazado", "sinServidor", "error"].includes(nube.estado))
+        nube.estado = "listo";
+      pintarNube(); arrancarSondeo();
+    })
     .catch(e => {
+      /* Con sesión legítima y el servidor de datos caído, la pantalla que
+         corresponde es el CRM, no el candado: ver abrirSinServidor(). */
+      if (nube.sesion && fallaDeRelojDelServidor(e.message)){ abrirSinServidor(e.message); return; }
       nube.estado = "error"; nube.error = mensajeDeFalla(e.message); pintarNube();
-      if (/401|JWT|token/i.test(e.message)){
-        pantallaEntrada();
-        // Con el reloj atrasado, el recuadro de acceso salía en blanco: parecía
-        // que lo habían sacado por una contraseña mala. Que diga de qué es.
-        const caja = document.getElementById("errEntrar");
-        if (caja && fallaDeRelojDelServidor(e.message)) caja.innerHTML = cajaDeFalla(e.message);
-      }
+      if (/401|JWT|token/i.test(e.message)) pantallaEntrada();
     });
 }
 

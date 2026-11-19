@@ -34,7 +34,9 @@
 
    5. Con el servidor contestando 401 y `PGRST303 … issued at future`, la
       pantalla de acceso NO dice «contraseña incorrecta», NO enseña el error
-      crudo, y sí dice de quién es la falla, a quién avisarle y qué se hace.
+      crudo, y no deja a nadie plantado en la puerta: la contraseña fue
+      aceptada, así que entra y trabaja con lo de su equipo. Lo que ve adentro
+      se comprueba en `trabajar-sin-servidor.mjs`.
    6. Grupo de control: un 401 de credenciales malas sigue diciendo lo de
       siempre.
    7. Y el código del servidor llega hasta aquí: `message` de PostgREST es
@@ -262,7 +264,8 @@ const intentarEntrar = async modo => {
     f.querySelector('[name="correo"]').value = 'alguien@ejemplo.example';
     f.querySelector('[name="pass"]').value   = 'lo-que-sea';
     f.requestSubmit();
-    for (let i = 0; i < 100; i++){
+    for (let i = 0; i < 120; i++){
+      if (!document.getElementById('entrada')) return 'ENTRÓ';
       const caja = document.querySelector('#errEntrar');
       if (caja && caja.innerText.trim()) return caja.innerText;
       await new Promise(r => setTimeout(r, 100));
@@ -276,13 +279,12 @@ const intentarEntrar = async modo => {
 await bloque('6 · con el reloj del servidor atrasado, no se culpa a la contraseña', async () => {
   const t = await intentarEntrar('reloj');
   afirma('NO le dice que su contraseña está mal',    !/contrase[ñn]a incorrect/i.test(t));
-  afirma('NO le enseña el error crudo del servidor',
-    !/JWT|PGRST303|401/i.test(t));
-  afirma('le dice que no es su contraseña ni su equipo',
-    /no es su contrase[ñn]a/i.test(t));
-  afirma('le dice de quién es la falla',             /servidor de datos/i.test(t));
-  afirma('y a quién avisarle',                      /sistemas/i.test(t));
-  afirma('y qué se hace para destrabarlo',           /reinici/i.test(t));
+  afirma('NO le enseña el error crudo del servidor', !/JWT|PGRST303|401/i.test(t));
+  /* Y ya no se queda afuera mirando un aviso: su contraseña fue aceptada, así
+     que entra y trabaja con lo de su equipo. Lo que ve adentro —la banda, el
+     chip, que lo capturado sube solo al volver el servidor— se comprueba
+     entero en trabajar-sin-servidor.mjs. */
+  afirma('y no se queda plantado en la puerta',      t === 'ENTRÓ');
 });
 
 await bloque('7 · grupo de control: una contraseña mala sigue diciendo lo de siempre', async () => {
