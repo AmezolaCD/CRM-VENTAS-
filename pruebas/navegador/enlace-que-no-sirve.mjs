@@ -1,4 +1,10 @@
 /* ===========================================================================
+   LO QUE SE LE DICE A LA GENTE CUANDO ALGO DEL SERVIDOR NO SIRVE
+
+   Dos historias de verdad, las dos del mismo tipo: el servidor no puede hacer
+   algo y el CRM no lo decía, o lo decía de una manera que mandaba a buscar el
+   problema donde no estaba.
+
    NO SE REPARTE UN ENLACE DE FIRMA QUE NO VA A FUNCIONAR
 
    Un cliente de verdad leyó su convenio, lo firmó con el dedo y al mandarlo le
@@ -17,6 +23,23 @@
    4. Y lo que importa: al mandarle el convenio al cliente, si el buzón no está
       montado el ejecutivo ve el aviso y **no se le ofrece el enlace**. Sólo el
       PDF, que sí funciona.
+
+   «401 · JWT ISSUED AT FUTURE» NO ES UNA CONTRASEÑA MALA (bloques 6 a 8)
+
+   A la gerente de ventas la pantalla de acceso le soltó ese renglón y nos
+   pasamos la tarde buscando un problema de contraseña. No lo era: su contraseña
+   fue aceptada y el que rechazaba el pase era el servidor de datos, con el reloj
+   atrasado cerca de una hora, así que un pase recién emitido le parecía venir
+   del futuro. Lo que se afirma:
+
+   5. Con el servidor contestando 401 y `PGRST303 … issued at future`, la
+      pantalla de acceso NO dice «contraseña incorrecta», NO enseña el error
+      crudo, y sí dice de quién es la falla, a quién avisarle y qué se hace.
+   6. Grupo de control: un 401 de credenciales malas sigue diciendo lo de
+      siempre.
+   7. Y el código del servidor llega hasta aquí: `message` de PostgREST es
+      siempre la misma frase genérica y sin `code` ni `details` no se distingue
+      un reloj atrasado de un permiso de fila.
 
    Cómo correrla:  node pruebas/navegador/enlace-que-no-sirve.mjs
    Con APP_HTML se le apunta a otra copia del index.html, que es como se
@@ -38,6 +61,12 @@ const CHROME = process.env.CHROME_PATH ||
    'ok'     → 200 true  */
 let buzon = 'falta';
 
+/* Qué le pasa a quien trata de entrar (bloque 6; apagado el resto del tiempo):
+   'reloj'  → la contraseña es aceptada y el servidor de DATOS rechaza el pase
+              recién emitido, como cuando el reloj de PostgREST se atrasa
+   'malas'  → contraseña incorrecta de verdad, el grupo de control  */
+let acceso = 'apagado';
+
 const srv = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
   const cors = { 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Headers':'*',
@@ -50,6 +79,23 @@ const srv = http.createServer((req, res) => {
   if (u.pathname === '/firmas.sql'){
     res.writeHead(200, { 'Content-Type':'text/plain; charset=utf-8' });
     return res.end(fs.readFileSync(SQL, 'utf8'));
+  }
+  if (u.pathname === '/auth/v1/token'){
+    if (acceso === 'malas'){
+      res.writeHead(400, cors);
+      return res.end('{"error_code":"invalid_credentials","msg":"Invalid login credentials"}');
+    }
+    res.writeHead(200, cors);
+    return res.end(JSON.stringify({ access_token:'pase-ficticio', refresh_token:'otro-ficticio',
+                                    token_type:'bearer', expires_in:3600,
+                                    user:{ id:'u1', email:'alguien@ejemplo.example' } }));
+  }
+  /* El reloj atrasado: el pase entra bien y los DATOS lo rechazan. Tal cual lo
+     contesta PostgREST, con su código y su detalle. */
+  if (acceso === 'reloj' && u.pathname.startsWith('/rest/v1/')){
+    res.writeHead(401, cors);
+    return res.end('{"code":"PGRST303","message":"JWT claims validation or parsing failed",' +
+                   '"details":"issued at future","hint":null}');
   }
   if (u.pathname === '/rest/v1/rpc/crm_buzon_ok'){
     if (buzon === 'falta'){ res.writeHead(404, cors); return res.end('{"message":"no existe"}'); }
@@ -193,6 +239,76 @@ await bloque('5 · un «no» NO se queda guardado', async () => {
   const despues = await mandarConvenio('ok', { fresco:false });
   afirma('al montarlo, el enlace vuelve solo', despues.botonesDeEnlace >= 3);
   afirma('y el aviso desaparece', !/todav[ií]a NO funciona/i.test(despues.texto));
+});
+
+/* ---------------------------------------------------------------------------
+   6 · EL RELOJ DEL SERVIDOR NO ES UNA CONTRASEÑA MALA
+
+   A la gerente de ventas la pantalla de acceso le dijo «401 · JWT issued at
+   future» y nos pasamos la tarde buscando un problema de contraseña. No lo era:
+   su contraseña fue aceptada y el que rechazaba el pase era el servidor de
+   datos, con el reloj atrasado. El recuadro de acceso no puede volver a mandar
+   a nadie por ese camino.
+   --------------------------------------------------------------------------- */
+
+/** Abre el recuadro de acceso de cero y devuelve lo que queda escrito en él. */
+const intentarEntrar = async modo => {
+  acceso = modo;
+  const texto = await p.evaluate(async () => {
+    document.querySelectorAll('.overlay, .modal-ov').forEach(e => e.remove());
+    nube.sesion = null;
+    pantallaEntrada();
+    const f = document.querySelector('#fEntrar');
+    f.querySelector('[name="correo"]').value = 'alguien@ejemplo.example';
+    f.querySelector('[name="pass"]').value   = 'lo-que-sea';
+    f.requestSubmit();
+    for (let i = 0; i < 100; i++){
+      const caja = document.querySelector('#errEntrar');
+      if (caja && caja.innerText.trim()) return caja.innerText;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return '(nunca dijo nada)';
+  });
+  acceso = 'apagado';
+  return texto;
+};
+
+await bloque('6 · con el reloj del servidor atrasado, no se culpa a la contraseña', async () => {
+  const t = await intentarEntrar('reloj');
+  afirma('NO le dice que su contraseña está mal',    !/contrase[ñn]a incorrect/i.test(t));
+  afirma('NO le enseña el error crudo del servidor',
+    !/JWT|PGRST303|401/i.test(t));
+  afirma('le dice que no es su contraseña ni su equipo',
+    /no es su contrase[ñn]a/i.test(t));
+  afirma('le dice de quién es la falla',             /servidor de datos/i.test(t));
+  afirma('y a quién avisarle',                      /sistemas/i.test(t));
+  afirma('y qué se hace para destrabarlo',           /reinici/i.test(t));
+});
+
+await bloque('7 · grupo de control: una contraseña mala sigue diciendo lo de siempre', async () => {
+  const t = await intentarEntrar('malas');
+  afirma('dice que el correo o la contraseña están mal',
+    /Correo o contrase[ñn]a incorrectos/i.test(t));
+  afirma('y no sale el aviso del reloj',             !/servidor de datos/i.test(t));
+});
+
+await bloque('8 · quién reconoce la falla, por dentro', async () => {
+  afirma('reconoce el código de PostgREST',
+    await p.evaluate(() => fallaDeRelojDelServidor('401 · PGRST303 JWT claims validation')) === true);
+  afirma('reconoce el detalle en texto',
+    await p.evaluate(() => fallaDeRelojDelServidor('issued at future')) === true);
+  afirma('y NO se mete donde no debe: una contraseña mala sigue siendo una contraseña mala',
+    await p.evaluate(() => fallaDeRelojDelServidor('Invalid login credentials')) === false);
+  /* El código y el detalle de PostgREST tienen que llegar hasta aquí: su
+     `message` es siempre la misma frase genérica y no distingue nada. */
+  acceso = 'reloj';
+  const crudo = await p.evaluate(async () => {
+    try{ await api('/rest/v1/loquesea'); return '(no falló)'; }
+    catch(ex){ return ex.message; }
+  });
+  acceso = 'apagado';
+  afirma('api() carga el código del servidor, no sólo su frase genérica',
+    /PGRST303/.test(crudo));
 });
 
 /* Lo que el panel copia y lo que contesta «Ya lo corrí» se comprueba aparte, en

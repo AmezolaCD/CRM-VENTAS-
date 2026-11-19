@@ -1052,7 +1052,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.10-4";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.10-5";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -5331,7 +5331,15 @@ async function api(ruta, opciones = {}, reintento = true){
   }
   if (!r.ok){
     let detalle = "";
-    try{ const j = await r.json(); detalle = j.message || j.error_description || j.error || JSON.stringify(j); }
+    // El código y el detalle van junto al mensaje, no se tiran: PostgREST pone
+    // en `message` una frase genérica («JWT claims validation or parsing
+    // failed») y la causa de verdad en `code` y `details`. Sin ellos nadie
+    // puede distinguir un permiso de fila de un reloj atrasado.
+    try{
+      const j = await r.json();
+      detalle = [j.message || j.error_description || j.error, j.code, j.details, j.hint]
+        .filter(Boolean).join(" · ") || JSON.stringify(j);
+    }
     catch(e){ detalle = await r.text().catch(() => ""); }
     throw new Error(`${r.status} · ${detalle || "sin detalle"}`);
   }
@@ -5355,6 +5363,45 @@ async function renovarSesion(){
 }
 
 /**
+ * El reloj del servidor de datos, cuando se atrasa.
+ *
+ * Una tarde la gerente de ventas no pudo entrar: la pantalla de acceso decía
+ * «401 · JWT issued at future» y todo el mundo se puso a buscar un problema de
+ * contraseña. No lo era. Su contraseña fue aceptada y su token se emitió bien;
+ * el que lo rechazaba era el servidor de datos (PostgREST), que valida la hora
+ * de emisión contra SU propio reloj. Ese reloj se había atrasado cerca de una
+ * hora, así que todo token recién emitido le parecía venir del futuro —y sólo
+ * pasaban las sesiones de más de una hora de antigüedad, que es la razón por la
+ * que a unos sí les funcionaba y a otros no.
+ *
+ * Como eso no se arregla desde aquí, lo único que el CRM puede —y debe— hacer
+ * es no mandar a nadie a cambiar una contraseña que está bien: decir de quién es
+ * la falla y a quién avisarle.
+ */
+const SENAS_DEL_RELOJ = /PGRST303|issued[ _]at[ _]future|not[ _]yet[ _]valid|iat.{0,20}future/i;
+
+/** ¿Este fallo es el reloj del servidor de datos, y no la contraseña? */
+function fallaDeRelojDelServidor(msg){
+  return SENAS_DEL_RELOJ.test(String(msg || ""));
+}
+
+const AVISO_DEL_RELOJ =
+  "No es su contraseña ni su equipo: la contraseña fue aceptada.\n" +
+  "El servidor de datos del hotel está rechazando las sesiones nuevas, porque su reloj " +
+  "se atrasó y toma por «del futuro» un pase que se acaba de emitir.\n" +
+  "Avísele a sistemas: se destraba reiniciando el proyecto en Supabase, en " +
+  "Settings → Infrastructure. Las sesiones que ya estaban abiertas no se caen.";
+
+/** El texto que de verdad se le enseña a quien no pudo entrar. */
+function mensajeDeFalla(msg){
+  return fallaDeRelojDelServidor(msg) ? AVISO_DEL_RELOJ : String(msg || "");
+}
+
+/** La cajita roja de la pantalla de acceso, con los renglones respetados. */
+const cajaDeFalla = msg =>
+  `<div class="errbox">${esc(mensajeDeFalla(msg)).replace(/\n/g, "<br>")}</div>`;
+
+/**
  * Traduce lo que contesta el servidor de cuentas.
  *
  * Antes, cualquier fallo se anunciaba como "correo o contraseña incorrectos",
@@ -5365,6 +5412,12 @@ async function renovarSesion(){
 function errorDeEntrada(estado, j, crudo){
   const codigo = String(j.error_code || j.code || j.error || "").toLowerCase();
   const texto  = String(j.msg || j.message || j.error_description || "").toLowerCase();
+
+  // Primero que nada: si es el reloj del servidor, no es la contraseña. Va
+  // antes del 401 genérico de abajo, que si no se lo tragaría y mandaría a
+  // revisar la llave pública, que está bien.
+  if (fallaDeRelojDelServidor(`${codigo} ${texto} ${crudo || ""}`))
+    return AVISO_DEL_RELOJ;
 
   if (codigo.includes("email_not_confirmed") || texto.includes("not confirmed"))
     return "La cuenta existe pero está sin confirmar. En Supabase, Authentication → Users, " +
@@ -7450,7 +7503,7 @@ function pantallaEntrada(){
       cerrarEntrada();
       render();
     }catch(ex){
-      err.innerHTML = `<div class="errbox">${esc(ex.message)}</div>`;
+      err.innerHTML = cajaDeFalla(ex.message);
       b.disabled = false; b.textContent = "Entrar";
     }
   };
@@ -7541,7 +7594,7 @@ async function arrancarNube(){
     }catch(ex){
       pantallaEntrada();
       const err = document.getElementById("errEntrar");
-      if (err) err.innerHTML = `<div class="errbox">${esc(ex.message)}</div>`;
+      if (err) err.innerHTML = cajaDeFalla(ex.message);
       return;
     }
   }
@@ -7554,8 +7607,14 @@ async function arrancarNube(){
   ponerseAlDia()
     .then(() => { nube.estado = "listo"; pintarNube(); arrancarSondeo(); })
     .catch(e => {
-      nube.estado = "error"; nube.error = e.message; pintarNube();
-      if (/401|JWT|token/i.test(e.message)) pantallaEntrada();
+      nube.estado = "error"; nube.error = mensajeDeFalla(e.message); pintarNube();
+      if (/401|JWT|token/i.test(e.message)){
+        pantallaEntrada();
+        // Con el reloj atrasado, el recuadro de acceso salía en blanco: parecía
+        // que lo habían sacado por una contraseña mala. Que diga de qué es.
+        const caja = document.getElementById("errEntrar");
+        if (caja && fallaDeRelojDelServidor(e.message)) caja.innerHTML = cajaDeFalla(e.message);
+      }
     });
 }
 
