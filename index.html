@@ -1061,7 +1061,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.10-6";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.10-7";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -6076,15 +6076,71 @@ function olvidarHuerfanos(){
 
 /* ----- Bajada y subida ----- */
 
+/* PEDIR «TODO» NO ES RECIBIR TODO.
+   ---------------------------------------------------------------------------
+   El servidor de datos tiene un tope de filas por respuesta —en Supabase se
+   llama «Max rows» y venía en 1000—. Cuando se pasa, NO contesta un error:
+   corta y contesta 200 tan tranquilo. Así que esta función pedía la tabla
+   entera en una sola petición y se quedaba con las primeras mil creyendo que
+   ésas eran todas.
+
+   Con 2252 filas en el servidor, un equipo que se enlazaba de cero recibía las
+   actividades, parte de los clientes, y de ahí en adelante NADA: ni un
+   convenio, ni un contrato, ni el catálogo de habitaciones, ni la lista de
+   usuarios —y sin la lista de usuarios el CRM no sabe quién es quién, con lo
+   que tampoco le entrega lo suyo a nadie—. Eso es, de verdad, el «no tiene
+   nada» de un ejecutivo nuevo.
+
+   Y no se arreglaba en la vuelta siguiente: `nube.ultimo` se quedaba con la
+   fecha más alta de esas mil filas, y lo cortado era casi todo más viejo que
+   esa marca, así que no se volvía a pedir nunca. Un hueco permanente y mudo.
+
+   Ahora se pide por tramos hasta que el servidor se queda sin filas. */
+const PASO_BAJADA  = 1000;   // cuántas se piden por vuelta
+const TOPE_VUELTAS = 200;    // freno: un servidor raro no puede dejar esto girando
+
 async function bajar(desde){
   const filtro = desde ? `&actualizado=gt.${encodeURIComponent(desde)}` : "";
-  /* `order=id`: sin esto el servidor devuelve las filas como se le acomode
-     —y una fila editada cambia de lugar—, así que un equipo recién enlazado
-     recibía el catálogo en un orden distinto del de todos los demás. Quien
-     manda el orden del catálogo es el campo `orden` de cada habitación; esto
-     nada más quita una fuente de desorden gratuita. */
-  const filas = await api(`/rest/v1/crm_datos?select=id,tipo,datos,actualizado,borrado${filtro}&order=id.asc`);
-  return filas || [];
+  const todas = [];
+  /* El tramo se marca con el ÚLTIMO ID traído, no con un `offset`. Con offset,
+     una fila que alguien edita a media bajada recorre a las demás de lugar y se
+     salta renglones; con la llave, no. */
+  let ultimoId = "";
+  let v = 0;
+  for (; v < TOPE_VUELTAS; v++){
+    const tope = ultimoId ? `&id=gt.${encodeURIComponent(ultimoId)}` : "";
+    /* `order=id`: sin esto el servidor devuelve las filas como se le acomode
+       —y una fila editada cambia de lugar—, así que un equipo recién enlazado
+       recibía el catálogo en un orden distinto del de todos los demás. Quien
+       manda el orden del catálogo es el campo `orden` de cada habitación; esto
+       nada más quita una fuente de desorden gratuita. Aquí además es lo que
+       hace que los tramos encajen uno tras otro sin repetir ni saltarse nada. */
+    const trozo = await api(`/rest/v1/crm_datos?select=id,tipo,datos,actualizado,borrado` +
+                            `${filtro}${tope}&order=id.asc&limit=${PASO_BAJADA}`);
+    if (!trozo || !trozo.length) break;
+    /* Si el tramo que llega no avanza —el servidor ignoró el «después de este
+       id» y devolvió otra vez el mismo—, se corta aquí. Sin esto, la bajada
+       daría las doscientas vueltas del freno repitiendo las mismas filas. Pasa
+       con un proxy de por medio, o con un servidor mal configurado, y no puede
+       convertirse en doscientas peticiones y un montón de repetidas. */
+    const ultimo = trozo[trozo.length - 1].id;
+    if (ultimoId && !(ultimo > ultimoId)){
+      console.warn("El servidor devolvió el mismo tramo otra vez; se corta la bajada en",
+                   todas.length, "fila(s). Puede faltar información.");
+      break;
+    }
+    todas.push(...trozo);
+    ultimoId = ultimo;
+    /* OJO: se corta SÓLO cuando llegan cero filas, nunca cuando llegan «menos
+       de las que pedí». Si el tope del servidor es más chico que PASO_BAJADA
+       —que es justo el caso que nos mordió— cada vuelta devuelve el tope, y
+       cortar por «vinieron menos» volvería a perder todo lo de atrás. Cuesta
+       una petición vacía al final; es el precio correcto. */
+  }
+  if (v >= TOPE_VUELTAS)
+    console.warn("Bajada cortada por el freno de vueltas:", todas.length,
+                 "fila(s). Puede faltar información.");
+  return todas;
 }
 
 /**
