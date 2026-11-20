@@ -1061,7 +1061,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.10-8";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.10-9";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -10521,7 +10521,7 @@ function enviarConfirmacion(id, via){
     const bajar = () => descargarBlob(blob, archivo);
     const abrir = () => {
       if (via === "correo")
-        window.location.href = `mailto:${encodeURIComponent(g.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+        abrirMailto(ligaCorreo(g.email, asunto, cuerpo));
       else window.open(waLink(g.telefono, cuerpo, ladaDe(g)), "_blank", "noopener");
       marcarEnviada(g.id, via);
     };
@@ -10546,7 +10546,7 @@ function enviarConfirmacion(id, via){
        <p><button class="btn" id="bAbrir2">Abrir ${esc(destino)} con el mensaje</button></p>`;
     ov.querySelector("#bAbrir2").onclick = () => {
       if (via === "correo")
-        window.location.href = `mailto:${encodeURIComponent(g.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+        abrirMailto(ligaCorreo(g.email, asunto, cuerpo));
       else window.open(waLink(g.telefono, cuerpo, ladaDe(g)), "_blank", "noopener");
       marcarEnviada(g.id, via);
     };
@@ -18717,7 +18717,9 @@ function enviarContrato(k, c){
              <button class="btn" id="kMailLiga" ${(c && c.email) ? "" : "disabled"}>Mandar el enlace por correo</button>
              <button class="btn wa" id="kWaLiga" ${(c && c.telefono) ? "" : "disabled"}
                title="Mandar el enlace por WhatsApp" aria-label="Mandar el enlace por WhatsApp">${ICONO_WA}</button>
-             <button class="btn sm" id="kCopiar">Copiar el enlace</button></p>
+             <button class="btn sm" id="kCopiar">Copiar el enlace</button>
+             <button class="btn sm" id="kCopiarMsg"
+               title="Copia el mensaje con el enlace ya puesto como enlace, para pegarlo">Copiar el mensaje</button></p>
            <p class="hint">El enlace sólo abre este documento y deja de servir en cuanto se firma.</p>
            ${enlaceYaViajo(k, "contratos") ? "" : avisoSinSubir()}
            <h3 class="sec">O mándale el PDF</h3>`
@@ -18764,10 +18766,20 @@ function enviarContrato(k, c){
       // ya salió de aquí.
       anotar("enlace");
     };
+    const cmk = ov.querySelector("#kCopiarMsg");
+    if (cmk) cmk.onclick = async () => {
+      const texto = msgLiga();
+      const como = await copiarMensaje(texto, ligaFirma(k, "contratos"));
+      if (como === "nada") prompt("Copia este mensaje y mándaselo al cliente:", texto);
+      else alert(como === "rico"
+        ? "Mensaje copiado, con el enlace ya puesto como enlace.\n\nPégalo en el correo con Ctrl+V."
+        : "Mensaje copiado.\n\nEste navegador no deja copiarlo con formato, así que el " +
+          "enlace va como texto.");
+      anotar("enlace");
+    };
     const ml = ov.querySelector("#kMailLiga");
     if (ml && !ml.disabled) ml.onclick = () => {
-      window.location.href = `mailto:${encodeURIComponent((c && c.email) || "")}` +
-        `?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(msgLiga())}`;
+      abrirMailto(ligaCorreo((c && c.email) || "", asunto, msgLiga()));
       anotar("correo"); ov.remove();
     };
     const wl = ov.querySelector("#kWaLiga");
@@ -18777,8 +18789,7 @@ function enviarContrato(k, c){
     };
     ov.querySelector("#kBajar").onclick = () => descargarBlob(blob, archivo);
     ov.querySelector("#kMail").onclick = () => {
-      window.location.href = `mailto:${encodeURIComponent((c && c.email) || "")}` +
-        `?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(mensaje)}`;
+      abrirMailto(ligaCorreo((c && c.email) || "", asunto, mensaje));
       anotar("correo"); ov.remove();
     };
     ov.querySelector("#kWa").onclick = () => {
@@ -21696,7 +21707,9 @@ function enviarEvento(e, c){
              <button class="btn" id="evMailLiga" ${(c && c.email) ? "" : "disabled"}>Mandar el enlace por correo</button>
              <button class="btn wa" id="evWaLiga" ${(c && c.telefono) ? "" : "disabled"}
                title="Mandar el enlace por WhatsApp" aria-label="Mandar el enlace por WhatsApp">${ICONO_WA}</button>
-             <button class="btn sm" id="evCopiar">Copiar el enlace</button></p>
+             <button class="btn sm" id="evCopiar">Copiar el enlace</button>
+             <button class="btn sm" id="evCopiarMsg"
+               title="Copia el mensaje con el enlace ya puesto como enlace, para pegarlo">Copiar el mensaje</button></p>
            <p class="hint">El enlace sólo abre este documento y deja de servir en cuanto se firma.</p>
            ${enlaceYaViajo(e, "eventos") ? "" : avisoSinSubir()}
            <h3 class="sec">O mándale el PDF</h3>`
@@ -21740,10 +21753,20 @@ function enviarEvento(e, c){
       // Por el portapapeles o a mano, el enlace ya salió de aquí.
       anotar("enlace");
     };
+    const cme = ov.querySelector("#evCopiarMsg");
+    if (cme) cme.onclick = async () => {
+      const texto = msgLiga();
+      const como = await copiarMensaje(texto, ligaFirma(e, "eventos"));
+      if (como === "nada") prompt("Copia este mensaje y mándaselo al cliente:", texto);
+      else alert(como === "rico"
+        ? "Mensaje copiado, con el enlace ya puesto como enlace.\n\nPégalo en el correo con Ctrl+V."
+        : "Mensaje copiado.\n\nEste navegador no deja copiarlo con formato, así que el " +
+          "enlace va como texto.");
+      anotar("enlace");
+    };
     const ml = ov.querySelector("#evMailLiga");
     if (ml && !ml.disabled) ml.onclick = () => {
-      window.location.href = `mailto:${encodeURIComponent((c && c.email) || "")}` +
-        `?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(msgLiga())}`;
+      abrirMailto(ligaCorreo((c && c.email) || "", asunto, msgLiga()));
       anotar("correo"); ov.remove();
     };
     const wl = ov.querySelector("#evWaLiga");
@@ -21753,8 +21776,7 @@ function enviarEvento(e, c){
     };
     ov.querySelector("#evBajar").onclick = () => descargarBlob(blob, archivo);
     ov.querySelector("#evMail").onclick = () => {
-      window.location.href = `mailto:${encodeURIComponent((c && c.email) || "")}` +
-        `?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(mensaje)}`;
+      abrirMailto(ligaCorreo((c && c.email) || "", asunto, mensaje));
       anotar("correo"); ov.remove();
     };
     ov.querySelector("#evWa").onclick = () => {
@@ -23984,6 +24006,62 @@ function cerrarOdt(o, firma){
  * que ya se mandaron no lo traen, y ésos se siguen leyendo como convenios, que
  * es lo único que existía cuando se generaron.
  */
+/* EL ENLACE TIENE QUE LLEGAR COMO ENLACE
+   ---------------------------------------------------------------------------
+   El enlace de firma llegaba al borrador de Outlook como texto muerto: había
+   que poner el cursor al final y dar Enter para que se volviera liga, y si no,
+   el cliente tenía que copiarlo y pegarlo a mano en su navegador. En un
+   documento que se manda a firmar, eso es fricción en el peor sitio.
+
+   La causa es el salto de línea. Outlook mete un `\n` suelto como SALTO DE
+   LÍNEA, no como fin de párrafo, y su autoformato sólo convierte una URL en
+   liga cuando un párrafo se cierra. Por eso no se convertía sola y por eso
+   darle Enter —que sí cierra párrafo— la convertía. Con CRLF cada renglón es un
+   párrafo y el autoformato corre. */
+const paraCorreo = t => String(t || "").replace(/\r\n|\r|\n/g, "\r\n");
+
+/** La dirección `mailto:` completa, con el cuerpo como Outlook lo espera. */
+const ligaCorreo = (para, asunto, cuerpo) =>
+  `mailto:${encodeURIComponent(para || "")}` +
+  `?subject=${encodeURIComponent(asunto || "")}` +
+  `&body=${encodeURIComponent(paraCorreo(cuerpo))}`;
+
+/* Abrir el correo va en su propia función por dos razones: que haya UN solo
+   lugar donde esto ocurre, y que las pruebas puedan mirar exactamente qué se
+   manda sin tener que secuestrar `location`. */
+function abrirMailto(url){ window.location.href = url; }
+
+/**
+ * Deja el mensaje en el portapapeles con la liga YA PUESTA como liga.
+ *
+ * Es la salida que no depende del autoformato de nadie: se pega con Ctrl+V en
+ * Outlook, en Gmail o en Word y el enlace llega siendo enlace. Va en dos
+ * versiones —HTML y texto plano— porque quien pegue en un campo sin formato
+ * tiene que recibir algo legible, no etiquetas.
+ *
+ * Devuelve "rico", "plano" o "nada", para poder decirle la verdad a la persona.
+ */
+async function copiarMensaje(texto, liga){
+  const cuerpo = String(texto || "");
+  const html = "<div>" +
+    esc(cuerpo)
+      .replace(/\r\n|\r|\n/g, "<br>")
+      .replace(esc(liga || "\u0000"), m => `<a href="${esc(liga)}">${m}</a>`) +
+    "</div>";
+  try{
+    await navigator.clipboard.write([new ClipboardItem({
+      "text/html":  new Blob([html],   { type:"text/html"  }),
+      "text/plain": new Blob([cuerpo], { type:"text/plain" })
+    })]);
+    return "rico";
+  }catch(e){
+    // Sin ClipboardItem —navegador viejo, permiso negado— se copia el texto de
+    // siempre. Peor que con liga, pero nunca se queda sin copiar nada.
+    try{ await navigator.clipboard.writeText(cuerpo); return "plano"; }
+    catch(e2){ return "nada"; }
+  }
+}
+
 const ligaFirma = (doc, tipo) =>
   location.origin + location.pathname + "#firmar=" +
   /* Una versión atrás esto llevaba dentro el teléfono del hotel, para que el
@@ -24462,7 +24540,7 @@ function enviarConvenio(v, c){
     guardar(); render();
   };
   const abrirCorreo = cuerpo => {
-    window.location.href = `mailto:${encodeURIComponent(c.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+    abrirMailto(ligaCorreo(c.email, asunto, cuerpo));
     anotar("correo");
   };
   const abrirWa = cuerpo => {
@@ -24475,7 +24553,9 @@ function enviarConvenio(v, c){
     <p style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn" data-mail="${id}" ${(c && c.email) ? "" : "disabled"}>Enviar por correo</button>
       <button class="btn wa" data-wa="${id}" ${(c && c.telefono) ? "" : "disabled"}
-        title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button></p>`;
+        title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${ICONO_WA}</button>
+      <button class="btn sm" data-copia="${id}"
+        title="Copia el mensaje con el enlace ya puesto como enlace, para pegarlo">Copiar el mensaje</button></p>`;
 
   pdfDeConvenio(v, c).then(async bytes => {
     if (conLiga && !(await buzonMontado())){ conLiga = false; sinBuzon = true; }
@@ -24536,6 +24616,21 @@ function enviarConvenio(v, c){
       abrirCorreo(b.dataset.mail === "liga" ? msgLiga() : msgPdf); });
     ov.querySelectorAll("[data-wa]").forEach(b => { if (!b.disabled) b.onclick = () =>
       abrirWa(b.dataset.wa === "liga" ? msgLiga() : msgPdf); });
+    /* La salida que no depende del autoformato de nadie: el mensaje se pega ya
+       con el enlace puesto. Ver copiarMensaje(). */
+    ov.querySelectorAll("[data-copia]").forEach(b => b.onclick = async () => {
+      const conEnlace = b.dataset.copia === "liga";
+      const texto = conEnlace ? msgLiga() : msgPdf;
+      const como = await copiarMensaje(texto, conEnlace ? ligaFirma(v) : "");
+      if (como === "nada") prompt("Copia este mensaje y mándaselo al cliente:", texto);
+      else alert(como === "rico"
+        ? "Mensaje copiado, con el enlace ya puesto como enlace.\n\nPégalo en el correo con Ctrl+V."
+        : "Mensaje copiado.\n\nEste navegador no deja copiarlo con formato, así que el " +
+          "enlace va como texto.");
+      // Copiar un mensaje que LLEVA el enlace es mandarlo: ya salió del hotel.
+      // El del PDF no, porque ahí no va nada adjunto.
+      if (conEnlace) anotar("enlace");
+    });
   }).catch(async err => {
     if (conLiga && !(await buzonMontado())){ conLiga = false; sinBuzon = true; }
     ov.querySelector("#cuerpoEnvioC").innerHTML =
