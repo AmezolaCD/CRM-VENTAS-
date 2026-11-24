@@ -41,7 +41,9 @@
       siempre.
    7. Y el código del servidor llega hasta aquí: `message` de PostgREST es
       siempre la misma frase genérica y sin `code` ni `details` no se distingue
-      un reloj atrasado de un permiso de fila.
+      un reloj atrasado de un permiso de fila. Pero el código POR SÍ SOLO no
+      basta para llamarle reloj: `PGRST303` también es el de una sesión
+      caducada, y confundirlos le costó dos meses a una ejecutiva del hotel.
 
    Cómo correrla:  node pruebas/navegador/enlace-que-no-sirve.mjs
    Con APP_HTML se le apunta a otra copia del index.html, que es como se
@@ -295,8 +297,16 @@ await bloque('7 · grupo de control: una contraseña mala sigue diciendo lo de s
 });
 
 await bloque('8 · quién reconoce la falla, por dentro', async () => {
-  afirma('reconoce el código de PostgREST',
-    await p.evaluate(() => fallaDeRelojDelServidor('401 · PGRST303 JWT claims validation')) === true);
+  /* El CÓDIGO a secas ya no basta, y es a propósito. `PGRST303` es el de
+     cualquier fallo de validación de claims —también el de una sesión
+     caducada—, y con él valiendo por sí solo a una ejecutiva del hotel se le
+     anunció durante semanas que «el servidor de datos no está recibiendo»
+     cuando el servidor estaba perfecto y lo único vencido era su sesión. Hace
+     falta que el servidor diga explícitamente que el pase viene del futuro. */
+  afirma('el código de PostgREST por sí solo NO es el reloj',
+    await p.evaluate(() => fallaDeRelojDelServidor('401 · PGRST303 JWT claims validation')) === false);
+  afirma('una sesión caducada tampoco lo es',
+    await p.evaluate(() => fallaDeRelojDelServidor('401 · PGRST303 · JWT expired')) === false);
   afirma('reconoce el detalle en texto',
     await p.evaluate(() => fallaDeRelojDelServidor('issued at future')) === true);
   afirma('y NO se mete donde no debe: una contraseña mala sigue siendo una contraseña mala',

@@ -1061,7 +1061,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.10-9";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.24";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -5363,17 +5363,55 @@ async function api(ruta, opciones = {}, reintento = true){
   return txt ? JSON.parse(txt) : null;
 }
 
+/**
+ * UNA SESIÓN QUE EL SERVIDOR DE CUENTAS YA NO RENUEVA SE SUELTA.
+ *
+ * A una ejecutiva del hotel le pasó esto durante DOS MESES: su último inicio de
+ * sesión con contraseña fue el 28 de septiembre, su refresh token murió, y el
+ * servidor llevaba semanas contestando 400 a cada intento de renovar. Esta
+ * función devolvía `false` y dejaba la sesión muerta puesta; como `candado()`
+ * sólo echa el cerrojo cuando NO hay sesión, su CRM no le volvió a pedir la
+ * contraseña ni una vez. Se quedó mirando un tablero en ceros, con una sesión
+ * que no servía, hablando con un servidor que la rechazaba.
+ *
+ * Se distingue RECHAZO de CAÍDA, porque no son lo mismo:
+ *   · 400 o 401 → el refresh token está muerto y no va a revivir. Se suelta.
+ *   · lo demás —5xx, sin red— → se conserva. Puede estar sin internet, y en ese
+ *     caso tiene que poder seguir trabajando con lo de su equipo.
+ *
+ * Soltar la sesión NO es `salir()`: aquí no se toca `state`. Lo que tenga
+ * capturado sigue en su equipo y sube en cuanto vuelva a entrar.
+ */
 async function renovarSesion(){
   try{
     const r = await fetch(nube.url + "/auth/v1/token?grant_type=refresh_token", {
       method:"POST", headers:{ apikey:nube.anon, "Content-Type":"application/json" },
       body: JSON.stringify({ refresh_token: nube.sesion.refresh_token })
     });
-    if (!r.ok) return false;
+    if (!r.ok){
+      if (r.status === 400 || r.status === 401) soltarSesionCaduca();
+      return false;
+    }
     nube.sesion = await r.json();
     guardarSesion();
     return true;
   }catch(e){ return false; }
+}
+
+/** Suelta la sesión y vuelve a pedir la contraseña, diciendo por qué. */
+function soltarSesionCaduca(){
+  if (!nube.sesion) return;
+  nube.sesion = null;
+  guardarSesion();
+  detenerSondeo();
+  nube.estado = "local";
+  pintarNube();
+  pantallaEntrada();
+  const caja = document.getElementById("errEntrar");
+  if (caja) caja.innerHTML = `<div class="note">Tu sesión caducó por no usarla en mucho
+    tiempo. <b>Vuelve a escribir tu contraseña</b>, es lo único que hace falta.<br><br>
+    No es un error y no se perdió nada: lo que tengas capturado en este equipo sigue
+    aquí y sube en cuanto entres.</div>`;
 }
 
 /**
@@ -5392,11 +5430,25 @@ async function renovarSesion(){
  * es no mandar a nadie a cambiar una contraseña que está bien: decir de quién es
  * la falla y a quién avisarle.
  */
-const SENAS_DEL_RELOJ = /PGRST303|issued[ _]at[ _]future|not[ _]yet[ _]valid|iat.{0,20}future/i;
+/* OJO CON EL CÓDIGO A SECAS.
+   Aquí decía `PGRST303|…`, y `PGRST303` es el código de CUALQUIER fallo de
+   validación de claims: también el de una sesión caducada. Resultado, en la
+   pantalla de una ejecutiva: «el servidor de datos del hotel no está
+   recibiendo» —que era falso, el servidor estaba perfecto— y un CRM vacío
+   detrás del aviso, cuando lo único que necesitaba era volver a escribir su
+   contraseña. Ahora hace falta que el servidor diga EXPLÍCITAMENTE que el pase
+   viene del futuro. */
+const SENAS_DEL_RELOJ = /issued[ _]at[ _]future|not[ _]yet[ _]valid|iat.{0,20}future|future.{0,20}iat/i;
+
+/* Y si habla de caducado, nunca es el reloj: es una sesión que se venció, y eso
+   se arregla entrando otra vez, no reiniciando ningún servidor. */
+const SENAS_DE_CADUCADO = /expired|caduc|\bexp\b/i;
 
 /** ¿Este fallo es el reloj del servidor de datos, y no la contraseña? */
 function fallaDeRelojDelServidor(msg){
-  return SENAS_DEL_RELOJ.test(String(msg || ""));
+  const t = String(msg || "");
+  if (SENAS_DE_CADUCADO.test(t)) return false;
+  return SENAS_DEL_RELOJ.test(t);
 }
 
 const AVISO_DEL_RELOJ =
@@ -5426,7 +5478,25 @@ function mensajeDeFalla(msg){
  * Se apunta en `nube.trabajoSinServidor`, que sobrevive a recargar, porque de eso
  * depende que al volver el servidor lo de este equipo se funda y no se reemplace.
  */
+/** ¿Hay algo de este equipo con qué trabajar mientras el servidor no recibe? */
+function hayConQueTrabajar(){
+  return !!(state.clientes.length || state.convenios.length || state.contratos.length ||
+            state.actividades.length || state.huespedes.length || state.eventos.length);
+}
+
 function abrirSinServidor(motivo){
+  /* Si este equipo no tiene NADA, abrir el CRM es ofrecer un tablero en ceros
+     con un aviso rojo encima: ni se puede trabajar ni se entiende qué pasó. Se
+     pide la contraseña, que es lo que sí saca a la persona del atasco. */
+  if (!hayConQueTrabajar()){
+    nube.estado = "error";
+    nube.error  = mensajeDeFalla(motivo);
+    pintarNube();
+    pantallaEntrada();
+    const caja = document.getElementById("errEntrar");
+    if (caja) caja.innerHTML = cajaDeFalla(motivo);
+    return;
+  }
   nube.estado = "sinServidor";
   nube.error  = mensajeDeFalla(motivo);
   nube.trabajoSinServidor = true;
