@@ -1061,7 +1061,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.25-2";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.25-3";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -5239,6 +5239,77 @@ let nube = { url:"", anon:"", sesion:null, estado:"local", ultimo:"", timer:null
              pendiente:null, rechazados:[] };
 let sincronizado = new Map();     // id de fila -> JSON ya confirmado en la nube
 
+/* LO QUE EL SERVIDOR YA TIENE, RECORDADO ENTRE RECARGAS.
+   ---------------------------------------------------------------------------
+   `sincronizado` guarda el JSON entero y vive EN MEMORIA: al recargar queda
+   vacío. Y de él depende la pregunta más delicada de la fusión —«¿esto de aquí
+   es una edición mía sin subir?»—, que al quedarse sin respuesta contestaba que
+   SÍ para todos los renglones. Consecuencia, medida en el hotel: un convenio
+   que el cliente había firmado y que ya estaba firmado en el servidor NO se
+   aplicaba al bajar, y encima la copia vieja de ese equipo se volvía a subir
+   ENCIMA. La firma desaparecía y el estado se iba para atrás, de «firmado por
+   el cliente» a «firmado por la ejecutiva». Le pasó al menos a dos convenios.
+
+   Aquí va lo mismo pero del tamaño de una línea por renglón, y esto SÍ
+   sobrevive a recargar. Se usa sólo para responder «¿cambió?». Nunca para
+   deducir borrados: de eso siguen encargándose `tumbas` y el `sincronizado` de
+   memoria, porque un localStorage a medias convertiría un mapa grande de ids en
+   una tanda de lápidas, y eso sí sería un desastre. */
+const HUELLAS = "crm-hotel-huellas";
+let huellas = new Map();          // id de fila -> huella de lo confirmado
+
+function huella(datos){
+  const t = JSON.stringify(datos);
+  // Dos acumuladores y la longitud: para dos mil renglones, chocar es imposible
+  // en la práctica, y un choque sólo retrasaría una subida, no borraría nada.
+  let a = 0x811c9dc5, b = 0x1000193;
+  for (let i = 0; i < t.length; i++){
+    const c = t.charCodeAt(i);
+    a = Math.imul(a ^ c, 16777619) >>> 0;
+    b = (Math.imul(b + c, 31) + (b >>> 7)) >>> 0;
+  }
+  return t.length.toString(36) + "." + a.toString(36) + "." + b.toString(36);
+}
+
+/* Los campos donde vive una firma, en cualquiera de las familias. */
+const CAMPOS_DE_FIRMA = ["firmaEmpresa", "firmaCliente", "firmaHotel", "firmaManual"];
+const firmadoEn = (d, k) => {
+  const f = d && d[k];
+  return !!f && (typeof f === "string" || !!f.img || !!f.pdf || !!f.ruta);
+};
+/** ¿Lo del servidor trae una firma que aquí no está? */
+const traeFirmaNueva = (remoto, local) =>
+  CAMPOS_DE_FIRMA.some(k => firmadoEn(remoto, k) && !firmadoEn(local, k));
+
+/** ¿Este renglón es, tal cual está, el que el servidor ya confirmó? */
+function yaSubido(id, datos){
+  if (sincronizado.get(id) === JSON.stringify(datos)) return true;
+  return !!huellas.size && huellas.get(id) === huella(datos);
+}
+
+/** Apuntar que el servidor lo tiene así. */
+function apuntarSubido(id, datos){
+  sincronizado.set(id, JSON.stringify(datos));
+  huellas.set(id, huella(datos));
+}
+
+function olvidarSubido(id){ sincronizado.delete(id); huellas.delete(id); }
+
+function guardarHuellas(){
+  try{ localStorage.setItem(HUELLAS, JSON.stringify([...huellas])); }catch(e){}
+}
+function cargarHuellas(){
+  try{
+    const h = JSON.parse(localStorage.getItem(HUELLAS) || "[]");
+    huellas = new Map(Array.isArray(h) ? h : []);
+  }catch(e){ huellas = new Map(); }
+}
+function olvidarTodoLoSubido(){
+  sincronizado = new Map();
+  huellas = new Map();
+  guardarHuellas();
+}
+
 const nubeActiva = () => !!(nube.url && nube.anon && nube.sesion);
 
 /**
@@ -5308,6 +5379,10 @@ function cargarNube(){
     guardarNubeCfg();
   }
   try{ nube.sesion = JSON.parse(localStorage.getItem(NUBE_SESION) || "null"); }catch(e){}
+  /* Lo que el servidor ya tiene, recordado de la sesión anterior. Sin esto la
+     fusión toma por edición sin subir TODO lo de este equipo tras cada
+     recarga, y acaba pisando en el servidor lo que otros ya firmaron. */
+  cargarHuellas();
   /* Se leen aquí y no en `arrancarNube` por lo mismo de siempre: una lectura
      que depende de que el llamador se acuerde es una lectura que algún día no
      se hace. Esto ya es el lugar donde se levanta lo guardado de la nube. */
@@ -6055,7 +6130,7 @@ async function entrarConCore(tokenHash){
 async function salir(){
   if (nubeActiva()){
     const faltan = () => filasDeEstado()
-      .filter(f => sincronizado.get(f.id) !== JSON.stringify(f.datos)).length;
+      .filter(f => !yaSubido(f.id, f.datos)).length;
     if (faltan()){
       try{ await sincronizar(); }catch(e){}
       if (faltan() && !confirm(
@@ -6082,7 +6157,7 @@ async function salir(){
   // La cartera del que se va no se queda esperando al siguiente. Ni sus
   // renglones frenados: en una computadora compartida, el que entra después no
   // tiene por qué heredar la espera de otro.
-  sincronizado = new Map();
+  olvidarTodoLoSubido();
   soltarElFreno();
   state = sanear({});
   alDiaSinTumbar(true);   // vaciar la pantalla NO es borrar: ver el candado
@@ -6203,7 +6278,10 @@ function estadoDesdeFilas(filas){
 }
 
 function marcarSincronizado(filas){
-  sincronizado = new Map(filas.map(f => [f.id, JSON.stringify(f.datos)]));
+  sincronizado = new Map();
+  huellas = new Map();
+  for (const f of filas) apuntarSubido(f.id, f.datos);
+  guardarHuellas();
 }
 
 /**
@@ -6212,7 +6290,7 @@ function marcarSincronizado(filas){
  * sincronizado" lo deja en paz: no se vuelve a subir, y tampoco se borra.
  */
 function olvidarHuerfanos(){
-  for (const id of huerfanos) sincronizado.delete(id);
+  for (const id of huerfanos) olvidarSubido(id);
   huerfanos = new Set();
 }
 
@@ -6543,7 +6621,7 @@ async function marcarFirmasQueLlegaron(porMarcar){
   const filas = new Map(filasDeEstado().map(f => [f.id, f]));
   for (const m of porMarcar){
     const f = filas.get(m.doc);
-    if (f && sincronizado.get(m.doc) === JSON.stringify(f.datos)) await marcarRecogida(m.fila);
+    if (f && yaSubido(m.doc, f.datos)) await marcarRecogida(m.fila);
     else console.warn("Firma aplicada que todavía no llega al servidor; no se marca:", m.doc);
   }
 }
@@ -6801,7 +6879,7 @@ function loQueFaltaSubir(actuales){
   for (const [id, e] of [...frenados]){
     const f = vivos.get(id);
     // Se fue de este equipo, o ya subió: el freno sobra.
-    if (!f || sincronizado.get(id) === JSON.stringify(f.datos)){ frenados.delete(id); continue; }
+    if (!f || yaSubido(id, f.datos)){ frenados.delete(id); continue; }
     faltan.push({ id, tipo: f.tipo, motivo: e.motivo, hasta: e.hasta });
   }
   return faltan;
@@ -6871,7 +6949,7 @@ async function sincronizar(){
         }
 
         const local = porId.get(r.id);
-        const mismoQueSincronizado = local && sincronizado.get(r.id) === JSON.stringify(local.datos);
+        const mismoQueSincronizado = local && yaSubido(r.id, local.datos);
 
         /* Si lo de aquí y lo del servidor son IDÉNTICOS no hay conflicto que
            proteger: se apunta como sincronizado y se sigue.
@@ -6886,7 +6964,22 @@ async function sincronizar(){
            en la primera vuelta. */
         if (local && !mismoQueSincronizado &&
             JSON.stringify(local.datos) === JSON.stringify(r.datos)){
-          sincronizado.set(r.id, JSON.stringify(local.datos));
+          apuntarSubido(r.id, local.datos);
+          continue;
+        }
+
+        /* UNA FIRMA NO SE DESHACE.
+           -------------------------------------------------------------------
+           Si el servidor trae el documento firmado y aquí no lo está, gana el
+           servidor AUNQUE esto parezca una edición local sin subir. Una firma
+           es un hecho que sólo avanza: nadie la deshace editando. Es el seguro
+           de lo que le pasó a dos convenios del hotel —firmados por el cliente
+           en el servidor, y el equipo de una ejecutiva los devolvía a «firmado
+           por la ejecutiva» cada vez que recargaba—. */
+        if (local && traeFirmaNueva(r.datos, local.datos)){
+          porId.set(r.id, { id:r.id, tipo:r.tipo, datos:r.datos });
+          aplicadas.push(r);
+          console.warn("Llegó firmado del servidor y aquí no lo estaba; gana el servidor:", r.id);
           continue;
         }
 
@@ -6918,9 +7011,9 @@ async function sincronizar(){
         // registro recién capturado se quedaba para siempre en esta máquina.
         const llegaron = new Set(aplicadas.map(r => r.id));
         for (const f of filasDeEstado())
-          if (llegaron.has(f.id)) sincronizado.set(f.id, JSON.stringify(f.datos));
+          if (llegaron.has(f.id)) apuntarSubido(f.id, f.datos);
         for (const r of aplicadas)
-          if (r.borrado) sincronizado.delete(r.id);
+          if (r.borrado) olvidarSubido(r.id);
         render();
       }
     }
@@ -6954,7 +7047,7 @@ async function sincronizar(){
        La protección ya existía, pero sólo al enlazar el equipo por primera
        vez; hacía falta en cada vuelta. */
     const cambios = actuales.filter(f =>
-      deMiIncumbencia(f) && sincronizado.get(f.id) !== JSON.stringify(f.datos) &&
+      deMiIncumbencia(f) && !yaSubido(f.id, f.datos) &&
       !frenado(f));
     const vivos = new Set(actuales.map(f => f.id));
     /* Las lápidas salen de lo APUNTADO, no de deducirlas de `sincronizado`:
@@ -6976,10 +7069,10 @@ async function sincronizar(){
          estorbarle a lo demás. */
       const entraron = new Set(parte.subidos);
       for (const f of actuales)
-        if (entraron.has(f.id)) sincronizado.set(f.id, JSON.stringify(f.datos));
+        if (entraron.has(f.id)) apuntarSubido(f.id, f.datos);
       for (const id of parte.subidos)
         if (!vivos.has(id)){
-          sincronizado.delete(id);
+          olvidarSubido(id);
           /* La lápida llegó: ya no hay nada que recordar. */
           tumbas.delete(id);
         }
@@ -7013,7 +7106,7 @@ async function sincronizar(){
       for (const r of parte.rechazados)
         if (!vivos.has(r.id) && tumbas.has(r.id) && sueltaLapida(r)){
           tumbas.delete(r.id);
-          sincronizado.delete(r.id);
+          olvidarSubido(r.id);
           console.warn("Lápida soltada, el servidor no la acepta:", r.id, r.motivo);
         }
       guardarTumbas();
@@ -7040,6 +7133,9 @@ async function sincronizar(){
     /* Y AHORA sí se dan por recogidas las firmas: con el documento ya en el
        servidor, no antes. Ver marcarFirmasQueLlegaron(). */
     await marcarFirmasQueLlegaron(parteFirmas && parteFirmas.porMarcar);
+
+    // Lo confirmado por el servidor, apuntado para que sobreviva a recargar.
+    guardarHuellas();
 
     nube.estado = nube.rechazados.length ? "rechazado" : "listo";
     nube.sincronizadoEn = new Date().toISOString();
@@ -7217,7 +7313,7 @@ async function primeraSincronizacion(){
   // el servidor le rebotaría el intento y le tumbaría la subida entera.
   if (!esAdmin())
     for (const f of filasDeEstado())
-      if (SOLO_ADMIN.includes(f.tipo)) sincronizado.set(f.id, JSON.stringify(f.datos));
+      if (SOLO_ADMIN.includes(f.tipo)) apuntarSubido(f.id, f.datos);
   for (const r of remotas)
     nube.ultimo = !nube.ultimo || r.actualizado > nube.ultimo ? r.actualizado : nube.ultimo;
   nube.enlazado = true;
@@ -7267,7 +7363,7 @@ async function revisarPermisos(){
 
 /** Los usuarios que el servidor todavía no tiene como están aquí. */
 const usuariosSinSubir = () => state.usuarios.filter(u =>
-  sincronizado.get("usuarios:" + u.id) !== JSON.stringify(u));
+  !yaSubido("usuarios:" + u.id, u));
 
 /**
  * Sube la lista de usuarios aunque no haya cambiado, y NO VUELVE HASTA SABER
@@ -7284,7 +7380,7 @@ const usuariosSinSubir = () => state.usuarios.filter(u =>
  * `sincronizado` es la prueba: ahí sólo entra lo que el servidor aceptó.
  */
 async function empujarUsuarios(){
-  for (const u of state.usuarios) sincronizado.delete("usuarios:" + u.id);
+  for (const u of state.usuarios) olvidarSubido("usuarios:" + u.id);
   soltarElFreno();   // se está pidiendo expresamente que suban: no se hace esperar
   for (let i = 0; i < 20; i++){
     await sincronizar();
@@ -11814,7 +11910,7 @@ function renderAjustes(){
   /** ¿Este equipo tiene apuntado que ya subió los ajustes? */
   const creeQueSubioAjustes = () => {
     const fila = filasDeEstado().find(f => f.id === "ajustes:global");
-    return !!fila && sincronizado.get("ajustes:global") === JSON.stringify(fila.datos);
+    return !!fila && yaSubido("ajustes:global", fila.datos);
   };
 
   p.querySelector("#bVerJefes").onclick = async () => {
@@ -12328,7 +12424,7 @@ function renderAjustes(){
     if (nube.sesion){
       const filas = filasDeEstado();
       const cuenta = t => filas.filter(f => f.tipo === t).length;
-      const faltan = filas.filter(f => sincronizado.get(f.id) !== JSON.stringify(f.datos)).length;
+      const faltan = filas.filter(f => !yaSubido(f.id, f.datos)).length;
       detalle = `<div style="margin-top:6px">En este equipo:
         <b>${cuenta("clientes")}</b> cliente(s),
         <b>${cuenta("actividades")}</b> actividad(es),
@@ -12432,7 +12528,7 @@ function renderAjustes(){
         // Con el registro de lo ya sincronizado en blanco, todo lo de este
         // equipo se ve como cambio y vuelve a salir. Los borrados se calculan
         // contra ese mismo registro, así que vaciarlo no da de baja nada.
-        sincronizado = new Map();
+        olvidarTodoLoSubido();
         soltarElFreno();   // pedirlo a mano es la señal que suelta lo frenado
         await sincronizar();
         if (nube.estado === "error") throw new Error(nube.error || "sin detalle");
@@ -12538,7 +12634,7 @@ function renderAjustes(){
       detenerSondeo();
       nube.url = ""; nube.anon = ""; nube.sesion = null; nube.ultimo = "";
       nube.estado = "local"; nube.enlazado = false;
-      sincronizado = new Map();
+      olvidarTodoLoSubido();
       soltarElFreno();
       guardarNubeCfg(); guardarSesion();
       pintarNube(); renderAjustes();
@@ -24709,8 +24805,7 @@ const enlaceYaViajo = (doc, tipo) =>
   !nubeActiva() ||
   /* En crm_datos el id SIEMPRE lleva su tipo adelante, sea cual sea. Lo que
      va pelado es el convenio en el buzón de firmas, que es otra tabla. */
-  sincronizado.get((DOCS_FIRMABLES[tipo] ? tipo : "convenios") + ":" + doc.id) ===
-    JSON.stringify(doc);
+  yaSubido((DOCS_FIRMABLES[tipo] ? tipo : "convenios") + ":" + doc.id, doc);
 
 /** El aviso, y el botón que lo arregla sin tener que explicarle nada a nadie. */
 const avisoSinSubir = () => `<div class="note warn" data-sinsubir="1">
