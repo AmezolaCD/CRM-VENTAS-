@@ -1061,7 +1061,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.25";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.25-2";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -4907,6 +4907,75 @@ function renglonDelPeso(){
  * No redibuja ni retoca nada: lo que se quita es blanco. Si algo no se puede
  * leer, se devuelve la de antes —una firma grande es mejor que ninguna—.
  */
+/* UN TOQUE NO ES UNA FIRMA.
+   ---------------------------------------------------------------------------
+   `prepararPad` marcaba el lienzo como firmado en el `pointerdown`, y el trazo
+   sólo se pinta en el `pointermove`. O sea que un toque —o un dedo que roza la
+   pantalla al bajar por la página— dejaba el lienzo EN BLANCO y marcado como
+   firmado. Un cliente del hotel le dio a enviar sin firmar: el convenio se
+   cerró solo, el enlace se apagó, y no hubo forma de volver a mandárselo.
+
+   Así que se mira la tinta, no el toque. */
+function tintaDe(ctx, w, h, fondoBlanco){
+  const d = ctx.getImageData(0, 0, w, h).data;
+  let pixeles = 0, x1 = w, y1 = h, x2 = -1, y2 = -1;
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++){
+      const i = (y * w + x) * 4;
+      /* Con fondo blanco —una firma ya guardada— el trazo es lo que no es
+         blanco; en el lienzo vivo, que es transparente, basta el alfa. */
+      const hay = fondoBlanco
+        ? (d[i + 3] > 8 && (d[i] < 236 || d[i + 1] < 236 || d[i + 2] < 236))
+        : d[i + 3] > 8;
+      if (!hay) continue;
+      pixeles++;
+      if (x < x1) x1 = x;
+      if (x > x2) x2 = x;
+      if (y < y1) y1 = y;
+      if (y > y2) y2 = y;
+    }
+  return { pixeles, ancho: x2 < 0 ? 0 : x2 - x1 + 1, alto: y2 < 0 ? 0 : y2 - y1 + 1,
+           x1, y1, x2, y2 };
+}
+
+/* Los mínimos van BAJOS a propósito: un toque no pinta absolutamente nada, así
+   que con exigir tinta ya se cierra el caso, y vale más dejar pasar una firma
+   diminuta que rechazarle la suya a quien firma pequeño. */
+const TINTA_MINIMA = 60;   // píxeles pintados
+const TRAZO_MINIMO = 16;   // px de ancho o de alto de lo trazado
+const hayFirma = t => t.pixeles >= TINTA_MINIMA && Math.max(t.ancho, t.alto) >= TRAZO_MINIMO;
+
+/** ¿En este lienzo hay una firma, o nada más lo tocaron? */
+function padFirmado(cv){
+  if (!cv) return false;
+  try{
+    return hayFirma(tintaDe(cv.getContext("2d"), cv.width, cv.height, false));
+  }catch(e){
+    // Si el lienzo no se deja leer, se cree lo de antes: nunca se bloquea a
+    // nadie por un navegador raro.
+    return !!cv.dataset.trazado;
+  }
+}
+
+/** ¿Esta firma YA GUARDADA está en blanco? Promesa: hay que descodificar el PNG. */
+function firmaEnBlanco(dataURL){
+  return new Promise(resolve => {
+    if (!dataURL) return resolve(false);          // no hay firma: otra cosa distinta
+    const img = new Image();
+    img.onerror = () => resolve(false);           // ante la duda, no se toca
+    img.onload = () => {
+      try{
+        const cv = document.createElement("canvas");
+        cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+        const c = cv.getContext("2d");
+        c.drawImage(img, 0, 0);
+        resolve(!hayFirma(tintaDe(c, cv.width, cv.height, true)));
+      }catch(e){ resolve(false); }
+    };
+    img.src = dataURL;
+  });
+}
+
 function compactarUnaFirma(dataURL){
   return new Promise(resolve => {
     const img = new Image();
@@ -7729,6 +7798,14 @@ async function firmasRecibidas(e){
     const v = (info.lista() || []).find(x => x.id === id);
     if (!v){ alert("Este equipo ya no tiene ese documento bajado."); return; }
     if (v[info.campoFirma]){ alert("Ese documento ya está firmado."); return; }
+    /* Por aquí tampoco entra un lienzo en blanco: si no, la firma vacía que se
+       acaba de quitar de un documento se podría volver a aplicar desde esta
+       misma pantalla. */
+    if (await firmaEnBlanco(fl.img)){
+      alert("Esa firma está EN BLANCO: el cliente mandó el formulario sin trazar nada.\n\n" +
+            "No se puede aplicar. Vuelve a mandarle el enlace para que firme.");
+      return;
+    }
     const distinta = !v.tokenFirma || v.tokenFirma !== fl.token;
     if (!confirm(`Se va a aplicar la firma de ${fl.nombre || "el cliente"} a ` +
         `${v.folio || id}.` +
@@ -15542,7 +15619,7 @@ function pantallaOdtPublica(datos){
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(val("odMail").trim())) falta.push("un correo válido");
       if (!val("odObj").trim())   falta.push("para qué es");
       if (!val("odEntrega"))      falta.push("para cuándo la necesitas");
-      if (!q("#pad").dataset.trazado) falta.push("tu firma");
+      if (!padFirmado(q("#pad"))) falta.push("tu firma");
       if (falta.length){
         err.innerHTML = `<div class="errbox">Falta ${esc(falta.join(", "))}.</div>`;
         err.scrollIntoView({ behavior:"smooth", block:"center" });
@@ -19167,7 +19244,10 @@ function verConvenio(id, alCerrar, pedirFirma){
           <button class="btn ok" id="bF2">Registrar firma del cliente</button>` : ""}
         ${v.estado === "firmado_cliente" ? `<span class="hint">Convenio cerrado. El cliente pasó a <b>Ganado</b>.${
           v.firmaManual ? ` Firmado en papel.` : ""}</span>
-          ${traeEscaneo(v.firmaManual) ? `<button class="btn sm" id="bVerEscaneo">Ver el escaneado</button>` : ""}` : ""}
+          ${traeEscaneo(v.firmaManual) ? `<button class="btn sm" id="bVerEscaneo">Ver el escaneado</button>` : ""}
+          <button class="btn danger sm" id="bCvSinFirma" style="display:none"
+            title="Este convenio se cerró con el recuadro de la firma en blanco"
+            >Quitar la firma y volver a mandarlo</button>` : ""}
       </div>
     </div>`);
 
@@ -19259,6 +19339,39 @@ function verConvenio(id, alCerrar, pedirFirma){
       if (!await firmar(v, "empresa", d)) return;
       ov.remove(); verConvenio(v.id, alCerrar);
     });
+
+  /* UNA FIRMA EN BLANCO SE PUEDE QUITAR, UNA DE VERDAD NO.
+     -----------------------------------------------------------------------
+     El botón sale ÚNICAMENTE cuando la firma guardada no tiene un solo trazo
+     —le pasó a CV-2027-154: el cliente le dio a enviar sin firmar, el convenio
+     se cerró solo y el enlace se apagó—. En un convenio firmado de verdad no
+     aparece, así que nadie puede borrar por error la firma de un cliente.
+     Hay que descodificar el PNG, así que se mira al abrir la carta y el botón
+     se descubre entonces. */
+  const sf = ov.querySelector("#bCvSinFirma");
+  if (sf){
+    firmaEnBlanco(v.firmaEmpresa && v.firmaEmpresa.img)
+      .then(enBlanco => { if (enBlanco) sf.style.display = ""; });
+    sf.onclick = () => {
+      if (!confirm(`El recuadro de la firma de ${v.folio} está EN BLANCO: el cliente ` +
+        "mandó el formulario sin trazar nada, y por eso el convenio se cerró solo.\n\n" +
+        "Se le va a quitar esa firma, el convenio vuelve a quedar firmado por la " +
+        "ejecutiva y se le hace un enlace NUEVO para volvérselo a mandar.\n\n" +
+        "El cliente se queda como está: si lo habías dado por Ganado por este " +
+        "convenio, revísalo a mano.\n\n¿Continuar?")) return;
+      v.firmaEmpresa = null;
+      v.estado = "firmado_ejecutiva";
+      v.tokenFirma = nuevoToken();     // enlace nuevo: el de antes se apagó al cerrarse
+      v.avisado = true;                // no hay novedad que contar: no se firmó
+      v.updatedAt = new Date().toISOString();
+      registrarAuto(v.clienteId, `Convenio ${v.folio}: se quitó una firma en blanco`,
+        "El cliente mandó el formulario sin trazar su firma, así que el convenio se " +
+        "había cerrado solo. Se le hizo un enlace nuevo para volvérselo a mandar.",
+        ejecutivoDe(v));
+      guardar(); render();
+      ov.remove(); verConvenio(v.id, alCerrar);
+    };
+  }
 
   const env = ov.querySelector("#bEnviar");
   if (env) env.onclick = () => {
@@ -22987,7 +23100,11 @@ function dibujarParaFirmar(caja, v, datos, pedir){
     const nombre = zona.querySelector("#cfNombre").value.trim();
     const pad = zona.querySelector("#pad");
     // Lo único que se le exige es la firma, que es lo que vino a hacer.
-    if (!pad.dataset.trazado){ err.innerHTML = `<div class="errbox">Falta su firma.</div>`; return; }
+    if (!padFirmado(pad)){
+      err.innerHTML = `<div class="errbox">Falta su firma: trace su firma en el recuadro
+        con el dedo o con el ratón. Tocarlo no basta.</div>`;
+      return;
+    }
     err.innerHTML = "";
     const b = e.currentTarget, antes = b.textContent;
     b.disabled = true; b.textContent = "Enviando…";
@@ -24889,7 +25006,7 @@ function padFirma(titulo, def, alFirmar, opciones){
   ov.querySelector("#bOk").onclick = () => {
     const nombre = ov.querySelector("#fNombre").value.trim();
     if (!nombre){ alert("Escribe el nombre de quien firma."); return; }
-    if (!usandoPrevia && !cv.dataset.trazado){ alert("Falta trazar la firma."); return; }
+    if (!usandoPrevia && !padFirmado(cv)){ alert("Falta trazar la firma: un toque no cuenta."); return; }
     const img = usandoPrevia ? previa.img : padAPng(cv);
     const puesto  = ov.querySelector("#fPuesto").value.trim();
     const celular = ov.querySelector("#fCel").value.trim();
@@ -24926,6 +25043,9 @@ function prepararPad(cv){
 
   const punto = ev => { const r = cv.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; };
   cv.addEventListener("pointerdown", ev => {
+    /* `trazado` se queda para los navegadores donde el lienzo no se deja leer
+       —ver padFirmado()—, pero YA NO ES EL GUARDIA: aquí no se ha pintado
+       nada todavía, y creerle costó un convenio cerrado sin firma. */
     ev.preventDefault(); trazando = true; cv.dataset.trazado = "sí";
     try{ cv.setPointerCapture(ev.pointerId); }catch(e){}
     last = punto(ev);
