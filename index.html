@@ -1061,7 +1061,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.24";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.25";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -6461,11 +6461,48 @@ async function subir(cambios, borrados){
  * Devuelve un parte de lo que encontró, no un sí o un no: cuando una firma no
  * se aplica hay que poder decir por qué, o se vuelve un misterio.
  */
+/**
+ * Marca como recogidas sólo las firmas cuyo documento YA ESTÁ EN EL SERVIDOR.
+ *
+ * `sincronizado` es el registro de lo que el servidor confirmó. Si el documento
+ * con la firma dentro no entró —rebotó por permisos, se cayó la red—, la firma
+ * se queda sin marcar y se vuelve a aplicar en la vuelta siguiente. Nunca se da
+ * por recogida una firma que no llegó: así se perdieron once.
+ */
+async function marcarFirmasQueLlegaron(porMarcar){
+  if (!porMarcar || !porMarcar.length) return;
+  const filas = new Map(filasDeEstado().map(f => [f.id, f]));
+  for (const m of porMarcar){
+    const f = filas.get(m.doc);
+    if (f && sincronizado.get(m.doc) === JSON.stringify(f.datos)) await marcarRecogida(m.fila);
+    else console.warn("Firma aplicada que todavía no llega al servidor; no se marca:", m.doc);
+  }
+}
+
+/** Dar por recogida una firma del buzón. Que no se le escape a nadie el motivo. */
+async function marcarRecogida(idFila, parte){
+  try{
+    await api(`/rest/v1/crm_firmas?id=eq.${encodeURIComponent(idFila)}`, {
+      method:"PATCH", headers:{ "Prefer":"return=minimal" },
+      body: JSON.stringify({ aplicada:true })
+    });
+    return true;
+  }catch(e){
+    if (parte) parte.notas.push("No se pudo marcar una firma como recogida; " +
+      "vuelve a aparecer en el siguiente sondeo. " + e.message);
+    return false;
+  }
+}
+
 async function recogerFirmas(){
   /* `notas` es todo lo que pasó, para el botón que se aprieta a mano.
      `avisos` es sólo una cosa: llegó la firma de un cliente y NO entró. Esos
      son los que se guardan y se enseñan sin que nadie los pida. */
-  const parte = { hubo:false, buzon:true, pendientes:0, aplicadas:0, notas:[], avisos:[] };
+  const parte = { hubo:false, buzon:true, pendientes:0, aplicadas:0, notas:[], avisos:[],
+                  /* Lo aplicado en ESTE equipo que todavía no se puede dar por
+                     recogido: sólo se marca cuando el documento llegó al
+                     servidor. Lo manda `sincronizar`, después de subir. */
+                  porMarcar:[] };
   if (!nubeActiva()){ parte.buzon = false; parte.notas.push("No hay sesión en la nube."); return parte; }
 
   let filas;
@@ -6511,39 +6548,53 @@ async function recogerFirmas(){
        sólo escribían en `notas`, y el sondeo automático las tiraba: el cliente
        firmaba, la fila quedaba marcada como recogida, y nadie se enteraba
        nunca. Eso es lo que arreglan estos `parte.avisos.push`. */
+    /* UNA FIRMA QUE NO SE APLICÓ NO SE DA POR RECOGIDA.
+       -----------------------------------------------------------------------
+       Aquí abajo había un PATCH `aplicada:true` FUERA del if, así que las tres
+       ramas que descartan la firma también la marcaban. Y como el sondeo sólo
+       pide `aplicada=is.false`, lo descartado quedaba invisible para siempre,
+       en todos los equipos. Once firmas de clientes del hotel se perdieron así
+       —CV-2026-089 entre ellas: su cliente firmó, se descargó firmado, y el
+       convenio seguía en «firmado por la ejecutiva»—, y lo único que la
+       pantalla ofrecía era «vuelve a mandarle el enlace»: pedirle que firme
+       otra vez a alguien que ya había firmado, teniendo su firma guardada.
+       Ahora cada rama dice si la consume o no. */
     if (soloEnPapel(v)){
       /* Puede quedar alguna firma en el buzón de antes de que legal lo
          prohibiera, o de un enlace que alcanzó a usarse. No se aplica: en un
-         contrato esa firma no vale. Ver `soloEnPapel`. */
+         contrato esa firma no vale. Ver `soloEnPapel`. NO se marca: la firma
+         del cliente es real y tiene que seguir a la vista. */
       const n = `Firmó ${f.nombre || "el cliente"} en pantalla el contrato ${v.folio || v.id}, y los ` +
         "contratos se firman en papel, así que no se aplicó. El cliente ya manifestó su " +
         "aceptación: imprímelo, fírmenlo a mano y súbelo con «Registrar que se firmó en papel».";
       parte.notas.push(n);
       parte.avisos.push(n);
     } else if (v[info.campoFirma]){
+      /* Ésta sí sobra: el documento ya está cerrado y nada va a cambiar. Es la
+         única que se puede marcar sin más. */
       const n = `${v.folio} ya estaba firmado; se descartó una firma repetida de ${f.nombre || "el cliente"}.`;
       parte.notas.push(n);
       parte.avisos.push(n);
+      await marcarRecogida(f.id, parte);
     } else if (!v.tokenFirma || v.tokenFirma !== f.token){
-      // Suele pasar si se rehizo el enlace: firmaron con el viejo.
+      // Suele pasar si se rehizo el enlace: firmaron con el viejo. NO se marca:
+      // esa firma se recupera desde «Firmas recibidas».
       const n = `La firma de ${f.nombre || "el cliente"} para ${v.folio} llegó con una clave que ya no corresponde ` +
         "—casi siempre es que se rehízo el enlace después de habérselo mandado—. " +
-        "Vuelve a mandarle el enlace de ahora.";
+        "Está guardada: en Ajustes → Nube y equipo → Firmas recibidas puedes aplicarla " +
+        "sin pedirle al cliente que firme otra vez.";
       parte.notas.push(n);
       parte.avisos.push(n);
     } else {
       info.aplica(v, firma, f);
       parte.aplicadas++;
       parte.hubo = true;
-    }
-    try{
-      await api(`/rest/v1/crm_firmas?id=eq.${encodeURIComponent(f.id)}`, {
-        method:"PATCH", headers:{ "Prefer":"return=minimal" },
-        body: JSON.stringify({ aplicada:true })
-      });
-    }catch(e){
-      parte.notas.push("La firma se aplicó pero no se pudo marcar como recogida; " +
-        "puede volver a aparecer en el siguiente sondeo. " + e.message);
+      /* Y AQUÍ NO SE MARCA TODAVÍA. Esta función corre dentro de
+         `sincronizar()`, ANTES de subir: marcar ahora es dar por recogida una
+         firma que a lo mejor no llega al servidor —le pasó al equipo que tenía
+         renglones rechazados por permisos—. Se apunta y `sincronizar` la marca
+         después, sólo si el documento de verdad entró. */
+      parte.porMarcar.push({ fila: f.id, doc: tipo + ":" + v.id });
     }
   }
   /* Se apunta AQUÍ ADENTRO, no en el llamador: ver `apuntarAvisosFirma`. */
@@ -6557,7 +6608,10 @@ async function buscarFirmasAhora(e){
   b.disabled = true; b.textContent = "Buscando…";
   try{
     const p = await recogerFirmas();
-    if (p.hubo) render();
+    /* Se sincroniza en el acto: así el convenio cerrado sube y la firma queda
+       dada por recogida, que es justo lo que no puede hacerse desde aquí
+       —marcar sin haber subido fue lo que perdió once firmas—. */
+    if (p.hubo){ render(); await sincronizar().catch(() => {}); }
     pintarAvisosFirma(); pintarNube();
     const cuerpo = !p.buzon
       ? p.notas.join("\n")
@@ -6808,7 +6862,8 @@ async function sincronizar(){
        adentro, para que ningún llamador pueda olvidarlo, que es exactamente
        lo que pasaba aquí—. Esto sólo repinta la caja de Ajustes si está
        abierta. */
-    if ((await recogerFirmas()).hubo) render();
+    const parteFirmas = await recogerFirmas();
+    if (parteFirmas.hubo) render();
     pintarAvisosFirma();
     // Los registros que dejaron en la liga entran antes de subir, para que
     // viajen a los demás equipos en esta misma tanda.
@@ -6912,6 +6967,10 @@ async function sincronizar(){
     /* Se calcula SIEMPRE, haya habido vuelta o no: si todo lo pendiente está
        frenado no se sube nada, y aun así hay que seguir diciendo cuánto falta. */
     nube.rechazados = [...loQueFaltaSubir(actuales), ...lapidasPendientes];
+
+    /* Y AHORA sí se dan por recogidas las firmas: con el documento ya en el
+       servidor, no antes. Ver marcarFirmasQueLlegaron(). */
+    await marcarFirmasQueLlegaron(parteFirmas && parteFirmas.porMarcar);
 
     nube.estado = nube.rechazados.length ? "rechazado" : "listo";
     nube.sincronizadoEn = new Date().toISOString();
@@ -7615,14 +7674,16 @@ async function firmasRecibidas(e){
     if (v[info.campoFirma]) return { doc, ok:true, que:"El documento está firmado." };
     if (!fl.aplicada) return { doc, ok:true,
       que:"Todavía no se recoge; entra en la siguiente sincronización." };
-    if (!v.tokenFirma || v.tokenFirma !== fl.token) return { doc, ok:false,
+    if (!v.tokenFirma || v.tokenFirma !== fl.token) return { doc, ok:false, aplicable:!!fl.img,
       que:"Llegó con una clave que ya no corresponde —el enlace se rehízo después de " +
-          "mandárselo—. Vuelve a mandarle el enlace de ahora." };
-    return { doc, ok:false,
-      que:"Se recogió y el documento quedó sin firma. Vuelve a mandarle el enlace." };
+          "mandárselo—, así que no entró sola. El cliente SÍ firmó y su firma está aquí: " +
+          "puedes aplicarla sin pedirle nada." };
+    return { doc, ok:false, aplicable:!!fl.img,
+      que:"Se dio por recogida y el documento quedó sin firma. La firma está guardada " +
+          "aquí: aplícala, no hace falta que el cliente vuelva a firmar." };
   };
 
-  modal(`
+  const ov = modal(`
     <div class="modal" style="max-width:640px">
       <div class="modal-head"><h2>Firmas recibidas</h2>
         <button class="btn" data-close>✕</button></div>
@@ -7641,7 +7702,9 @@ async function firmasRecibidas(e){
                 <div class="hint" style="margin-top:4px">${esc(fechaHora(fl.creado))} · ${
                   fl.aplicada ? "ya recogida" : "sin recoger"} · ${
                   fl.img ? "con firma" : "SIN imagen de firma"}</div>
-                <div style="margin-top:6px">${esc(q.que)}</div></div>`;
+                <div style="margin-top:6px">${esc(q.que)}</div>${
+                  q.aplicable ? `<p style="margin:8px 0 0"><button class="btn sm primary"
+                    data-aplicar="${esc(String(fl.id))}">Aplicar esta firma</button></p>` : ""}</div>`;
             }).join("")}
         <p class="hint" style="margin-top:14px">Se enseñan las ${lista.length} más
           recientes. La imagen de la firma no se imprime aquí a propósito.</p>
@@ -7649,6 +7712,45 @@ async function firmasRecibidas(e){
       <div class="modal-foot"><div class="spacer"></div>
         <button class="btn" data-close>Cerrar</button></div>
     </div>`);
+
+  /* RECUPERAR UNA FIRMA QUE SE DIO POR RECOGIDA.
+     -----------------------------------------------------------------------
+     Antes esta pantalla sólo diagnosticaba, y la única salida que ofrecía era
+     «vuelve a mandarle el enlace»: pedirle que firme otra vez a un cliente que
+     ya firmó, teniendo su firma guardada a un palmo. La imagen está en el
+     buzón; aplicarla es el mismo camino de siempre —`info.aplica`—, así que el
+     documento se cierra, el cliente pasa a Ganado y queda en la bitácora igual
+     que si hubiera entrado sola. */
+  ov.querySelectorAll("[data-aplicar]").forEach(b => b.onclick = async () => {
+    const fl = lista.find(x => String(x.id) === b.dataset.aplicar);
+    if (!fl) return;
+    const { tipo, id } = docDelBuzon(fl.convenio_id);
+    const info = infoDoc(tipo);
+    const v = (info.lista() || []).find(x => x.id === id);
+    if (!v){ alert("Este equipo ya no tiene ese documento bajado."); return; }
+    if (v[info.campoFirma]){ alert("Ese documento ya está firmado."); return; }
+    const distinta = !v.tokenFirma || v.tokenFirma !== fl.token;
+    if (!confirm(`Se va a aplicar la firma de ${fl.nombre || "el cliente"} a ` +
+        `${v.folio || id}.` +
+        (distinta ? "\n\nOJO: llegó con una clave que ya no corresponde, porque el " +
+                    "enlace se rehízo después de mandárselo. La firma es del cliente y " +
+                    "es válida; lo único que no cuadra es la clave del enlace." : "") +
+        "\n\nEl documento queda cerrado y el cliente pasa a Ganado. ¿Continuar?")) return;
+
+    b.disabled = true; b.textContent = "Aplicando…";
+    try{
+      info.aplica(v, { nombre:fl.nombre, puesto:fl.puesto, celular:fl.celular,
+                       fecha: fl.creado || new Date().toISOString(), img: fl.img }, fl);
+      await sincronizar().catch(() => {});
+      await marcarFirmasQueLlegaron([{ fila: fl.id, doc: tipo + ":" + v.id }]);
+      render();
+      alert(`Listo: ${v.folio || id} quedó firmado por el cliente.`);
+      ov.remove();
+    }catch(ex){
+      alert("No se pudo aplicar: " + ((ex && ex.message) || ex));
+      b.disabled = false; b.textContent = "Aplicar esta firma";
+    }
+  });
 }
 
 /** El nombre de un tipo de registro, para decírselo a una persona. */

@@ -170,10 +170,14 @@ await bloque('1 · firmó un contrato en pantalla: el aviso queda, no se evapora
   afirma('EL CHIP LO DICE, sin que nadie entre a Ajustes', /firma sin aplicar/i.test(c.txt));
   afirma('y al pasar el ratón explica qué pasó', /no entró al documento/i.test(c.titulo));
 
-  // Lo que NO cambia: la fila se sigue marcando, para no repetir el aviso
-  // cada quince segundos para siempre.
-  afirma('la fila del buzón se sigue marcando como recogida',
-    servidor.parcheadas.includes('1'));
+  /* Esto afirmaba justo el defecto: la fila se marcaba como recogida aunque la
+     firma NO se hubiera aplicado, y como el sondeo sólo pide las que no lo
+     están, quedaba invisible para siempre. Once firmas de clientes del hotel
+     se perdieron así. Que el aviso insista es el precio correcto: es algo sin
+     resolver, y `olvidarAvisosFirma()` existe para callarlo cuando se resuelva.
+     Lo comprueba a fondo la-firma-que-se-dio-por-recogida.mjs. */
+  afirma('y la fila del buzón NO se da por recogida: la firma es recuperable',
+    !servidor.parcheadas.includes('1'));
 });
 
 /* --- 2 -------------------------------------------------------------------- */
@@ -189,8 +193,10 @@ await bloque('2 · la clave del enlace ya no corresponde', async () => {
   afirma('quedó apuntado', g.length === 1);
   afirma('dice que la clave ya no corresponde',
     !!g[0] && /clave que ya no corresponde/i.test(g[0].txt));
-  afirma('y que hay que volver a mandarle el enlace',
-    !!g[0] && /mandarle el enlace/i.test(g[0].txt));
+  /* Y ya no se le manda a pedirle otra firma a quien ya firmó: se le dice
+     dónde está guardada y que puede aplicarla. */
+  afirma('y que la firma está guardada y se puede aplicar',
+    !!g[0] && /Firmas recibidas/i.test(g[0].txt));
   afirma('el documento NO se dio por firmado',
     await p.evaluate(() => state.contratos[0].estado) === 'firmado_hotel');
 });
