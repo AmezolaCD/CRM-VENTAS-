@@ -99,9 +99,12 @@ const preparar = async () => {
     nube.enlazado = true; nube.ultimo = ''; nube.estado = 'listo';
     sincronizado = new Map();
     if (typeof soltarElFreno === 'function') soltarElFreno();
-    /* Esperas cortas, para no tardar una hora de reloj en comprobar una hora de
-       espera. Es el mismo mecanismo, con otros números. */
-    if (typeof ESPERAS !== 'undefined') ESPERAS.splice(0, ESPERAS.length, 250, 100000);
+    /* Esperas LARGAS: lo que se mide aquí es el freno, no el reloj. Con una
+       primera espera corta —250 ms, como estaba— los bloques tardaban más que
+       ella y el renglón se soltaba solo a media prueba, que es medir el tiempo
+       que tarda la prueba. El bloque 7, que sí mide cómo crece la espera, se
+       pone los suyos. */
+    if (typeof ESPERAS !== 'undefined') ESPERAS.splice(0, ESPERAS.length, 60000, 120000);
     state.clientes = [
       saneaCliente({ id:'bueno', empresa:'CLIENTE QUE SÍ SUBE SA', contacto:'Alguien',
         telefono:'6640000001', email:'uno@ejemplo.example', estatus:'prospecto' }),

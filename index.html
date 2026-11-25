@@ -1061,7 +1061,7 @@ window.CORE_NUBE = { url:"", anon:"" };
    Todo esto es editable en la pestaña Ajustes.
    ========================================================================== */
 
-const VERSION = "2026.11.25-3";   // sale abajo a la izquierda, a la vista de todos
+const VERSION = "2026.11.25-4";   // sale abajo a la izquierda, a la vista de todos
 const STORE = "crm-hotel-v3";
 const VIEJOS = ["crm-hotel-v2", "crm-ventas-kanban-v1"];
 
@@ -5702,6 +5702,25 @@ function errorDeEntrada(estado, j, crudo){
 const b64url = t => btoa(t).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const deB64url = t => atob(t.replace(/-/g, "+").replace(/_/g, "/")
   .padEnd(Math.ceil(t.length / 4) * 4, "="));
+
+/**
+ * El hash de la dirección, sin lo que le mete el correo.
+ *
+ * El enlace de firma son casi cuatrocientos caracteres, y en un borrador de
+ * correo ocupa cuatro renglones. Al copiarlo se le cuelan espacios y saltos de
+ * línea, y entonces el patrón de abajo corta en el primero y lo que queda no
+ * es un enlace. Quitárselos rescata el que sólo venía partido —no al que de
+ * verdad le faltan caracteres, que ésos van a la pantalla de enlace roto—.
+ */
+function hashDeLaLiga(){
+  const crudo = String(location.hash || "");
+  let t = crudo;
+  try{ t = decodeURIComponent(crudo); }catch(e){}   // un % suelto lo revienta
+  return t.replace(/\s+/g, "");
+}
+
+/** ¿La dirección dice que esto es una liga pública, sea legible o no? */
+const parecePublica = () => /[#&](firmar|alta|odt)=/.test(hashDeLaLiga());
 
 /**
  * Una liga que ya trae dentro la dirección y la llave.
@@ -15270,7 +15289,7 @@ function usarServidorDeLaLiga(){
 
 /** ¿La dirección trae la liga de las órdenes? */
 function enlaceDeOdt(){
-  const m = String(location.hash || "").match(/[#&]odt=([A-Za-z0-9_-]+)/);
+  const m = hashDeLaLiga().match(/[#&]odt=([A-Za-z0-9_-]+)/);
   return m ? { token: m[1] } : null;
 }
 
@@ -15778,7 +15797,7 @@ const comoDataURL = f => new Promise((ok, mal) => {
 
 /** ¿La dirección trae una liga de registro? */
 function enlaceDeAlta(){
-  const m = String(location.hash || "").match(/[#&]alta=([A-Za-z0-9_-]+)/);
+  const m = hashDeLaLiga().match(/[#&]alta=([A-Za-z0-9_-]+)/);
   if (!m) return null;
   const p = new URLSearchParams(String(location.search || "").replace(/^\?/, ""));
   const h = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
@@ -23007,12 +23026,48 @@ function docDelBuzon(crudo){
   return { tipo: "convenios", id: t };
 }
 
+/**
+ * LO QUE VE QUIEN LLEGA CON UN ENLACE QUE NO SE PUEDE LEER.
+ *
+ * Un cliente del hotel abrió su enlace de firma, al enlace le faltaba un
+ * carácter —se mandó por correo, donde ocupa cuatro renglones—, y como no se
+ * pudo leer, el arranque entendió «esto no es una liga de cliente» y le abrió
+ * EL CRM: la pestaña Clientes, con cartera y botones. Que fuera el catálogo de
+ * ejemplo y no el del hotel fue suerte, no diseño.
+ *
+ * Quien llega con una liga en la dirección no entra al CRM ni aunque la liga
+ * esté rota. Ve esto, y nada más que esto.
+ */
+function pantallaLigaRota(){
+  document.body.className = "";
+  document.body.innerHTML = `<div id="firmaCliente">
+    <div class="hoja-cliente" style="padding:26px 22px">
+      <div style="width:54px;margin:0 0 14px">${logoCore()}</div>
+      <h2 style="margin:0 0 10px;font-size:19px">Este enlace llegó incompleto</h2>
+      <p style="margin:0 0 12px">No es su computadora ni nada que usted haya hecho
+        mal: el enlace es muy largo y, al viajar por correo, se parte en varios
+        renglones y a veces se pierde un pedazo por el camino.</p>
+      <p style="margin:0 0 12px"><b>Pídale a quien se lo mandó que se lo vuelva a
+        enviar.</b> Su documento está intacto y no hay que rehacer nada.</p>
+      <p class="hint" style="margin:0">Si lo copió y pegó a mano, revise que no le
+        falte ningún pedazo: tiene que ir todo seguido, sin espacios ni saltos de
+        línea.</p>
+    </div></div>`;
+}
+
 const enlaceDeFirma = () => {
-  const m = String(location.hash || "").match(/[#&]firmar=([A-Za-z0-9_-]+)/);
+  const m = hashDeLaLiga().match(/[#&]firmar=([A-Za-z0-9_-]+)/);
   if (!m) return null;
   try{
     const d = JSON.parse(deB64url(m[1]));
-    if (!(d && d.v && d.t && d.u && d.k)) return null;
+    if (!(d && d.v && d.t)) return null;
+    /* La dirección y la llave van dentro del enlace porque el navegador del
+       cliente no las conoce… salvo que la aplicación ya las traiga, y entonces
+       el enlace se ahorra unos 265 caracteres de los 390 que mide. Que no es
+       cosmético: así de largo es lo que se parte en el correo. */
+    if (!d.u) d.u = NUBE_DEF.url;
+    if (!d.k) d.k = NUBE_DEF.anon;
+    if (!(d.u && d.k)) return null;
     /* Los enlaces que ya andan circulando no traen el tipo, y no hay que
        romperlos: cuando se generaron, lo único que se firmaba así era un
        convenio. */
@@ -24453,8 +24508,13 @@ const ligaFirma = (doc, tipo) =>
      cliente pudiera avisar si la firma fallaba. Se quitó: al cliente no se le
      encarga nada. Las ligas que ya andan circulando lo traen y no pasa nada,
      porque el lector ignora lo que no usa. */
-  b64url(JSON.stringify({ v: doc.id, d: DOCS_FIRMABLES[tipo] ? tipo : "convenios",
-                          t: doc.tokenFirma, u: nube.url, k: nube.anon }));
+  b64url(JSON.stringify(Object.assign(
+    { v: doc.id, d: DOCS_FIRMABLES[tipo] ? tipo : "convenios", t: doc.tokenFirma },
+    /* Si la aplicación ya trae dentro la conexión del hotel, el enlace no tiene
+       que cargar con ella: pasa de unos 390 caracteres a unos 110, y deja de
+       partirse en cuatro renglones dentro de un correo. Un cliente abrió uno
+       partido al que le faltaba un carácter y acabó mirando el CRM. */
+    traeLaNubeDentro() ? {} : { u: nube.url, k: nube.anon })));
 
 /** Cómo se llama ese documento en el buzón de firmas. */
 const idEnBuzon = (doc, tipo) => infoDoc(tipo).prefijo + doc.id;
@@ -25712,6 +25772,14 @@ try{
     const _firma = enlaceDeFirma();
     const _alta  = enlaceDeAlta();
     const _odt   = enlaceDeOdt();
+
+    /* La dirección dice que esto es una liga pública pero no se pudo leer
+       ninguna: NO se arranca el CRM. Ver pantallaLigaRota(). */
+    if (!_firma && !_odt && !_alta && parecePublica()){
+      terminarEntrada();
+      pantallaLigaRota();
+      return;
+    }
 
     if (_firma || _odt || _alta){
       /* Las ligas públicas NO esperan a leer la copia y NO la tocan.
